@@ -52,25 +52,25 @@ class Tree:
                     self.node_list[left_node.parent_id].content = content
                     vector = self.circular_correlation(
                         left_node.vector, right_node.vector)
-                # ベクトルの大きさを1に正規化
-                if self.reguralized:
-                    vector = vector / torch.norm(vector)
-                self.node_list[left_node.parent_id].vector = vector
-                self.node_list[left_node.parent_id].ready = True
-                # print("step" + str(i) + ":")
-                # print(
-                #     left_node.content +
-                #     ':' +
-                #     left_node.category +
-                #     ' ' +
-                #     right_node.content +
-                #     ':' +
-                #     right_node.category)
-                # print('-> ' + self.node_list[left_node.parent_id].content +
-                #       ':' + self.node_list[left_node.parent_id].category)
-                # print()
-                node_pairs.remove(node_pair)
-                i += 1
+                    # ベクトルの大きさを1に正規化
+                    if self.reguralized:
+                        vector = vector / torch.norm(vector)
+                    self.node_list[left_node.parent_id].vector = vector
+                    self.node_list[left_node.parent_id].ready = True
+                    # print("step" + str(i) + ":")
+                    # print(
+                    #     left_node.content +
+                    #     ':' +
+                    #     left_node.category +
+                    #     ' ' +
+                    #     right_node.content +
+                    #     ':' +
+                    #     right_node.category)
+                    # print('-> ' + self.node_list[left_node.parent_id].content +
+                    #       ':' + self.node_list[left_node.parent_id].category)
+                    # print()
+                    node_pairs.remove(node_pair)
+                    i += 1
             if node_pairs == []:
                 break
 
@@ -82,16 +82,10 @@ class Tree:
                 node.is_leaf = bool(False)
 
     def circular_correlation(self, a, b):
-        a = torch.reshape(a, (-1, 1))
-        b = torch.reshape(b, (-1, 1))
-        zeros = torch.zeros_like(a)
-        a = torch.cat((a, zeros), 1)
-        b = torch.cat((b, zeros), 1)
-        conj_fft_a = conj(fft(a, 1))
-        fft_b = fft(b, 1)
-        mul_a_b = mul(conj_fft_a, fft_b)
-        c = ifft(torch.view_as_real(mul_a_b), 1)
-        c = c.real
+        a = conj(fft(a))
+        b = fft(b)
+        c = mul(a, b)
+        c = ifft(c).real
         return c
 
     def reset_node_status(self):
@@ -192,26 +186,23 @@ class Tree_List:
 
 
 class Tree_Net(nn.Module):
-    def __init__(self, tree_list, weight_matrix, reguralized, random):
+    def __init__(self, tree_list, initial_weight_matrix):
         super(Tree_Net, self).__init__()
-        self.num_embedding = weight_matrix.shape[0]
-        self.embedding_dim = weight_matrix.shape[1]
+        self.num_embedding = initial_weight_matrix.shape[0]
+        self.embedding_dim = initial_weight_matrix.shape[1]
         self.num_category = len(tree_list.category)
-        if random:  # scrachから学習
-            self.embedding = nn.Embedding(self.num_embedding, self.embedding_dim)
-        else:  # pre-trainedを使う
-            self.embedding = nn.Embedding(
-                self.num_embedding,
-                self.embedding_dim,
-                _weight=weight_matrix)
+        self.embedding = nn.Embedding(
+            self.num_embedding,
+            self.embedding_dim,
+            _weight=initial_weight_matrix)
         self.linear = nn.Linear(self.embedding_dim, self.num_category)
-        self.softmax = nn.Softmax()
+        self.softmax = nn.Softmax(dim=1)
 
-    def forward(self, tree, reguralized):
+    def forward(self, tree):
         for node in tree.node_list:
             if node.is_leaf:  # リーフノードのベクトルを設定
                 vector = self.embedding(torch.tensor(node.content_id))
-                if reguralized:
+                if tree.reguralized:
                     vector = vector / torch.norm(vector)
                 node.vector = vector
         tree.climb()
