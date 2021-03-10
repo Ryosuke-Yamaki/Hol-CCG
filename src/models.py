@@ -1,5 +1,5 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
 from torch.fft import fft, ifft
 from torch import conj, mul
 
@@ -13,19 +13,19 @@ class Node:
         self.parent_id = parent_id
         self.LR = LR
         if content == 'None':
-            self.ready = bool(False)
+            self.ready = False
         else:
-            self.ready = bool(True)
+            self.ready = True
 
 
 class Tree:
-    def __init__(self, sentense, node_list, reguralized):
+    def __init__(self, sentense, node_list, REGULARIZED):
         self.sentense = sentense
         self.node_list = node_list
         self.set_leaf_node()
-        self.reguralized = reguralized
+        self.regularized = REGULARIZED
 
-    def make_node_pairs(self):
+    def make_node_pair_list(self):
         left_nodes = []
         right_nodes = []
         for node in self.node_list:
@@ -33,18 +33,19 @@ class Tree:
                 left_nodes.append(node)
             elif node.LR == 'R':
                 right_nodes.append(node)
-        node_pairs = []
+        node_pair_list = []
         for left_node in left_nodes:
             for right_node in right_nodes:
                 if left_node.sibling_id == right_node.self_id:
-                    node_pairs.append((left_node, right_node))
-        return node_pairs
+                    node_pair_list.append((left_node, right_node))
+        return node_pair_list
 
     def climb(self):
-        node_pairs = self.make_node_pairs()
+        node_pair_list = self.make_node_pair_list()
         i = 1
+        roop_count = 0
         while True:
-            for node_pair in node_pairs:
+            for node_pair in node_pair_list:
                 left_node = node_pair[0]
                 right_node = node_pair[1]
                 if left_node.ready and right_node.ready:
@@ -52,8 +53,8 @@ class Tree:
                     self.node_list[left_node.parent_id].content = content
                     vector = self.circular_correlation(
                         left_node.vector, right_node.vector)
-                    # ベクトルの大きさを1に正規化
-                    if self.reguralized:
+                    # regularize the norm of vector
+                    if self.regularized:
                         vector = vector / torch.norm(vector)
                     self.node_list[left_node.parent_id].vector = vector
                     self.node_list[left_node.parent_id].ready = True
@@ -69,17 +70,14 @@ class Tree:
                     # print('-> ' + self.node_list[left_node.parent_id].content +
                     #       ':' + self.node_list[left_node.parent_id].category)
                     # print()
-                    node_pairs.remove(node_pair)
+                    node_pair_list.remove(node_pair)
                     i += 1
-            if node_pairs == []:
+            roop_count += 1
+            if node_pair_list == []:
                 break
-
-    def set_leaf_node(self):
-        for node in self.node_list:
-            if node.ready:
-                node.is_leaf = bool(True)
-            else:
-                node.is_leaf = bool(False)
+            elif roop_count > 1000:
+                print("***** Too many roop detected during tree climb! *****")
+                exit()
 
     def circular_correlation(self, a, b):
         a = conj(fft(a))
@@ -88,6 +86,14 @@ class Tree:
         c = ifft(c).real
         return c
 
+    def set_leaf_node(self):
+        for node in self.node_list:
+            if node.ready:
+                node.is_leaf = bool(True)
+            else:
+                node.is_leaf = bool(False)
+
+    # reset node status for next coming epoch
     def reset_node_status(self):
         for node in self.node_list:
             if node.is_leaf:
@@ -95,14 +101,14 @@ class Tree:
             else:
                 node.ready = False
 
-    # NNに入力するためのテンソルを作成
+    # generate tensor as the input of tree net
     def make_node_vector_tensor(self):
         node_vector_list = []
         for node in self.node_list:
             node_vector_list.append(node.vector)
         return torch.stack(node_vector_list)
 
-    # 正解ラベルのテンソルを作成
+    # generate tnesor as the correct category label
     def make_label_tensor(self):
         label_list = []
         for node in self.node_list:
@@ -111,15 +117,15 @@ class Tree:
 
 
 class Tree_List:
-    def __init__(self, path_to_data, reguralized):
-        self.reguralized = reguralized
-        self.tree_list = self.make_tree_list_from_data(path_to_data)
+    def __init__(self, PATH_TO_DATA, REGULARIZED):
+        self.regularized = REGULARIZED
+        self.tree_list = self.initialize_tree_list(PATH_TO_DATA)
         self.vocab, self.category = self.make_vocab_category(self.tree_list)
         self.add_content_category_id(self.tree_list, self.vocab, self.category)
 
-    # テキストファイルから導出木のリストを出力する関数
-    def make_tree_list_from_data(self, path_to_data):
-        with open(path_to_data, 'r') as f:
+    # initialize tree list from txt data
+    def initialize_tree_list(self, PATH_TO_DATA):
+        with open(PATH_TO_DATA, 'r') as f:
             data_list = [data.strip() for data in f.readlines()]
         data_list = data_list[2:]
         data_list = [data.replace('\n', '') for data in data_list]
@@ -158,10 +164,10 @@ class Tree_List:
                         sibling_id,
                         parent_id,
                         LR))
-            tree_list.append(Tree(sentense, node_list, self.reguralized))
+            tree_list.append(Tree(sentense, node_list, self.regularized))
         return tree_list
 
-    # create vocablary and category from trees
+    # create vocablary and category from tree list
     def make_vocab_category(self, tree_list):
         vocab = {}
         category = {}
@@ -177,7 +183,7 @@ class Tree_List:
                     j += 1
         return vocab, category
 
-    # add content_id to each node of tree
+    # add content_id and category_id to each node of tree
     def add_content_category_id(self, tree_list, vocab, category):
         for tree in tree_list:
             for node in tree.node_list:
@@ -200,9 +206,9 @@ class Tree_Net(nn.Module):
 
     def forward(self, tree):
         for node in tree.node_list:
-            if node.is_leaf:  # リーフノードのベクトルを設定
+            if node.is_leaf:
                 vector = self.embedding(torch.tensor(node.content_id))
-                if tree.reguralized:
+                if tree.regularized:
                     vector = vector / torch.norm(vector)
                 node.vector = vector
         tree.climb()

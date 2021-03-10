@@ -1,62 +1,69 @@
-from network import Tree_Net
-from tree_structure import Tree_List
-import matplotlib.pyplot as plt
 import torch
-import numpy as np
-from sklearn.manifold import TSNE
-from utils import load_weight_matrix
+import matplotlib.pyplot as plt
+import sys
+from utils import load_weight_matrix, visualize_result
+from models import Tree_List, Tree_Net
 
 FROM_RANDOM = True
-REGURALIZED = True
-TRAINED = True
+REGULARIZED = True
 
-PATH_TO_DATA = '~/Hol-CCG/data/toy_data.txt'
-PATH_TO_WEIGHT_MATRIX = '~/Hol-CCG/data/INITIAL_WEIGHT_MATRIX.csv'
-MODEL_LOAD_PATH = '~/Hol-CCG/data/'
-if FROM_RANDOM:
-    MODEL_LOAD_PATH += 'from_random'
-else:
-    MODEL_LOAD_PATH += 'glove'
-if REGURALIZED:
-    MODEL_LOAD_PATH += '_reguralized.pth'
-else:
-    MODEL_LOAD_PATH += '.pth'
+args = sys.argv
+if len(args) > 1:
+    if args[1] == 'True':
+        FROM_RANDOM = True
+    else:
+        FROM_RANDOM = False
+    if args[2] == 'True':
+        REGULARIZED = True
+    else:
+        REGULARIZED = False
 
-tree_list = Tree_List(PATH_TO_DATA, REGURALIZED)
-INITIAL_WEIGHT_MATRIX = load_weight_matrix(PATH_TO_WEIGHT_MATRIX)
-tree_net = Tree_Net(tree_list, INITIAL_WEIGHT_MATRIX, REGURALIZED, FROM_RANDOM)
-tree_net.load_state_dict(torch.load(MODEL_LOAD_PATH))
+PATH_TO_DIR = "/home/yryosuke0519/"
+
+PATH_TO_DATA = PATH_TO_DIR + "Hol-CCG/data/toy_data.txt"
+PATH_TO_WEIGHT_MATRIX = PATH_TO_DIR + "Hol-CCG/data/weight_matrix.csv"
+
+path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"
+path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
+path_to_initial_map = PATH_TO_DIR + "Hol-CCG/result/fig/"
+path_to_trained_map = PATH_TO_DIR + "Hol-CCG/result/fig/"
+path_list = [
+    path_to_initial_weight_matrix,
+    path_to_model,
+    path_to_initial_map,
+    path_to_trained_map]
+
+for i in range(len(path_list)):
+    if FROM_RANDOM:
+        path_list[i] += "from_random"
+    else:
+        path_list[i] += "glove"
+    if REGULARIZED:
+        path_list[i] += "_regularized"
+    else:
+        path_list[i] += "_not_regularized"
+path_to_initial_weight_matrix = path_list[0] + "_initial_weight_matrix.csv"
+path_to_model = path_list[1] + "_model.pth"
+path_to_initial_map = path_list[2] + "_initial_map.png"
+path_to_trained_map = path_list[3] + "_trained_map.png"
+
+tree_list = Tree_List(PATH_TO_DATA, REGULARIZED)
+
+initial_weight_matrix = load_weight_matrix(path_to_initial_weight_matrix, REGULARIZED)
+initial_weight_matrix = torch.from_numpy(initial_weight_matrix)
+tree_net = Tree_Net(tree_list, torch.zeros_like(initial_weight_matrix))
+tree_net.load_state_dict(torch.load(path_to_model))
 tree_net.eval()
-TRAINED_WEIGHT_MATRIX = tree_net.embedding.weight
+trained_weight_matrix = tree_net.embedding.weight
 
-for tree in tree_list.tree_list:
-    for node in tree.node_list:
-        if node.is_leaf:
-            vector = INITIAL_WEIGHT_MATRIX[node.content_id]
-            if REGURALIZED:
-                vector = vector / torch.norm(vector)
-            node.vector = vector
-
-tensor_list = []
-label_list = []
-for tree in tree_list.tree_list:
-    tree.climb()
-    tensor_list.append(tree.make_node_vector_tensor().detach().numpy())
-    label_list.append(tree.make_label_tensor().detach().numpy())
-tensor_list = np.array(tensor_list)
-label_list = np.array(label_list)
-flatten_tensor_list = []
-flatten_label_list = []
-for i in range(len(tensor_list)):
-    for j in range(len(tensor_list[i])):
-        flatten_tensor_list.append(tensor_list[i][j])
-        flatten_label_list.append(label_list[i][j])
-tensor_list = np.array(flatten_tensor_list)
-label_list = np.array(flatten_label_list)
-
-torch.manual_seed(0)
-tsne = TSNE(n_components=2, FROM_RANDOM_state=0, perplexity=30, n_iter=1000)
-embedded = tsne.fit_transform(tensor_list)
+if FROM_RANDOM:
+    fig_name = "from_random"
+else:
+    fig_name = "GloVe"
+if REGULARIZED:
+    fig_name += "_regularized"
+else:
+    fig_name += "_not_regularized"
 
 group_list = []
 group_list.append([1, 4])  # 1 名詞・名詞句
@@ -73,22 +80,24 @@ group_list.append([9, 18, 25])  # 11 動詞句を修飾
 group_list.append([19])  # 12 to不定詞
 group_list.append([26])  # 13 接続詞
 
-plt.figure(figsize=(15, 15))
-color_list = ['black', 'gray', 'lightcoral', 'red', 'saddlebrown', 'orange', 'yellowgreen',
-              'forestgreen', 'turquoise', 'deepskyblue', 'blue', 'darkviolet', 'magenta']
-group_num = 0
-for group in group_list:
-    scatter_x_list = []
-    scatter_y_list = []
-    for i in range(len(label_list)):
-        if label_list[i] in group:
-            scatter_x_list.append(embedded[i][0])
-            scatter_y_list.append(embedded[i][1])
-    label = 'group ' + str(group_num + 1)
-    plt.scatter(scatter_x_list, scatter_y_list, label=label, c=color_list[group_num])
-    group_num += 1
-plt.legend()
-plt.title('regularized GloVe')
-plt.savefig('/content/drive/MyDrive/Lab/HOL_CCG/Data/result/glove_reg_map.png',
-            dpi=300, orientation='portrait', transparent=False, pad_inches=0.0)
+# visualize initial state
+print("t-SNE working.....")
+visualize_result(
+    tree_list,
+    initial_weight_matrix,
+    group_list,
+    path_to_initial_map,
+    fig_name +
+    '_initial')
+plt.show()
+
+# visualize trained state
+print("t-SNE working.....")
+visualize_result(
+    tree_list,
+    trained_weight_matrix,
+    group_list,
+    path_to_trained_map,
+    fig_name +
+    '_trained')
 plt.show()
