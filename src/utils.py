@@ -92,3 +92,36 @@ def visualize_result(tree_list, weight_matrix, group_list, path_to_map, fig_name
     plt.legend()
     plt.title(fig_name)
     plt.savefig(path_to_map, dpi=300, orientation='portrait', transparent=False, pad_inches=0.0)
+
+
+class Analyzer:
+    def __init__(self, category, tree_net):
+        self.inv_category = self.make_inv_category(category)
+        self.tree_net = tree_net
+
+    def make_inv_category(self, category):
+        inv_category = {}
+        for k, v in category.items():
+            inv_category[v] = k
+        return inv_category
+
+    def analyze(self, tree):
+        output = self.tree_net(tree)
+        print(tree.sentense)
+        print('acc: ' + str(cal_acc(output, tree.make_label_tensor())))
+        print('*' * 50)
+        i = 0
+        for node in tree.node_list:
+            content = node.content
+            true_category = node.category
+            pred_category = self.inv_category[int(torch.argmax(output[i]))]
+            print('content: ' + content)
+            print('true category: ' + true_category)
+            print('pred category: ' + pred_category)
+            if true_category == pred_category:
+                print('True')
+            else:
+                print('False')
+            print()
+            i += 1
+        print('*' * 50)
