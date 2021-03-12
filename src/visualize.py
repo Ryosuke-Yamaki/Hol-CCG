@@ -20,7 +20,7 @@ if len(args) > 1:
 
 PATH_TO_DIR = "/home/yryosuke0519/"
 
-PATH_TO_DATA = PATH_TO_DIR + "Hol-CCG/data/toy_data.txt"
+PATH_TO_DATA = PATH_TO_DIR + "Hol-CCG/data/train.txt"
 PATH_TO_WEIGHT_MATRIX = PATH_TO_DIR + "Hol-CCG/data/pretrained_weight_matrix.csv"
 
 path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"

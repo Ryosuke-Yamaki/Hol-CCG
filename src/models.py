@@ -121,7 +121,7 @@ class Tree_List:
         self.regularized = REGULARIZED
         self.tree_list = self.initialize_tree_list(PATH_TO_DATA)
         self.vocab, self.category = self.make_vocab_category(self.tree_list)
-        self.add_content_category_id(self.tree_list, self.vocab, self.category)
+        self.add_content_category_id(self.vocab, self.category)
 
     # initialize tree list from txt data
     def initialize_tree_list(self, PATH_TO_DATA):
@@ -184,8 +184,8 @@ class Tree_List:
         return vocab, category
 
     # add content_id and category_id to each node of tree
-    def add_content_category_id(self, tree_list, vocab, category):
-        for tree in tree_list:
+    def add_content_category_id(self, vocab, category):
+        for tree in self.tree_list:
             for node in tree.node_list:
                 node.content_id = vocab[node.content]
                 node.category_id = category[node.category]
