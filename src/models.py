@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.fft import fft, ifft
 from torch import conj, mul
+from utils import cal_acc, cal_norm_mean_std
 
 
 class Node:
@@ -216,3 +217,31 @@ class Tree_Net(nn.Module):
         x = self.linear(x)
         x = self.softmax(x)
         return x
+
+    def cal_stat(self, tree_list, criteria):
+        total_loss = 0.0
+        total_acc = 0.0
+        total_norm = 0.0
+        total_mean = 0.0
+        total_std = 0.0
+        for tree in tree_list.tree_list:
+            label = tree.make_label_tensor()
+            output = self.forward(tree)
+            loss = criteria(output, label)
+            acc = cal_acc(output, label)
+            norm, mean, std = cal_norm_mean_std(tree)
+            total_loss += loss
+            total_acc += acc
+            total_norm += norm
+            total_mean += mean
+            total_std += std
+            tree.reset_node_status()
+
+        len_tree_list = len(tree_list.tree_list)
+        stat_list = []
+        stat_list.append(float(total_loss / len_tree_list))
+        stat_list.append(float(total_acc / len_tree_list))
+        stat_list.append(float(total_norm / len_tree_list))
+        stat_list.append(float(total_mean / len_tree_list))
+        stat_list.append(float(total_std / len_tree_list))
+        return stat_list

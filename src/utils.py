@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import csv
+import random
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 
@@ -42,6 +43,20 @@ def cal_acc(output, label):
             num_False += 1
     acc = num_True / (num_True + num_False)
     return acc
+
+
+def cal_norm_mean_std(tree):
+    norm_list = []
+    mean_list = []
+    std_list = []
+    for node in tree.node_list:
+        norm_list.append(torch.norm(node.vector))
+        mean_list.append(torch.mean(node.vector))
+        std_list.append(torch.std(node.vector))
+    norm = sum(norm_list) / len(norm_list)
+    mean = sum(mean_list) / len(mean_list)
+    std = sum(std_list) / len(std_list)
+    return norm, mean, std
 
 
 def visualize_result(tree_list, weight_matrix, group_list, path_to_map, fig_name):
@@ -125,3 +140,10 @@ class Analyzer:
             print()
             i += 1
         print('*' * 50)
+
+
+def set_random_seed(seed):
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
