@@ -176,7 +176,7 @@ class Tree_List:
         j = 0
         for tree in tree_list:
             for node in tree.node_list:
-                if node.content not in vocab:
+                if node.content not in vocab and node.content != 'None':
                     vocab[node.content] = i
                     i += 1
                 if node.category not in category:
@@ -188,7 +188,8 @@ class Tree_List:
     def add_content_category_id(self, vocab, category):
         for tree in self.tree_list:
             for node in tree.node_list:
-                node.content_id = vocab[node.content]
+                if node.content != 'None':
+                    node.content_id = vocab[node.content]
                 node.category_id = category[node.category]
 
 
