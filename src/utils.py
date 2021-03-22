@@ -147,3 +147,29 @@ def set_random_seed(seed):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
+
+
+def original_loss(output, label, criteria, tree):
+    loss = criteria(output, label)
+    vector = tree.make_node_vector_tensor()
+    norm = torch.norm(vector, dim=1)
+    norm_base_line = torch.ones_like(norm)
+    norm_loss = torch.sum(torch.abs(norm - norm_base_line))
+
+    # mean = torch.mean(vector, 1)
+    # std = torch.std(vector, 1)
+    # mean_base_line = torch.tensor([0.0] * vector.shape[0], dtype=torch.float)
+    # std_base_line = torch.tensor([1 / np.sqrt(vector.shape[1])] *
+    #                              vector.shape[0], dtype=torch.float)
+    # mseloss = MSELoss()
+    # mean_loss = mseloss(mean, mean_base_line)
+    # std_loss = mseloss(std, std_base_line)
+    # return loss + mean_loss * 1e10 + std_loss * 1e10
+    return loss + norm_loss
+
+
+def make_batch(tree_list, BATCH_SIZE):
+    batch_tree_list = []
+    for index in range(0, len(tree_list) - BATCH_SIZE, BATCH_SIZE):
+        batch_tree_list.append(tree_list[index:index + BATCH_SIZE])
+    return batch_tree_list
