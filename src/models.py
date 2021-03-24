@@ -109,6 +109,13 @@ class Tree:
             node_vector_list.append(node.vector)
         return torch.stack(node_vector_list)
 
+    def make_leaf_node_vector_tensor(self):
+        node_vector_list = []
+        for node in self.node_list:
+            if node.is_leaf:
+                node_vector_list.append(node.vector)
+        return torch.stack(node_vector_list)
+
     # generate tnesor as the correct category label
     def make_label_tensor(self):
         label_list = []

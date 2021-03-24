@@ -5,6 +5,8 @@ import sys
 
 FROM_RANDOM = True
 REGULARIZED = True
+USE_ORIGINAL_LOSS = False
+EMBEDDING_DIM = 100
 
 args = sys.argv
 if len(args) > 1:
@@ -16,6 +18,11 @@ if len(args) > 1:
         REGULARIZED = True
     else:
         REGULARIZED = False
+    if args[3] == 'True':
+        USE_ORIGINAL_LOSS = True
+    else:
+        USE_ORIGINAL_LOSS = False
+    EMBEDDING_DIM = int(args[4])
 
 PATH_TO_DIR = "/home/yryosuke0519/"
 
@@ -26,14 +33,16 @@ PATH_TO_PRETRAINED_WEIGHT_MATRIX = PATH_TO_DIR + "Hol-CCG/data/pretrained_weight
 path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
 
 if FROM_RANDOM:
-    path_to_model += "from_random"
+    path_to_model += "random"
 else:
-    path_to_model += "glove"
+    path_to_model += "GloVe"
 if REGULARIZED:
-    path_to_model += "_regularized"
+    path_to_model += "_reg"
 else:
-    path_to_model += "_not_regularized"
-
+    path_to_model += "_not_reg"
+if USE_ORIGINAL_LOSS:
+    path_to_model += "_original_loss"
+path_to_model += "_" + str(EMBEDDING_DIM) + "d"
 path_to_model += "_model.pth"
 
 train_tree_list = Tree_List(PATH_TO_TRAIN_DATA, REGULARIZED)

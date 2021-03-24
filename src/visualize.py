@@ -6,6 +6,7 @@ from models import Tree_List, Tree_Net
 
 FROM_RANDOM = True
 REGULARIZED = True
+EMBEDDING_DIM = 100
 
 args = sys.argv
 if len(args) > 1:
@@ -17,6 +18,11 @@ if len(args) > 1:
         REGULARIZED = True
     else:
         REGULARIZED = False
+    if args[3] == 'True':
+        USE_ORIGINAL_LOSS = True
+    else:
+        USE_ORIGINAL_LOSS = False
+    EMBEDDING_DIM = int(args[4])
 
 PATH_TO_DIR = "/home/yryosuke0519/"
 
@@ -35,13 +41,16 @@ path_list = [
 
 for i in range(len(path_list)):
     if FROM_RANDOM:
-        path_list[i] += "from_random"
+        path_list[i] += "random"
     else:
-        path_list[i] += "glove"
+        path_list[i] += "GloVe"
     if REGULARIZED:
-        path_list[i] += "_regularized"
+        path_list[i] += "_reg"
     else:
-        path_list[i] += "_not_regularized"
+        path_list[i] += "_not_reg"
+    if USE_ORIGINAL_LOSS:
+        path_list[i] += "_original_loss"
+    path_list[i] += "_" + str(EMBEDDING_DIM) + "d"
 path_to_initial_weight_matrix = path_list[0] + "_initial_weight_matrix.csv"
 path_to_model = path_list[1] + "_model.pth"
 path_to_initial_map = path_list[2] + "_initial_map.png"
@@ -57,13 +66,16 @@ tree_net.eval()
 trained_weight_matrix = tree_net.embedding.weight
 
 if FROM_RANDOM:
-    fig_name = "from_random"
+    fig_name = "random"
 else:
     fig_name = "GloVe"
 if REGULARIZED:
-    fig_name += "_regularized"
+    fig_name += " reg"
 else:
-    fig_name += "_not_regularized"
+    fig_name += " not reg"
+if USE_ORIGINAL_LOSS:
+    fig_name += " original loss"
+fig_name += " " + str(EMBEDDING_DIM) + "d"
 
 group_list = []
 group_list.append([1, 4])  # 1 名詞・名詞句
@@ -88,7 +100,7 @@ visualize_result(
     group_list,
     path_to_initial_map,
     fig_name +
-    '_initial')
+    ' initial map')
 plt.show()
 
 # visualize trained state
@@ -99,5 +111,5 @@ visualize_result(
     group_list,
     path_to_trained_map,
     fig_name +
-    '_trained')
+    ' trained map')
 plt.show()

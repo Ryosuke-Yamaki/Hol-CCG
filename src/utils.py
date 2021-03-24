@@ -155,16 +155,6 @@ def original_loss(output, label, criteria, tree):
     norm = torch.norm(vector, dim=1)
     norm_base_line = torch.ones_like(norm)
     norm_loss = torch.sum(torch.abs(norm - norm_base_line))
-
-    # mean = torch.mean(vector, 1)
-    # std = torch.std(vector, 1)
-    # mean_base_line = torch.tensor([0.0] * vector.shape[0], dtype=torch.float)
-    # std_base_line = torch.tensor([1 / np.sqrt(vector.shape[1])] *
-    #                              vector.shape[0], dtype=torch.float)
-    # mseloss = MSELoss()
-    # mean_loss = mseloss(mean, mean_base_line)
-    # std_loss = mseloss(std, std_base_line)
-    # return loss + mean_loss * 1e10 + std_loss * 1e10
     return loss + norm_loss
 
 
