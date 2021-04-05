@@ -28,22 +28,27 @@ PATH_TO_DIR = "/home/yryosuke0519/"
 
 PATH_TO_TRAIN_DATA = PATH_TO_DIR + "Hol-CCG/data/train.txt"
 PATH_TO_TEST_DATA = PATH_TO_DIR + "Hol-CCG/data/test.txt"
-PATH_TO_PRETRAINED_WEIGHT_MATRIX = PATH_TO_DIR + "Hol-CCG/data/pretrained_weight_matrix.csv"
 
+path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"
 path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
+path_list = [
+    path_to_initial_weight_matrix,
+    path_to_model]
 
-if FROM_RANDOM:
-    path_to_model += "random"
-else:
-    path_to_model += "GloVe"
-if REGULARIZED:
-    path_to_model += "_reg"
-else:
-    path_to_model += "_not_reg"
-if USE_ORIGINAL_LOSS:
-    path_to_model += "_original_loss"
-path_to_model += "_" + str(EMBEDDING_DIM) + "d"
-path_to_model += "_model.pth"
+for i in range(len(path_list)):
+    if FROM_RANDOM:
+        path_list[i] += "random"
+    else:
+        path_list[i] += "GloVe"
+    if REGULARIZED:
+        path_list[i] += "_reg"
+    else:
+        path_list[i] += "_not_reg"
+    if USE_ORIGINAL_LOSS:
+        path_list[i] += "_original_loss"
+    path_list[i] += "_" + str(EMBEDDING_DIM) + "d"
+path_to_initial_weight_matrix = path_list[0] + "_initial_weight_matrix.csv"
+path_to_model = path_list[1] + "_model.pth"
 
 train_tree_list = Tree_List(PATH_TO_TRAIN_DATA, REGULARIZED)
 test_tree_list = Tree_List(PATH_TO_TEST_DATA, REGULARIZED)
@@ -60,7 +65,7 @@ for k, v in vocab.items():
 for k, v in category.items():
     inv_category[v] = k
 
-weight_matrix = torch.tensor(load_weight_matrix(PATH_TO_PRETRAINED_WEIGHT_MATRIX, REGULARIZED))
+weight_matrix = torch.tensor(load_weight_matrix(path_to_initial_weight_matrix, REGULARIZED))
 tree_net = Tree_Net(test_tree_list, weight_matrix)
 tree_net.load_state_dict(torch.load(path_to_model))
 tree_net.eval()

@@ -60,6 +60,7 @@ def cal_norm_mean_std(tree):
 
 
 def visualize_result(tree_list, weight_matrix, group_list, path_to_map, fig_name):
+    # climb the derivation tree and make vectors for each nodes
     for tree in tree_list.tree_list:
         for node in tree.node_list:
             if node.is_leaf:
@@ -67,46 +68,56 @@ def visualize_result(tree_list, weight_matrix, group_list, path_to_map, fig_name
                 if tree.regularized:
                     vector = vector / torch.norm(vector)
                 node.vector = vector
-
-    tensor_list = []
+    vector_list = []
     label_list = []
     for tree in tree_list.tree_list:
         tree.climb()
-        tensor_list.append(tree.make_node_vector_tensor().detach().numpy())
+        vector_list.append(tree.make_node_vector_tensor().detach().numpy())
         label_list.append(tree.make_label_tensor().detach().numpy())
-    tensor_list = np.array(tensor_list)
+    vector_list = np.array(vector_list)
     label_list = np.array(label_list)
-    flatten_tensor_list = []
+    flatten_vector_list = []
     flatten_label_list = []
-    for i in range(len(tensor_list)):
-        for j in range(len(tensor_list[i])):
-            flatten_tensor_list.append(tensor_list[i][j])
+    for i in range(len(vector_list)):
+        for j in range(len(vector_list[i])):
+            flatten_vector_list.append(vector_list[i][j])
             flatten_label_list.append(label_list[i][j])
-    tensor_list = np.array(flatten_tensor_list)
+    vector_list = np.array(flatten_vector_list)
     label_list = np.array(flatten_label_list)
 
-    torch.manual_seed(0)
+    set_random_seed(0)
 
     tsne = TSNE()
-    embedded = tsne.fit_transform(tensor_list)
+    print("t-SNE working.....")
+    embedded = tsne.fit_transform(vector_list)
+
+    cmap = plt.cm.gist_rainbow
 
     plt.figure(figsize=(10, 10))
     color_list = ['black', 'gray', 'lightcoral', 'red', 'saddlebrown', 'orange', 'yellowgreen',
                   'forestgreen', 'turquoise', 'deepskyblue', 'blue', 'darkviolet', 'magenta']
-    group_num = 0
-    for group in group_list:
+    for group_num in range(len(group_list)):
         scatter_x_list = []
         scatter_y_list = []
-        for i in range(len(label_list)):
-            if label_list[i] in group:
-                scatter_x_list.append(embedded[i][0])
-                scatter_y_list.append(embedded[i][1])
-        label = 'group ' + str(group_num + 1)
-        plt.scatter(scatter_x_list, scatter_y_list, label=label, c=color_list[group_num])
-        group_num += 1
+        idx = 0
+        for label in label_list:
+            if label in group_list[group_num]:
+                scatter_x_list.append(embedded[idx, 0])
+                scatter_y_list.append(embedded[idx, 1])
+            idx += 1
+
+        plt.scatter(
+            scatter_x_list,
+            scatter_y_list,
+            c=color_list[group_num],
+            cmap=cmap,
+            label='group {}'.format(group_num + 1)
+        )
+
     plt.legend()
     plt.title(fig_name)
     plt.savefig(path_to_map, dpi=300, orientation='portrait', transparent=False, pad_inches=0.0)
+    plt.show()
 
 
 class Analyzer:

@@ -1,11 +1,11 @@
 import torch
-import matplotlib.pyplot as plt
 import sys
 from utils import load_weight_matrix, visualize_result
 from models import Tree_List, Tree_Net
 
 FROM_RANDOM = True
 REGULARIZED = True
+USE_ORIGINAL_LOSS = False
 EMBEDDING_DIM = 100
 
 args = sys.argv
@@ -92,8 +92,7 @@ group_list.append([9, 18, 25])  # 11 動詞句を修飾
 group_list.append([19])  # 12 to不定詞
 group_list.append([26])  # 13 接続詞
 
-# visualize initial state
-print("t-SNE working.....")
+# visualize initial map
 visualize_result(
     tree_list,
     initial_weight_matrix,
@@ -101,10 +100,8 @@ visualize_result(
     path_to_initial_map,
     fig_name +
     ' initial map')
-plt.show()
 
-# visualize trained state
-print("t-SNE working.....")
+# visualize trained map
 visualize_result(
     tree_list,
     trained_weight_matrix,
@@ -112,4 +109,3 @@ visualize_result(
     path_to_trained_map,
     fig_name +
     ' trained map')
-plt.show()
