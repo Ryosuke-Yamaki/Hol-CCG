@@ -1,7 +1,8 @@
 import torch
 import sys
-from utils import load_weight_matrix, visualize_result
+from utils import load_weight_matrix, visualize
 from models import Tree_List, Tree_Net
+from sklearn.manifold import TSNE
 
 FROM_RANDOM = True
 REGULARIZED = True
@@ -93,18 +94,24 @@ group_list.append([19])  # 12 to不定詞
 group_list.append([26])  # 13 接続詞
 
 # visualize initial map
-visualize_result(
-    tree_list,
-    initial_weight_matrix,
-    group_list,
-    path_to_initial_map,
-    fig_name +
-    ' initial map')
+# visualize_result(
+#     tree_list,
+#     initial_weight_matrix,
+#     group_list,
+#     path_to_initial_map,
+#     fig_name +
+#     ' initial map')
 
 # visualize trained map
-visualize_result(
-    tree_list,
-    trained_weight_matrix,
+vector_list, label_list = tree_list.make_vector_label_list(trained_weight_matrix)
+
+print("t-SNE working.....")
+tsne = TSNE()
+embedded = tsne.fit_transform(vector_list)
+
+visualize(
+    embedded,
+    label_list,
     group_list,
     path_to_trained_map,
     fig_name +

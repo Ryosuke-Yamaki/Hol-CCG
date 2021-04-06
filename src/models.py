@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.fft import fft, ifft
 from torch import conj, mul
 from utils import cal_acc, cal_norm_mean_std
+import numpy as np
 
 
 class Node:
@@ -198,6 +199,37 @@ class Tree_List:
                 if node.content != 'None':
                     node.content_id = vocab[node.content]
                 node.category_id = category[node.category]
+
+    def make_vector_label_list(self, weight_matrix):
+        # climb the derivation tree and make vectors for each nodes
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    vector = weight_matrix[node.content_id]
+                    if tree.regularized:
+                        vector = vector / torch.norm(vector)
+                    node.vector = vector
+
+        vector_list = []
+        label_list = []
+        for tree in self.tree_list:
+            tree.climb()
+            vector_list.append(tree.make_node_vector_tensor().detach().numpy())
+            label_list.append(tree.make_label_tensor().detach().numpy())
+        vector_list = np.array(vector_list)
+        label_list = np.array(label_list)
+
+        flatten_vector_list = []
+        flatten_label_list = []
+        for i in range(len(vector_list)):
+            for j in range(len(vector_list[i])):
+                flatten_vector_list.append(vector_list[i][j])
+                flatten_label_list.append(label_list[i][j])
+
+        vector_list = np.array(flatten_vector_list)
+        label_list = np.array(flatten_label_list)
+
+        return vector_list, label_list
 
 
 class Tree_Net(nn.Module):

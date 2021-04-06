@@ -59,43 +59,11 @@ def cal_norm_mean_std(tree):
     return norm, mean, std
 
 
-def visualize_result(tree_list, weight_matrix, group_list, path_to_map, fig_name):
-    # climb the derivation tree and make vectors for each nodes
-    for tree in tree_list.tree_list:
-        for node in tree.node_list:
-            if node.is_leaf:
-                vector = weight_matrix[node.content_id]
-                if tree.regularized:
-                    vector = vector / torch.norm(vector)
-                node.vector = vector
-    vector_list = []
-    label_list = []
-    for tree in tree_list.tree_list:
-        tree.climb()
-        vector_list.append(tree.make_node_vector_tensor().detach().numpy())
-        label_list.append(tree.make_label_tensor().detach().numpy())
-    vector_list = np.array(vector_list)
-    label_list = np.array(label_list)
-    flatten_vector_list = []
-    flatten_label_list = []
-    for i in range(len(vector_list)):
-        for j in range(len(vector_list[i])):
-            flatten_vector_list.append(vector_list[i][j])
-            flatten_label_list.append(label_list[i][j])
-    vector_list = np.array(flatten_vector_list)
-    label_list = np.array(flatten_label_list)
-
-    set_random_seed(0)
-
-    tsne = TSNE()
-    print("t-SNE working.....")
-    embedded = tsne.fit_transform(vector_list)
-
-    cmap = plt.cm.gist_rainbow
-
+def visualize(embedded, label_list, group_list, path_to_map, fig_name):
     plt.figure(figsize=(10, 10))
     color_list = ['black', 'gray', 'lightcoral', 'red', 'saddlebrown', 'orange', 'yellowgreen',
                   'forestgreen', 'turquoise', 'deepskyblue', 'blue', 'darkviolet', 'magenta']
+
     for group_num in range(len(group_list)):
         scatter_x_list = []
         scatter_y_list = []
@@ -110,10 +78,8 @@ def visualize_result(tree_list, weight_matrix, group_list, path_to_map, fig_name
             scatter_x_list,
             scatter_y_list,
             c=color_list[group_num],
-            cmap=cmap,
             label='group {}'.format(group_num + 1)
         )
-
     plt.legend()
     plt.title(fig_name)
     plt.savefig(path_to_map, dpi=300, orientation='portrait', transparent=False, pad_inches=0.0)
