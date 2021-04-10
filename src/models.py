@@ -16,15 +16,17 @@ class Node:
         self.LR = LR
         if content == 'None':
             self.ready = False
+            self.is_leaf = False
         else:
             self.ready = True
+            self.is_leaf = True
 
 
 class Tree:
-    def __init__(self, sentense, node_list, REGULARIZED):
+    def __init__(self, self_id, sentense, node_list, REGULARIZED):
+        self.self_id = self_id
         self.sentense = sentense
         self.node_list = node_list
-        self.set_leaf_node()
         self.regularized = REGULARIZED
 
     def make_node_pair_list(self):
@@ -88,12 +90,13 @@ class Tree:
         c = ifft(c).real
         return c
 
-    def set_leaf_node(self):
+    def set_leaf_node_vector(self, weight_matrix):
         for node in self.node_list:
-            if node.ready:
-                node.is_leaf = bool(True)
-            else:
-                node.is_leaf = bool(False)
+            if node.is_leaf:
+                vector = weight_matrix[node.content_id]
+                if self.regularized:
+                    vector = vector / torch.norm(vector)
+                node.vector = vector
 
     # reset node status for next coming epoch
     def reset_node_status(self):
@@ -150,6 +153,7 @@ class Tree_List:
         block_list.append(block)
 
         tree_list = []
+        tree_id = 0
         for block in block_list:
             sentense = block[0]
             node_list = []
@@ -161,9 +165,13 @@ class Tree_List:
                 sibling_id = node_inf[3]
                 if sibling_id != 'None':
                     sibling_id = int(sibling_id)
+                else:
+                    sibling_id = None
                 parent_id = node_inf[4]
                 if parent_id != 'None':
                     parent_id = int(parent_id)
+                else:
+                    parent_id = None
                 LR = node_inf[5]
                 node_list.append(
                     Node(
@@ -173,7 +181,8 @@ class Tree_List:
                         sibling_id,
                         parent_id,
                         LR))
-            tree_list.append(Tree(sentense, node_list, self.regularized))
+            tree_list.append(Tree(tree_id, sentense, node_list, self.regularized))
+            tree_id += 1
         return tree_list
 
     # create vocablary and category from tree list
@@ -200,36 +209,37 @@ class Tree_List:
                     node.content_id = vocab[node.content]
                 node.category_id = category[node.category]
 
-    def make_vector_label_list(self, weight_matrix):
-        # climb the derivation tree and make vectors for each nodes
-        for tree in self.tree_list:
-            for node in tree.node_list:
-                if node.is_leaf:
-                    vector = weight_matrix[node.content_id]
-                    if tree.regularized:
-                        vector = vector / torch.norm(vector)
-                    node.vector = vector
-
+    def prepare_inf_for_visualization(self, weight_matrix):
         vector_list = []
-        label_list = []
+        content_info_dict = {}
+        # content_info_dict : contains dicts of each content's info in the type of dict
+        # inner dict contains possible category id to correspond content and the
+        # embedded idx of content
+
+        idx = 0  # this index shows where each content included in the embedded vector list
         for tree in self.tree_list:
+            tree.set_leaf_node_vector(weight_matrix)
             tree.climb()
-            vector_list.append(tree.make_node_vector_tensor().detach().numpy())
-            label_list.append(tree.make_label_tensor().detach().numpy())
+            for node in tree.node_list:
+                # first time which the node.contetnt subscribed
+                if node.content not in content_info_dict:
+                    # initialize dictionary for each content
+                    content_info = {}
+                    content_info['category_id_list'] = [node.category_id]
+                    content_info['idx'] = idx
+                    content_info['plotted_category_list'] = []
+                    content_info['plotted_category_id_list'] = []
+                    content_info_dict[node.content] = content_info
+                    vector_list.append(node.vector.detach().numpy())
+                    idx += 1
+
+                # already node.content included, but the category is different
+                elif node.category_id not in content_info_dict[node.content]['category_id_list']:
+                    content_info_dict[node.content]['category_id_list'].append(node.category_id)
+
         vector_list = np.array(vector_list)
-        label_list = np.array(label_list)
 
-        flatten_vector_list = []
-        flatten_label_list = []
-        for i in range(len(vector_list)):
-            for j in range(len(vector_list[i])):
-                flatten_vector_list.append(vector_list[i][j])
-                flatten_label_list.append(label_list[i][j])
-
-        vector_list = np.array(flatten_vector_list)
-        label_list = np.array(flatten_label_list)
-
-        return vector_list, label_list
+        return vector_list, content_info_dict
 
 
 class Tree_Net(nn.Module):

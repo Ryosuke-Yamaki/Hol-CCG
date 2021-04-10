@@ -1,29 +1,31 @@
 import torch
 import sys
-from utils import load_weight_matrix, visualize
+import matplotlib.pyplot as plt
+from utils import load_weight_matrix, visualize, interactive_visualize, set_random_seed
 from models import Tree_List, Tree_Net
 from sklearn.manifold import TSNE
+import copy
 
 FROM_RANDOM = True
 REGULARIZED = True
 USE_ORIGINAL_LOSS = False
 EMBEDDING_DIM = 100
+visualize_tree_id = range(100)
+WITH_ARROW = False
 
 args = sys.argv
-if len(args) > 1:
-    if args[1] == 'True':
-        FROM_RANDOM = True
-    else:
-        FROM_RANDOM = False
-    if args[2] == 'True':
-        REGULARIZED = True
-    else:
-        REGULARIZED = False
-    if args[3] == 'True':
-        USE_ORIGINAL_LOSS = True
-    else:
-        USE_ORIGINAL_LOSS = False
+if len(args) > 1 and args[1] == 'False':
+    FROM_RANDOM = False
+if len(args) > 2 and args[2] == 'False':
+    REGULARIZED = False
+if len(args) > 3 and args[3] == 'True':
+    USE_ORIGINAL_LOSS = True
+if len(args) > 4:
     EMBEDDING_DIM = int(args[4])
+if len(args) > 5:
+    visualize_tree_id = [int(args[5])]
+    WITH_ARROW = True
+
 
 PATH_TO_DIR = "/home/yryosuke0519/"
 
@@ -32,13 +34,11 @@ PATH_TO_WEIGHT_MATRIX = PATH_TO_DIR + "Hol-CCG/data/pretrained_weight_matrix.csv
 
 path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"
 path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
-path_to_initial_map = PATH_TO_DIR + "Hol-CCG/result/fig/"
-path_to_trained_map = PATH_TO_DIR + "Hol-CCG/result/fig/"
+path_to_map = PATH_TO_DIR + "Hol-CCG/result/fig/"
 path_list = [
     path_to_initial_weight_matrix,
     path_to_model,
-    path_to_initial_map,
-    path_to_trained_map]
+    path_to_map]
 
 for i in range(len(path_list)):
     if FROM_RANDOM:
@@ -54,8 +54,7 @@ for i in range(len(path_list)):
     path_list[i] += "_" + str(EMBEDDING_DIM) + "d"
 path_to_initial_weight_matrix = path_list[0] + "_initial_weight_matrix.csv"
 path_to_model = path_list[1] + "_model.pth"
-path_to_initial_map = path_list[2] + "_initial_map.png"
-path_to_trained_map = path_list[3] + "_trained_map.png"
+path_to_map = path_list[2] + "_map.png"
 
 tree_list = Tree_List(PATH_TO_DATA, REGULARIZED)
 
@@ -93,26 +92,49 @@ group_list.append([9, 18, 25])  # 11 動詞句を修飾
 group_list.append([19])  # 12 to不定詞
 group_list.append([26])  # 13 接続詞
 
-# visualize initial map
-# visualize_result(
-#     tree_list,
-#     initial_weight_matrix,
-#     group_list,
-#     path_to_initial_map,
-#     fig_name +
-#     ' initial map')
+color_list = ['black', 'gray', 'lightcoral', 'red', 'saddlebrown', 'orange', 'yellowgreen',
+              'forestgreen', 'turquoise', 'deepskyblue', 'blue', 'darkviolet', 'magenta']
 
-# visualize trained map
-vector_list, label_list = tree_list.make_vector_label_list(trained_weight_matrix)
+# reset random seed for t-SNE
+set_random_seed(0)
 
+# make the map of trained state
+vector_list, content_info_dict = tree_list.prepare_inf_for_visualization(
+    trained_weight_matrix)
 print("t-SNE working.....")
 tsne = TSNE()
 embedded = tsne.fit_transform(vector_list)
 
+visualize_tree_list = []
+for tree_id in visualize_tree_id:
+    visualize_tree_list.append(tree_list.tree_list[tree_id])
+
+fig0 = plt.figure(figsize=(10, 10))
+ax0 = fig0.add_subplot()
 visualize(
-    embedded,
-    label_list,
-    group_list,
-    path_to_trained_map,
-    fig_name +
-    ' trained map')
+    ax=ax0,
+    embedded=embedded,
+    visualize_tree_list=visualize_tree_list,
+    content_info_dict=copy.deepcopy(content_info_dict),
+    group_list=group_list,
+    color_list=color_list,
+    fig_name=fig_name +
+    " trained",
+    WITH_ARROW=WITH_ARROW)
+if not WITH_ARROW:
+    fig0.savefig(
+        path_to_map,
+        dpi=300,
+        orientation='portrait',
+        transparent=False,
+        pad_inches=0.0)
+
+fig1 = plt.figure(figsize=(10, 10))
+interactive_visualize(
+    fig=fig1,
+    embedded=embedded,
+    visualize_tree_list=visualize_tree_list,
+    content_info_dict=copy.deepcopy(content_info_dict),
+    group_list=group_list,
+    color_list=color_list)
+plt.show()
