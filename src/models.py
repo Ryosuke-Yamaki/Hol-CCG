@@ -46,7 +46,6 @@ class Tree:
 
     def climb(self):
         node_pair_list = self.make_node_pair_list()
-        i = 1
         roop_count = 0
         while True:
             for node_pair in node_pair_list:
@@ -75,7 +74,6 @@ class Tree:
                     #       ':' + self.node_list[left_node.parent_id].category)
                     # print()
                     node_pair_list.remove(node_pair)
-                    i += 1
             roop_count += 1
             if node_pair_list == []:
                 break
