@@ -125,6 +125,36 @@ class Tree:
             label_list.append(torch.tensor(node.category_id))
         return torch.stack(label_list)
 
+    def generate_info_for_training(self):
+        leaf_node_vocab_id_list = []
+        category_id_list = []
+        for node in self.node_list:
+            if not node.is_leaf:
+                break
+            else:
+                leaf_node_vocab_id_list.append(node.content_id)
+                category_id_list.append(node.category_id)
+        node_pair_list = self.make_node_pair_list()
+
+        composition_order = []
+        while True:
+            for node_pair in node_pair_list:
+                left_node = node_pair[0]
+                right_node = node_pair[1]
+                parent_node = self.node_list[left_node.parent_id]
+                if left_node.ready and right_node.ready:
+                    category_id_list.append(parent_node.category_id)
+                    composition_order.append(
+                        [left_node.self_id, right_node.self_id, left_node.parent_id])
+                    parent_node.ready = True
+                    node_pair_list.remove(node_pair)
+            if node_pair_list == []:
+                break
+        leaf_node_vocab_id_list = torch.tensor(leaf_node_vocab_id_list, dtype=torch.int)
+        category_id_list = torch.tensor(category_id_list, dtype=torch.int)
+        composition_order = torch.tensor(composition_order, dtype=torch.int)
+        return leaf_node_vocab_id_list, category_id_list, composition_order
+
 
 class Tree_List:
     def __init__(self, PATH_TO_DATA, REGULARIZED):
