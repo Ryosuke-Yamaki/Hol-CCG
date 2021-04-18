@@ -29,21 +29,6 @@ def generate_random_weight_matrix(NUM_VOCAB, EMBEDDING_DIM, REGULARIZED):
     return weight_matrix.astype(np.float32)
 
 
-def cal_acc(output, label):
-    num_True = 0
-    num_False = 0
-
-    for i in range(output.shape[0]):
-        pred = torch.argmax(output[i])
-        correct = label[i]
-        if pred == correct:
-            num_True += 1
-        else:
-            num_False += 1
-    acc = num_True / (num_True + num_False)
-    return acc
-
-
 def cal_norm_mean_std(tree):
     norm_list = []
     mean_list = []

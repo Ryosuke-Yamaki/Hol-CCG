@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.fft import fft, ifft
 from torch import conj, mul
-from utils import cal_acc, cal_norm_mean_std
+from utils import cal_norm_mean_std
 import numpy as np
 
 
@@ -81,13 +81,6 @@ class Tree:
                 print("***** Too many roop detected during tree climb! *****")
                 exit()
 
-    def circular_correlation(self, a, b):
-        a = conj(fft(a))
-        b = fft(b)
-        c = mul(a, b)
-        c = ifft(c).real
-        return c
-
     def set_leaf_node_vector(self, weight_matrix):
         for node in self.node_list:
             if node.is_leaf:
@@ -95,14 +88,6 @@ class Tree:
                 if self.regularized:
                     vector = vector / torch.norm(vector)
                 node.vector = vector
-
-    # reset node status for next coming epoch
-    def reset_node_status(self):
-        for node in self.node_list:
-            if node.is_leaf:
-                node.ready = True
-            else:
-                node.ready = False
 
     # generate tensor as the input of tree net
     def make_node_vector_tensor(self):
@@ -118,50 +103,42 @@ class Tree:
                 node_vector_list.append(node.vector)
         return torch.stack(node_vector_list)
 
-    # generate tnesor as the correct category label
-    def make_label_tensor(self):
+    def set_info_for_training(self):
+        leaf_node_info = []
         label_list = []
         for node in self.node_list:
-            label_list.append(torch.tensor(node.category_id))
-        return torch.stack(label_list)
+            if node.is_leaf:
+                leaf_node_info.append([node.self_id, node.content_id])
+            label_list.append(node.category_id)
 
-    def generate_info_for_training(self):
-        leaf_node_vocab_id_list = []
-        category_id_list = []
-        for node in self.node_list:
-            if not node.is_leaf:
-                break
-            else:
-                leaf_node_vocab_id_list.append(node.content_id)
-                category_id_list.append(node.category_id)
         node_pair_list = self.make_node_pair_list()
-
-        composition_order = []
+        composition_info = []
         while True:
             for node_pair in node_pair_list:
                 left_node = node_pair[0]
                 right_node = node_pair[1]
                 parent_node = self.node_list[left_node.parent_id]
                 if left_node.ready and right_node.ready:
-                    category_id_list.append(parent_node.category_id)
-                    composition_order.append(
+                    composition_info.append(
                         [left_node.self_id, right_node.self_id, left_node.parent_id])
                     parent_node.ready = True
                     node_pair_list.remove(node_pair)
             if node_pair_list == []:
                 break
-        leaf_node_vocab_id_list = torch.tensor(leaf_node_vocab_id_list, dtype=torch.int)
-        category_id_list = torch.tensor(category_id_list, dtype=torch.int)
-        composition_order = torch.tensor(composition_order, dtype=torch.int)
-        return leaf_node_vocab_id_list, category_id_list, composition_order
+        leaf_node_info = torch.tensor(leaf_node_info, dtype=torch.int, requires_grad=False)
+        label_list = torch.tensor(label_list, dtype=torch.long, requires_grad=False)
+        composition_info = torch.tensor(composition_info, dtype=torch.int, requires_grad=False)
+        self.leaf_node_info = leaf_node_info
+        self.label_list = label_list
+        self.composition_info = composition_info
 
 
 class Tree_List:
     def __init__(self, PATH_TO_DATA, REGULARIZED):
         self.regularized = REGULARIZED
-        self.tree_list = self.initialize_tree_list(PATH_TO_DATA)
-        self.vocab, self.category = self.make_vocab_category(self.tree_list)
-        self.add_content_category_id(self.vocab, self.category)
+        self.initialize_tree_list(PATH_TO_DATA)
+        self.make_vocab_category()
+        self.set_info_for_training()
 
     # initialize tree list from txt data
     def initialize_tree_list(self, PATH_TO_DATA):
@@ -211,31 +188,36 @@ class Tree_List:
                         LR))
             tree_list.append(Tree(tree_id, sentense, node_list, self.regularized))
             tree_id += 1
-        return tree_list
+        self.tree_list = tree_list
 
-    # create vocablary and category from tree list
-    def make_vocab_category(self, tree_list):
-        vocab = {}
-        category = {}
+    # create dictionary of contents, categories and thier id
+    def make_vocab_category(self):
+        self.content_to_id = {}
+        self.id_to_content = {}
+        self.category_to_id = {}
+        self.id_to_category = {}
         i = 0
         j = 0
-        for tree in tree_list:
-            for node in tree.node_list:
-                if node.content not in vocab and node.content != 'None':
-                    vocab[node.content] = i
-                    i += 1
-                if node.category not in category:
-                    category[node.category] = j
-                    j += 1
-        return vocab, category
-
-    # add content_id and category_id to each node of tree
-    def add_content_category_id(self, vocab, category):
         for tree in self.tree_list:
             for node in tree.node_list:
-                if node.content != 'None':
-                    node.content_id = vocab[node.content]
-                node.category_id = category[node.category]
+                if node.is_leaf:  # only when node is leaf add to vocablary
+                    if node.content not in self.content_to_id:
+                        self.content_to_id[node.content] = i
+                        self.id_to_content[i] = node.content
+                        i += 1
+                    node.content_id = self.content_to_id[node.content]
+                if node.category not in self.category_to_id:
+                    self.category_to_id[node.category] = j
+                    self.id_to_category[j] = node.category
+                    j += 1
+                node.category_id = self.category_to_id[node.category]
+
+    def set_content_category_id(self):
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    node.content_id = self.content_to_id[node.content]
+                node.category_id = self.category_to_id[node.category]
 
     def prepare_inf_for_visualization(self, weight_matrix):
         vector_list = []
@@ -269,13 +251,17 @@ class Tree_List:
 
         return vector_list, content_info_dict
 
+    def set_info_for_training(self):
+        for tree in self.tree_list:
+            tree.set_info_for_training()
+
 
 class Tree_Net(nn.Module):
     def __init__(self, tree_list, initial_weight_matrix):
         super(Tree_Net, self).__init__()
         self.num_embedding = initial_weight_matrix.shape[0]
         self.embedding_dim = initial_weight_matrix.shape[1]
-        self.num_category = len(tree_list.category)
+        self.num_category = len(tree_list.category_to_id)
         self.embedding = nn.Embedding(
             self.num_embedding,
             self.embedding_dim,
@@ -283,43 +269,116 @@ class Tree_Net(nn.Module):
         self.linear = nn.Linear(self.embedding_dim, self.num_category)
         self.softmax = nn.Softmax(dim=1)
 
-    def forward(self, tree):
-        for node in tree.node_list:
-            if node.is_leaf:
-                vector = self.embedding(torch.tensor(node.content_id))
-                if tree.regularized:
-                    vector = vector / torch.norm(vector)
-                node.vector = vector
-        tree.climb()
-        x = tree.make_node_vector_tensor()
-        x = self.linear(x)
-        x = self.softmax(x)
-        return x
+    def forward(self, leaf_node_info, composition_info):
+        num_leaf_node = len(leaf_node_info)
+        node_vectors = [0] * (2 * num_leaf_node - 1)
+        for info in leaf_node_info:
+            self_id = info[0]
+            content_id = info[1]
+            node_vectors[self_id] = self.embedding(content_id)
+        for info in composition_info:
+            left_node_id = info[0]
+            right_node_id = info[1]
+            parent_node_id = info[2]
+            node_vectors[parent_node_id] = self.circular_correlation(
+                node_vectors[left_node_id], node_vectors[right_node_id], True)
+        node_vectors = torch.stack(node_vectors, dim=0)
+        output = self.softmax(self.linear(node_vectors))
+        return output
 
-    def cal_stat(self, tree_list, criteria):
-        total_loss = 0.0
-        total_acc = 0.0
-        total_norm = 0.0
-        total_mean = 0.0
-        total_std = 0.0
-        for tree in tree_list.tree_list:
-            label = tree.make_label_tensor()
-            output = self.forward(tree)
-            loss = criteria(output, label)
-            acc = cal_acc(output, label)
-            norm, mean, std = cal_norm_mean_std(tree)
-            total_loss += loss
-            total_acc += acc
-            total_norm += norm
-            total_mean += mean
-            total_std += std
-            tree.reset_node_status()
+    def circular_correlation(self, a, b, REGULARIZED):
+        a = conj(fft(a))
+        b = fft(b)
+        c = mul(a, b)
+        c = ifft(c).real
+        if REGULARIZED:
+            return c / torch.norm(c)
+        else:
+            return c
 
-        len_tree_list = len(tree_list.tree_list)
-        stat_list = []
-        stat_list.append(float(total_loss / len_tree_list))
-        stat_list.append(float(total_acc / len_tree_list))
-        stat_list.append(float(total_norm / len_tree_list))
-        stat_list.append(float(total_mean / len_tree_list))
-        stat_list.append(float(total_std / len_tree_list))
-        return stat_list
+
+class History:
+    def __init__(self, tree_net, tree_list, criteria):
+        self.tree_net = tree_net
+        self.tree_list = tree_list
+        self.criteria = criteria
+        self.loss_history = np.array([])
+        self.acc_history = np.array([])
+
+    def cal_stat(self):
+        loss = 0.0
+        acc = 0.0
+        for tree in self.tree_list.tree_list:
+            leaf_node_info = tree.leaf_node_info
+            label_list = tree.label_list
+            composition_info = tree.composition_info
+            output = self.tree_net(leaf_node_info, composition_info)
+            loss += self.criteria(output, label_list)
+            acc += self.cal_acc(output, label_list)
+
+        loss = loss.detach().numpy() / len(self.tree_list.tree_list)
+        acc = acc.detach().numpy() / len(self.tree_list.tree_list)
+        self.loss_history = np.append(self.loss_history, loss)
+        self.acc_history = np.append(self.acc_history, acc)
+        self.max_acc = np.max(self.acc_history)
+        self.max_acc_idx = np.argmax(self.acc_history)
+
+    def cal_acc(self, output, label_list):
+        pred = torch.argmax(output, dim=1)
+        num_correct = torch.count_nonzero(pred == label_list)
+        return num_correct / output.shape[0]
+
+
+class Condition_Setter:
+    def __init__(self, PATH_TO_DIR):
+        if int(input("random(0) or GloVe(1): ")) == 1:
+            self.RANDOM = False
+        else:
+            self.RANDOM = True
+        if int(input("reg(0) or not_reg(1): ")) == 1:
+            self.REGULARIZED = False
+        else:
+            self.REGULARIZED = True
+        if int(input("normal_loss(0) or original_loss(1): ")) == 1:
+            self.USE_ORIGINAL_LOSS = True
+        else:
+            self.USE_ORIGINAL_LOSS = False
+        embedding_dim = input("embedding_dim(default=100d): ")
+        if embedding_dim != "":
+            self.embedding_dim = int(embedding_dim)
+        else:
+            self.embedding_dim = 100
+        self.set_path(PATH_TO_DIR)
+
+    def set_path(self, PATH_TO_DIR):
+        self.path_to_train_data = PATH_TO_DIR + "data/train.txt"
+        self.path_to_test_data = PATH_TO_DIR + "data/test.txt"
+        self.path_to_pretrained_weight_matrix = PATH_TO_DIR + "data/pretrained_weight_matrix.csv"
+        path_to_initial_weight_matrix = PATH_TO_DIR + "result/data/"
+        path_to_model = PATH_TO_DIR + "result/model/"
+        path_to_train_data_history = PATH_TO_DIR + "result/data/"
+        path_to_test_data_history = PATH_TO_DIR + "result/data/"
+        path_to_history_fig = PATH_TO_DIR + "result/fig/"
+        path_list = [
+            path_to_initial_weight_matrix,
+            path_to_model,
+            path_to_train_data_history,
+            path_to_test_data_history,
+            path_to_history_fig]
+        for i in range(len(path_list)):
+            if self.RANDOM:
+                path_list[i] += "random"
+            else:
+                path_list[i] += "GloVe"
+            if self.REGULARIZED:
+                path_list[i] += "_reg"
+            else:
+                path_list[i] += "_not_reg"
+            if self.USE_ORIGINAL_LOSS:
+                path_list[i] += "_original_loss"
+            path_list[i] += "_" + str(self.embedding_dim) + "d"
+        self.path_to_initial_weight_matrix = path_list[0] + "_initial_weight_matrix.csv"
+        self.path_to_model = path_list[1] + "_model.pth"
+        self.path_to_train_data_history = path_list[2] + "_train_history.csv"
+        self.path_to_test_data_history = path_list[3] + "_test_history.csv"
+        self.path_to_history_fig = path_list[4] + "_history.png"
