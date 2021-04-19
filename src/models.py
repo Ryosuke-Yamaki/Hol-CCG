@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
-from torch.fft import fft, ifft
-from torch import conj, mul
-from utils import cal_norm_mean_std
+from utils import circular_correlation
 import numpy as np
 import csv
+import random
 
 
 class Node:
@@ -30,7 +29,7 @@ class Tree:
         self.node_list = node_list
         self.regularized = REGULARIZED
 
-    def make_node_pair_list(self):
+    def set_node_pair_list(self):
         left_nodes = []
         right_nodes = []
         for node in self.node_list:
@@ -43,44 +42,16 @@ class Tree:
             for right_node in right_nodes:
                 if left_node.sibling_id == right_node.self_id:
                     node_pair_list.append((left_node, right_node))
-        return node_pair_list
+        self.node_pair_list = node_pair_list
 
     def climb(self):
-        node_pair_list = self.make_node_pair_list()
-        roop_count = 0
-        while True:
-            for node_pair in node_pair_list:
-                left_node = node_pair[0]
-                right_node = node_pair[1]
-                if left_node.ready and right_node.ready:
-                    content = left_node.content + ' ' + right_node.content
-                    self.node_list[left_node.parent_id].content = content
-                    vector = self.circular_correlation(
-                        left_node.vector, right_node.vector)
-                    # regularize the norm of vector
-                    if self.regularized:
-                        vector = vector / torch.norm(vector)
-                    self.node_list[left_node.parent_id].vector = vector
-                    self.node_list[left_node.parent_id].ready = True
-                    # print("step" + str(i) + ":")
-                    # print(
-                    #     left_node.content +
-                    #     ':' +
-                    #     left_node.category +
-                    #     ' ' +
-                    #     right_node.content +
-                    #     ':' +
-                    #     right_node.category)
-                    # print('-> ' + self.node_list[left_node.parent_id].content +
-                    #       ':' + self.node_list[left_node.parent_id].category)
-                    # print()
-                    node_pair_list.remove(node_pair)
-            roop_count += 1
-            if node_pair_list == []:
-                break
-            elif roop_count > 1000:
-                print("***** Too many roop detected during tree climb! *****")
-                exit()
+        for info in self.composition_info:
+            left_node = self.node_list[info[0]]
+            right_node = self.node_list[info[1]]
+            parent_node = self.node_list[info[2]]
+            parent_node.content = left_node.content + ' ' + right_node.content
+            parent_node.vector = circular_correlation(
+                left_node.vector, right_node.vector, self.regularized)
 
     def set_leaf_node_vector(self, weight_matrix):
         for node in self.node_list:
@@ -90,20 +61,7 @@ class Tree:
                     vector = vector / torch.norm(vector)
                 node.vector = vector
 
-    # generate tensor as the input of tree net
-    def make_node_vector_tensor(self):
-        node_vector_list = []
-        for node in self.node_list:
-            node_vector_list.append(node.vector)
-        return torch.stack(node_vector_list)
-
-    def make_leaf_node_vector_tensor(self):
-        node_vector_list = []
-        for node in self.node_list:
-            if node.is_leaf:
-                node_vector_list.append(node.vector)
-        return torch.stack(node_vector_list)
-
+    # when initialize tree_list, each info of tree is automatically set
     def set_info_for_training(self):
         leaf_node_info = []
         label_list = []
@@ -112,7 +70,7 @@ class Tree:
                 leaf_node_info.append([node.self_id, node.content_id])
             label_list.append(node.category_id)
 
-        node_pair_list = self.make_node_pair_list()
+        node_pair_list = self.node_pair_list
         composition_info = []
         while True:
             for node_pair in node_pair_list:
@@ -132,6 +90,12 @@ class Tree:
         self.leaf_node_info = leaf_node_info
         self.label_list = label_list
         self.composition_info = composition_info
+        self.reset_node_status()
+
+    def reset_node_status(self):
+        for node in self.node_list:
+            if not node.is_leaf and node.ready:
+                node.ready = False
 
 
 class Tree_List:
@@ -254,7 +218,15 @@ class Tree_List:
 
     def set_info_for_training(self):
         for tree in self.tree_list:
+            tree.set_node_pair_list()
             tree.set_info_for_training()
+
+    def make_batch(self, BATCH_SIZE):
+        sampled_tree_list = random.sample(self.tree_list, len(self.tree_list))
+        batch_tree_list = []
+        for idx in range(0, len(sampled_tree_list) - BATCH_SIZE, BATCH_SIZE):
+            batch_tree_list.append(sampled_tree_list[idx:idx + BATCH_SIZE])
+        return batch_tree_list
 
 
 class Tree_Net(nn.Module):
@@ -281,21 +253,11 @@ class Tree_Net(nn.Module):
             left_node_id = info[0]
             right_node_id = info[1]
             parent_node_id = info[2]
-            node_vectors[parent_node_id] = self.circular_correlation(
+            node_vectors[parent_node_id] = circular_correlation(
                 node_vectors[left_node_id], node_vectors[right_node_id], True)
         node_vectors = torch.stack(node_vectors, dim=0)
         output = self.softmax(self.linear(node_vectors))
         return output
-
-    def circular_correlation(self, a, b, REGULARIZED):
-        a = conj(fft(a))
-        b = fft(b)
-        c = mul(a, b)
-        c = ifft(c).real
-        if REGULARIZED:
-            return c / torch.norm(c)
-        else:
-            return c
 
 
 class History:
