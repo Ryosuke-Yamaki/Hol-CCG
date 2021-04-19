@@ -4,6 +4,7 @@ from torch.fft import fft, ifft
 from torch import conj, mul
 from utils import cal_norm_mean_std
 import numpy as np
+import csv
 
 
 class Node:
@@ -328,6 +329,12 @@ class History:
         num_correct = torch.count_nonzero(pred == label_list)
         return num_correct / output.shape[0]
 
+    def save(self, path):
+        with open(path, 'w') as f:
+            writer = csv.writer(f, lineterminator='\n')
+            writer.writerow(self.loss_history)
+            writer.writerow(self.acc_history)
+
 
 class Condition_Setter:
     def __init__(self, PATH_TO_DIR):
@@ -359,12 +366,14 @@ class Condition_Setter:
         path_to_train_data_history = PATH_TO_DIR + "result/data/"
         path_to_test_data_history = PATH_TO_DIR + "result/data/"
         path_to_history_fig = PATH_TO_DIR + "result/fig/"
+        fig_name = ""
         path_list = [
             path_to_initial_weight_matrix,
             path_to_model,
             path_to_train_data_history,
             path_to_test_data_history,
-            path_to_history_fig]
+            path_to_history_fig,
+            fig_name]
         for i in range(len(path_list)):
             if self.RANDOM:
                 path_list[i] += "random"
@@ -382,3 +391,4 @@ class Condition_Setter:
         self.path_to_train_data_history = path_list[2] + "_train_history.csv"
         self.path_to_test_data_history = path_list[3] + "_test_history.csv"
         self.path_to_history_fig = path_list[4] + "_history.png"
+        self.fig_name = path_list[5].replace('_', ' ')
