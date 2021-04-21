@@ -80,6 +80,7 @@ class Tree:
                 if left_node.ready and right_node.ready:
                     composition_info.append(
                         [left_node.self_id, right_node.self_id, left_node.parent_id])
+                    parent_node.content = left_node.content + ' ' + right_node.content
                     parent_node.ready = True
                     node_pair_list.remove(node_pair)
             if node_pair_list == []:
@@ -232,6 +233,7 @@ class Tree_List:
 class Tree_Net(nn.Module):
     def __init__(self, tree_list, initial_weight_matrix):
         super(Tree_Net, self).__init__()
+        self.regularized = tree_list.regularized
         self.num_embedding = initial_weight_matrix.shape[0]
         self.embedding_dim = initial_weight_matrix.shape[1]
         self.num_category = len(tree_list.category_to_id)
@@ -248,7 +250,11 @@ class Tree_Net(nn.Module):
         for info in leaf_node_info:
             self_id = info[0]
             content_id = info[1]
-            node_vectors[self_id] = self.embedding(content_id)
+            if self.regularized:
+                node_vectors[self_id] = self.embedding(
+                    content_id) / torch.norm(self.embedding(content_id))
+            else:
+                node_vectors[self_id] = self.embedding(content_id)
         for info in composition_info:
             left_node_id = info[0]
             right_node_id = info[1]
@@ -312,11 +318,14 @@ class Condition_Setter:
             self.USE_ORIGINAL_LOSS = True
         else:
             self.USE_ORIGINAL_LOSS = False
-        embedding_dim = input("embedding_dim(default=100d): ")
-        if embedding_dim != "":
-            self.embedding_dim = int(embedding_dim)
+        if self.RANDOM:
+            embedding_dim = input("embedding_dim(default=100d): ")
+            if embedding_dim != "":
+                self.embedding_dim = int(embedding_dim)
+            else:
+                self.embedding_dim = 100
         else:
-            self.embedding_dim = 100
+            self.embedding_dim = 300
         self.set_path(PATH_TO_DIR)
 
     def set_path(self, PATH_TO_DIR):

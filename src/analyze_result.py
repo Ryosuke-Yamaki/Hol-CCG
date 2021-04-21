@@ -1,76 +1,69 @@
 import torch
-from models import Tree_List, Tree_Net
-from utils import load_weight_matrix, Analyzer
-import sys
+from models import Tree_List, Tree_Net, Condition_Setter
+from utils import load_weight_matrix
 
-FROM_RANDOM = True
-REGULARIZED = True
-USE_ORIGINAL_LOSS = False
-EMBEDDING_DIM = 100
 
-args = sys.argv
-if len(args) > 1:
-    if args[1] == 'True':
-        FROM_RANDOM = True
-    else:
-        FROM_RANDOM = False
-    if args[2] == 'True':
-        REGULARIZED = True
-    else:
-        REGULARIZED = False
-    if args[3] == 'True':
-        USE_ORIGINAL_LOSS = True
-    else:
-        USE_ORIGINAL_LOSS = False
-    EMBEDDING_DIM = int(args[4])
+class Analyzer:
+    def __init__(self, tree_list, tree_net):
+        self.tree_list = tree_list
+        self.id_to_category = tree_list.id_to_category
+        self.tree_net = tree_net
 
-PATH_TO_DIR = "/home/yryosuke0519/"
+    def analyze(self, target_tree_id=None):
+        if target_tree_id is None:
+            tree_list = self.tree_list.tree_list
+        else:
+            tree_list = []
+            for tree_id in target_tree_id:
+                tree_list.append(self.tree_list.tree_list[tree_id])
+        for tree in tree_list:
+            leaf_node_info = tree.leaf_node_info
+            label_list = tree.label_list
+            composition_info = tree.composition_info
+            output = self.tree_net(leaf_node_info, composition_info)
+            acc = self.cal_acc(output, label_list)
+            print(tree.sentense)
+            print('acc: {}'.format(acc))
+            print('*' * 50)
+            for node in tree.node_list:
+                content = node.content
+                true_category = node.category
+                pred_category = self.id_to_category[int(torch.argmax(output[node.self_id]))]
+                print('content: {}'.format(content))
+                print('true category: {}'.format(true_category))
+                print('pred category: {}'.format(pred_category))
+                if true_category == pred_category:
+                    print('True')
+                else:
+                    print('False')
+                print()
+            print('*' * 50)
 
-PATH_TO_TRAIN_DATA = PATH_TO_DIR + "Hol-CCG/data/train.txt"
-PATH_TO_TEST_DATA = PATH_TO_DIR + "Hol-CCG/data/test.txt"
+    def cal_acc(self, output, label_list):
+        pred = torch.argmax(output, dim=1)
+        num_correct = torch.count_nonzero(pred == label_list)
+        return num_correct / output.shape[0]
 
-path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"
-path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
-path_list = [
-    path_to_initial_weight_matrix,
-    path_to_model]
 
-for i in range(len(path_list)):
-    if FROM_RANDOM:
-        path_list[i] += "random"
-    else:
-        path_list[i] += "GloVe"
-    if REGULARIZED:
-        path_list[i] += "_reg"
-    else:
-        path_list[i] += "_not_reg"
-    if USE_ORIGINAL_LOSS:
-        path_list[i] += "_original_loss"
-    path_list[i] += "_" + str(EMBEDDING_DIM) + "d"
-path_to_initial_weight_matrix = path_list[0] + "_initial_weight_matrix.csv"
-path_to_model = path_list[1] + "_model.pth"
+PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
 
-train_tree_list = Tree_List(PATH_TO_TRAIN_DATA, REGULARIZED)
-test_tree_list = Tree_List(PATH_TO_TEST_DATA, REGULARIZED)
-test_tree_list.vocab = train_tree_list.vocab
-test_tree_list.category = train_tree_list.category
-test_tree_list.add_content_category_id(test_tree_list.vocab, test_tree_list.category)
+condition = Condition_Setter(PATH_TO_DIR)
 
-vocab = test_tree_list.vocab
-category = test_tree_list.category
-inv_vocab = {}
-inv_category = {}
-for k, v in vocab.items():
-    inv_vocab[v] = k
-for k, v in category.items():
-    inv_category[v] = k
+# initialize tree_list from toy_data
+train_tree_list = Tree_List(condition.path_to_train_data, condition.REGULARIZED)
+test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
+test_tree_list.content_to_id = train_tree_list.content_to_id
+test_tree_list.category_to_id = train_tree_list.category_to_id
+test_tree_list.set_content_category_id()
+test_tree_list.set_info_for_training()
 
-weight_matrix = torch.tensor(load_weight_matrix(path_to_initial_weight_matrix, REGULARIZED))
+weight_matrix = torch.tensor(
+    load_weight_matrix(
+        condition.path_to_initial_weight_matrix,
+        condition.REGULARIZED))
 tree_net = Tree_Net(test_tree_list, weight_matrix)
-tree_net.load_state_dict(torch.load(path_to_model))
+tree_net.load_state_dict(torch.load(condition.path_to_model))
 tree_net.eval()
 
-analyzer = Analyzer(train_tree_list.category, tree_net)
-
-for tree in test_tree_list.tree_list:
-    analyzer.analyze(tree)
+analyzer = Analyzer(test_tree_list, tree_net)
+analyzer.analyze([1, 2])
