@@ -202,14 +202,11 @@ if int(input("normal_loss(0) or original_loss(1): ")) == 1:
     USE_ORIGINAL_LOSS = True
 else:
     USE_ORIGINAL_LOSS = False
-if FROM_RANDOM:
-    embedding_dim = input("embedding_dim(default=100d): ")
-    if embedding_dim != "":
-        embedding_dim = int(embedding_dim)
-    else:
-        embedding_dim = 100
-else:  # GloVe
-    embedding_dim = 300
+embedding_dim = input("embedding_dim(default=100d): ")
+if embedding_dim != "":
+    embedding_dim = int(embedding_dim)
+else:
+    embedding_dim = 100
 target_tree_id = input("target tree id(default=all): ")
 if target_tree_id != "":
     target_tree_id = [int(x) for x in target_tree_id.split(",")]

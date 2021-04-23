@@ -1,7 +1,6 @@
 import torch
-from models import Tree_List, Tree_Net
+from models import Tree_List, Tree_Net, Condition_Setter
 from utils import load_weight_matrix
-import sys
 import numpy as np
 
 
@@ -51,90 +50,48 @@ def compose_categories(left_category, right_category):
         return right_category.parent_category
 
 
-FROM_RANDOM = True
-REGULARIZED = True
-USE_ORIGINAL_LOSS = False
-EMBEDDING_DIM = 100
+PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
 
-args = sys.argv
-if len(args) > 1:
-    if args[1] == 'True':
-        FROM_RANDOM = True
-    else:
-        FROM_RANDOM = False
-    if args[2] == 'True':
-        REGULARIZED = True
-    else:
-        REGULARIZED = False
-    if args[3] == 'True':
-        USE_ORIGINAL_LOSS = True
-    else:
-        USE_ORIGINAL_LOSS = False
-    EMBEDDING_DIM = int(args[4])
+condition = Condition_Setter(PATH_TO_DIR)
 
-PATH_TO_DIR = "/home/yryosuke0519/"
-
-PATH_TO_TRAIN_DATA = PATH_TO_DIR + "Hol-CCG/data/train.txt"
-PATH_TO_TEST_DATA = PATH_TO_DIR + "Hol-CCG/data/test.txt"
-
-path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"
-path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
-path_list = [
-    path_to_initial_weight_matrix,
-    path_to_model]
-
-for i in range(len(path_list)):
-    if FROM_RANDOM:
-        path_list[i] += "random"
-    else:
-        path_list[i] += "GloVe"
-    if REGULARIZED:
-        path_list[i] += "_reg"
-    else:
-        path_list[i] += "_not_reg"
-    if USE_ORIGINAL_LOSS:
-        path_list[i] += "_original_loss"
-    path_list[i] += "_" + str(EMBEDDING_DIM) + "d"
-path_to_initial_weight_matrix = path_list[0] + "_initial_weight_matrix.csv"
-path_to_model = path_list[1] + "_model.pth"
-
-train_tree_list = Tree_List(PATH_TO_TRAIN_DATA, REGULARIZED)
-test_tree_list = Tree_List(PATH_TO_TEST_DATA, REGULARIZED)
+train_tree_list = Tree_List(condition.path_to_train_data, condition.REGULARIZED)
+test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
 # use same vocablary and category as train_tree_list
-test_tree_list.vocab = train_tree_list.vocab
-test_tree_list.category = train_tree_list.category
-test_tree_list.add_content_category_id(test_tree_list.vocab, test_tree_list.category)
+test_tree_list.content_to_id = train_tree_list.content_to_id
+test_tree_list.category_to_id = train_tree_list.category_to_id
+test_tree_list.id_to_content = train_tree_list.id_to_content
+test_tree_list.id_to_category = train_tree_list.id_to_category
+test_tree_list.set_content_category_id()
+test_tree_list.set_info_for_training()
 
-# make inverse vocablary and category dictionary: id -> word or category
-vocab = test_tree_list.vocab
-category = test_tree_list.category
-inv_vocab = {}
-inv_category = {}
-for k, v in vocab.items():
-    inv_vocab[v] = k
-for k, v in category.items():
-    inv_category[v] = k
-
-weight_matrix = torch.tensor(load_weight_matrix(path_to_initial_weight_matrix, REGULARIZED))
+weight_matrix = torch.tensor(
+    load_weight_matrix(
+        condition.path_to_initial_weight_matrix,
+        condition.REGULARIZED))
 tree_net = Tree_Net(test_tree_list, weight_matrix)
-tree_net.load_state_dict(torch.load(path_to_model))
+tree_net.load_state_dict(torch.load(condition.path_to_model))
 tree_net.eval()
 
-tree = test_tree_list.tree_list[2]
-output = tree_net(tree)
+for tree in test_tree_list.tree_list[1:3]:
+    output = tree_net(tree.leaf_node_info, tree.composition_info)
+    id_to_category = test_tree_list.id_to_category
+    n = 10
+    for node_id in range(len(tree.node_list)):
+        node = tree.node_list[node_id]
+        # if node.is_leaf:
+        node.prob_dist = output[node_id].detach().numpy().copy()
+        node.top_n_category_id = np.argsort(node.prob_dist)[::-1][:n]
 
-n = 5
-for node_id in range(len(tree.node_list)):
-    node = tree.node_list[node_id]
-    # if node.is_leaf:
-    node.prob_dist = output[node_id].detach().numpy().copy()
-    node.top_n_category_id = np.argsort(node.prob_dist)[::-1][:n]
-
-for node in tree.node_list:
-    print(node.content)
-    for category_id in node.top_n_category_id:
-        print('{}:{}'.format(inv_category[category_id], node.prob_dist[category_id]))
-    print('')
+    for node in tree.node_list:
+        print(node.content)
+        if node.category_id in node.top_n_category_id:
+            print('True category is included: {}'.format(node.category))
+        else:
+            print('True category is not included: {}'.format(node.category))
+        for category_id in node.top_n_category_id:
+            print('{}: {}'.format(id_to_category[category_id], node.prob_dist[category_id]))
+        print('')
+    print('*' * 50)
 
 # for node in tree.node_list:
 #     if node.is_leaf:

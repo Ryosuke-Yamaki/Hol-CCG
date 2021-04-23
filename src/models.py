@@ -318,20 +318,18 @@ class Condition_Setter:
             self.USE_ORIGINAL_LOSS = True
         else:
             self.USE_ORIGINAL_LOSS = False
-        if self.RANDOM:
-            embedding_dim = input("embedding_dim(default=100d): ")
-            if embedding_dim != "":
-                self.embedding_dim = int(embedding_dim)
-            else:
-                self.embedding_dim = 100
+        embedding_dim = input("embedding_dim(default=100d): ")
+        if embedding_dim != "":
+            self.embedding_dim = int(embedding_dim)
         else:
-            self.embedding_dim = 300
+            self.embedding_dim = 100
         self.set_path(PATH_TO_DIR)
 
     def set_path(self, PATH_TO_DIR):
         self.path_to_train_data = PATH_TO_DIR + "data/train.txt"
         self.path_to_test_data = PATH_TO_DIR + "data/test.txt"
-        self.path_to_pretrained_weight_matrix = PATH_TO_DIR + "data/pretrained_weight_matrix.csv"
+        self.path_to_pretrained_weight_matrix = PATH_TO_DIR + \
+            "data/glove_{}d.csv".format(self.embedding_dim)
         path_to_initial_weight_matrix = PATH_TO_DIR + "result/data/"
         path_to_model = PATH_TO_DIR + "result/model/"
         path_to_train_data_history = PATH_TO_DIR + "result/data/"
