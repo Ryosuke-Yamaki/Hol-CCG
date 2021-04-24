@@ -23,9 +23,9 @@ class Node:
 
 
 class Tree:
-    def __init__(self, self_id, sentense, node_list, REGULARIZED):
+    def __init__(self, self_id, sentence, node_list, REGULARIZED):
         self.self_id = self_id
-        self.sentense = sentense
+        self.sentence = sentence
         self.node_list = node_list
         self.regularized = REGULARIZED
 
@@ -126,7 +126,12 @@ class Tree_List:
         tree_list = []
         tree_id = 0
         for block in block_list:
-            sentense = block[0]
+            sentence = block[0]
+            # remove 'num:' at the top of sentence
+            for idx in range(len(sentence)):
+                if sentence[idx] == ':':
+                    sentence = sentence[idx + 1:]
+                    break
             node_list = []
             for node_inf in block[1:]:
                 node_inf = node_inf.split()
@@ -152,7 +157,7 @@ class Tree_List:
                         sibling_id,
                         parent_id,
                         LR))
-            tree_list.append(Tree(tree_id, sentense, node_list, self.regularized))
+            tree_list.append(Tree(tree_id, sentence, node_list, self.regularized))
             tree_id += 1
         self.tree_list = tree_list
 
