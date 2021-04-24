@@ -4,6 +4,7 @@ from utils import circular_correlation
 import numpy as np
 import csv
 import random
+from parsed_tree import Parsed_Tree
 
 
 class Node:
@@ -109,7 +110,7 @@ class Tree:
             scope_start = idx
             scope_end = idx + len(content)
             converted_node_list.append((scope_start, scope_end, node.category_id))
-        return converted_node_list
+        self.converted_node_list = converted_node_list
 
 
 class Tree_List:
@@ -296,16 +297,20 @@ class Tree_Net(nn.Module):
 
 
 class History:
-    def __init__(self, tree_net, tree_list, criteria):
+    def __init__(self, tree_net, tree_list, criteria, parser):
         self.tree_net = tree_net
         self.tree_list = tree_list
         self.criteria = criteria
+        self.parser = parser
+        self.convert_node_list_for_eval()
         self.loss_history = np.array([])
         self.acc_history = np.array([])
+        self.f1_history = np.array([])
 
     def cal_stat(self):
         loss = 0.0
         acc = 0.0
+        f1 = 0.0
         for tree in self.tree_list.tree_list:
             leaf_node_info = tree.leaf_node_info
             label_list = tree.label_list
@@ -313,11 +318,16 @@ class History:
             output = self.tree_net(leaf_node_info, composition_info)
             loss += self.criteria(output, label_list)
             acc += self.cal_acc(output, label_list)
-
+            chart = self.parser.parse(tree.sentence)
+            parsed_tree = Parsed_Tree(len(tree.sentence.split()), chart,
+                                      tree.sentence, self.tree_list.id_to_category)
+            f1 += parsed_tree.cal_f1_score(tree.converted_node_list)[0]
         loss = loss.detach().numpy() / len(self.tree_list.tree_list)
         acc = acc.detach().numpy() / len(self.tree_list.tree_list)
+        f1 = f1 / len(self.tree_list.tree_list)
         self.loss_history = np.append(self.loss_history, loss)
         self.acc_history = np.append(self.acc_history, acc)
+        self.f1_history = np.append(self.f1_history, f1)
         self.max_acc = np.max(self.acc_history)
         self.max_acc_idx = np.argmax(self.acc_history)
 
@@ -331,6 +341,11 @@ class History:
             writer = csv.writer(f, lineterminator='\n')
             writer.writerow(self.loss_history)
             writer.writerow(self.acc_history)
+            writer.writerow(self.f1_history)
+
+    def convert_node_list_for_eval(self):
+        for tree in self.tree_list.tree_list:
+            tree.convert_node_list_for_eval()
 
 
 class Condition_Setter:

@@ -22,7 +22,7 @@ class Analyzer:
             composition_info = tree.composition_info
             output = self.tree_net(leaf_node_info, composition_info)
             acc = self.cal_acc(output, label_list)
-            print(tree.sentense)
+            print(tree.sentence)
             print('acc: {}'.format(acc))
             print('*' * 50)
             for node in tree.node_list:

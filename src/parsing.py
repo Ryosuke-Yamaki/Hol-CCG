@@ -84,7 +84,7 @@ class Parser:
             for possible_category_id in possible_category_id_list:
                 possible_category_info = {}
                 # set vector
-                vector = weight_matrix[word_id]
+                vector = self.weight_matrix[word_id]
                 # set probability for corresponding possible category id
                 prob = self.linear_classifier(torch.reshape(
                     vector, (1, -1)))[0][possible_category_id]
@@ -143,105 +143,6 @@ class Parser:
             return right_category.parent_category_id
 
 
-class Node:
-    def __init__(self, self_id, scope, content, cell, category_id=None, top=False):
-        self.self_id = self_id
-        self.scope = scope
-        self.content = content
-        self.cell = cell
-        self.find_max_prob()
-        if top:
-            self.category_id = self.max_prob_category_id
-        else:
-            self.category_id = category_id
-
-    def find_max_prob(self):
-        self.max_prob = 0.0
-        for possible_category_id, possible_category_info in self.cell.items():
-            if possible_category_info['prob'] > self.max_prob:
-                self.max_prob = possible_category_info['prob']
-                self.max_prob_category_id = possible_category_id
-
-    def extract_back_pointer(self):
-        if 'back_pointer' in self.cell[self.category_id]:
-            backpointer = self.cell[self.category_id]['back_pointer']
-            left_pointer = backpointer[0]
-            right_pointer = backpointer[1]
-            return left_pointer, right_pointer
-        else:
-            return None, None
-
-
-class Parsed_Tree:
-    def __init__(self, length_of_sentence, chart, sentence, id_to_category):
-        self.length_of_sentence = length_of_sentence
-        self.chart = chart
-        self.sentence = sentence.split()
-        self.id_to_category = id_to_category
-        self.node_list = []
-        self.pointers_before_define = []
-        self.define_top_node()
-        self.define_other_nodes()
-        self.convert_node_list_for_eval()
-
-    def define_top_node(self):
-        top_node = Node(0, (0, self.length_of_sentence), (' ').join(self.sentence),
-                        chart[(0, self.length_of_sentence)], top=True)
-        left_pointer, right_pointer = top_node.extract_back_pointer()
-        self.node_list.append(top_node)
-        self.pointers_before_define.append(left_pointer)
-        self.pointers_before_define.append(right_pointer)
-
-    def define_other_nodes(self):
-        node_id = 1
-        while True:
-            pointer = self.pointers_before_define.pop(0)
-            node = Node(node_id,
-                        scope=pointer[:2],
-                        content=(' ').join(self.sentence[pointer[0]:pointer[1]]),
-                        cell=self.chart[pointer[:2]],
-                        category_id=pointer[2])
-            left_pointer, right_pointer = node.extract_back_pointer()
-            self.node_list.append(node)
-            if left_pointer is not None and right_pointer is not None:
-                self.pointers_before_define.append(left_pointer)
-                self.pointers_before_define.append(right_pointer)
-            node_id += 1
-            if self.pointers_before_define == []:
-                break
-
-    def convert_node_list_for_eval(self):
-        converted_node_list = []
-        for node in self.node_list:
-            scope = node.scope
-            category_id = node.category_id
-            converted_node_list.append((scope[0], scope[1], category_id))
-        self.converted_node_list = converted_node_list
-
-    def cal_f1_score(self, correct_node_list):
-        pred_node_list = self.converted_node_list
-        precision = 0.0
-        for node in pred_node_list:
-            if node in correct_node_list:
-                precision += 1.0
-        precision = precision / len(pred_node_list)
-
-        recall = 0.0
-        for node in correct_node_list:
-            if node in pred_node_list:
-                recall += 1.0
-        recall = recall / len(correct_node_list)
-        f1 = (2 * precision * recall) / (precision + recall)
-
-        return f1, precision, recall
-
-    def visualize_parsing_result(self):
-        for node in self.node_list:
-            print('content: {}'.format(node.content))
-            print('category :{}'.format(self.id_to_category[node.category_id]))
-            print()
-
-
 class Linear_Classifier(nn.Module):
     def __init__(self, tree_net):
         super(Linear_Classifier, self).__init__()
@@ -253,51 +154,51 @@ class Linear_Classifier(nn.Module):
         return output
 
 
-PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
+# PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
 
-condition = Condition_Setter(PATH_TO_DIR)
+# condition = Condition_Setter(PATH_TO_DIR)
 
-train_tree_list = Tree_List(condition.path_to_train_data, condition.REGULARIZED)
-test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
-# use same vocablary and category as train_tree_list
-test_tree_list.content_to_id = train_tree_list.content_to_id
-test_tree_list.category_to_id = train_tree_list.category_to_id
-test_tree_list.id_to_content = train_tree_list.id_to_content
-test_tree_list.id_to_category = train_tree_list.id_to_category
-test_tree_list.set_content_category_id()
-test_tree_list.set_info_for_training()
-test_tree_list.set_info_for_parsing()
+# train_tree_list = Tree_List(condition.path_to_train_data, condition.REGULARIZED)
+# test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
+# # use same vocablary and category as train_tree_list
+# test_tree_list.content_to_id = train_tree_list.content_to_id
+# test_tree_list.category_to_id = train_tree_list.category_to_id
+# test_tree_list.id_to_content = train_tree_list.id_to_content
+# test_tree_list.id_to_category = train_tree_list.id_to_category
+# test_tree_list.set_content_category_id()
+# test_tree_list.set_info_for_training()
+# test_tree_list.set_info_for_parsing()
 
-weight_matrix = torch.tensor(
-    load_weight_matrix(
-        condition.path_to_initial_weight_matrix,
-        condition.REGULARIZED))
-tree_net = Tree_Net(test_tree_list, weight_matrix)
-tree_net.load_state_dict(torch.load(condition.path_to_model))
-tree_net.eval()
-linear_classifier = Linear_Classifier(tree_net)
+# weight_matrix = torch.tensor(
+#     load_weight_matrix(
+#         condition.path_to_initial_weight_matrix,
+#         condition.REGULARIZED))
+# tree_net = Tree_Net(test_tree_list, weight_matrix)
+# tree_net.load_state_dict(torch.load(condition.path_to_model))
+# tree_net.eval()
+# linear_classifier = Linear_Classifier(tree_net)
 
-ccg_category_list = CCG_Category_List(test_tree_list)
+# ccg_category_list = CCG_Category_List(test_tree_list)
 
-weight_matrix = tree_net.embedding.weight.detach()
-parser = Parser(
-    ccg_category_list,
-    test_tree_list.content_to_id,
-    test_tree_list.parsing_info,
-    weight_matrix,
-    linear_classifier)
-f1_list = []
-precision_list = []
-recall_list = []
-for tree in test_tree_list.tree_list:
-    chart = parser.parse(tree.sentence)
-    parsed_tree = Parsed_Tree(len(tree.sentence.split()), chart,
-                              tree.sentence, test_tree_list.id_to_category)
-    converted_node_list = tree.convert_node_list_for_eval()
-    f1, precision, recall = parsed_tree.cal_f1_score(converted_node_list)
-    f1_list.append(f1)
-    precision_list.append(precision)
-    recall_list.append(recall)
-print('f1: {}'.format(sum(f1_list) / len(f1_list)))
-print('precision: {}'.format(sum(precision_list) / len(precision_list)))
-print('recall: {}'.format(sum(recall_list) / len(recall_list)))
+# weight_matrix = tree_net.embedding.weight.detach()
+# parser = Parser(
+#     ccg_category_list,
+#     test_tree_list.content_to_id,
+#     test_tree_list.parsing_info,
+#     weight_matrix,
+#     linear_classifier)
+# f1_list = []
+# precision_list = []
+# recall_list = []
+# for tree in test_tree_list.tree_list:
+#     chart = parser.parse(tree.sentence)
+#     parsed_tree = Parsed_Tree(len(tree.sentence.split()), chart,
+#                               tree.sentence, test_tree_list.id_to_category)
+#     converted_node_list = tree.convert_node_list_for_eval()
+#     f1, precision, recall = parsed_tree.cal_f1_score(converted_node_list)
+#     f1_list.append(f1)
+#     precision_list.append(precision)
+#     recall_list.append(recall)
+# print('f1: {}'.format(sum(f1_list) / len(f1_list)))
+# print('precision: {}'.format(sum(precision_list) / len(precision_list)))
+# print('recall: {}'.format(sum(recall_list) / len(recall_list)))
