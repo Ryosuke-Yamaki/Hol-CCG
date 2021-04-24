@@ -2,6 +2,7 @@ import torch
 from models import Tree_List, Tree_Net, Condition_Setter
 from utils import load_weight_matrix, circular_correlation
 import numpy as np
+import torch.nn as nn
 
 
 class CCG_Category:
@@ -57,12 +58,19 @@ class CCG_Category_List:
 
 
 class Parser:
-    def __init__(self, ccg_category_list, content_to_id, parsing_info, weight_matrix):
+    def __init__(
+            self,
+            ccg_category_list,
+            content_to_id,
+            parsing_info,
+            weight_matrix,
+            linear_classifier):
         self.ccg_category_list = ccg_category_list
         self.category_info = ccg_category_list.category_info
         self.content_to_id = content_to_id
         self.parsing_info = parsing_info
         self.weight_matrix = weight_matrix
+        self.linear_classifier = linear_classifier
 
     def parse(self, sentence):
         chart = {}
@@ -73,44 +81,59 @@ class Parser:
             word = sentence[i]
             word_id = self.content_to_id[word]
             cell = {}
-            cell['vector'] = self.weight_matrix[word_id]
-            cell['possible_category_id_list'] = self.parsing_info[word_id]
-            cell['possible_category'] = []
-            for category_id in cell['possible_category_id_list']:
-                cell['possible_category'].append(self.ccg_category_list.id_to_category[category_id])
+            possible_category_id_list = self.parsing_info[word_id]
+            for possible_category_id in possible_category_id_list:
+                possible_category_info = {}
+                # set vector
+                vector = weight_matrix[word_id]
+                # set probability for corresponding possible category id
+                prob = self.linear_classifier(torch.reshape(
+                    vector, (1, -1)))[0][possible_category_id]
+                possible_category_info['vector'] = vector
+                possible_category_info['prob'] = prob
+                possible_category_info['category'] = self.ccg_category_list.id_to_category[possible_category_id]
+                cell[possible_category_id] = possible_category_info
             chart[(i, i + 1)] = cell
 
         for l in range(2, n + 1):
             for i in range(n - l + 1):
                 j = i + l
                 cell = {}
-                cell['possible_category_id_list'] = []
                 for k in range(i + 1, j):
                     left_cell = chart[(i, k)]
                     right_cell = chart[(k, j)]
                     if left_cell is not None and right_cell is not None:
-                        # set parent node's vector
-                        # cell['vector'] = circular_correlation(
-                        # left_cell['vector'], right_cell['vector'], True)
-
-                        for left_category_id in left_cell['possible_category_id_list']:
+                        for left_category_id in left_cell.keys():
                             left_category = self.category_info[left_category_id]
-                            for right_category_id in right_cell['possible_category_id_list']:
+                            for right_category_id in right_cell.keys():
                                 right_category = self.category_info[right_category_id]
                                 possible_category_id = self.compose_categories(
                                     left_category, right_category)
                                 if possible_category_id is not None:
-                                    cell['possible_category_id_list'].append(possible_category_id)
-
-                if cell['possible_category_id_list'] == []:
+                                    possible_category_info = {}
+                                    left_vector = left_cell[left_category_id]['vector']
+                                    right_vector = right_cell[right_category_id]['vector']
+                                    vector = circular_correlation(left_vector, right_vector, True)
+                                    prob = self.linear_classifier(torch.reshape(
+                                        vector, (1, -1)))[0][possible_category_id]
+                                    possible_category_info['vector'] = vector
+                                    possible_category_info['prob'] = prob
+                                    possible_category_info['back_pointer'] = (
+                                        (i, k, left_category_id), (k, j, right_category_id))
+                                    possible_category_info['category'] = self.ccg_category_list.id_to_category[possible_category_id]
+                                    if possible_category_id not in cell:
+                                        cell[possible_category_id] = possible_category_info
+                                    elif possible_category_info['prob'] > cell[possible_category_id]['prob']:
+                                        cell[possible_category_id] = possible_category_info
+                        if len(cell) > 0:
+                            chart[(i, j)] = cell
+                if (i, j) not in chart:
                     chart[(i, j)] = None
-                else:
-                    cell['possible_category'] = []
-                    for category_id in cell['possible_category_id_list']:
-                        cell['possible_category'].append(
-                            self.ccg_category_list.id_to_category[category_id])
-                    chart[(i, j)] = cell
-        return chart, chart[(0, n)]['possible_category']
+        # for possible_category_info in chart[(0, n)].values():
+        #     print('category: {}'.format(possible_category_info['category']))
+        #     print('prob: {}'.format(possible_category_info['prob']))
+        #     print('backpointer: {}'.format(possible_category_info['back_pointer']))
+        return chart
 
     def compose_categories(self, left_category, right_category):
         if left_category.direction_of_slash == 'R'\
@@ -119,6 +142,17 @@ class Parser:
         elif right_category.direction_of_slash == 'L'\
                 and right_category.sibling_category_id == left_category.self_category_id:
             return right_category.parent_category_id
+
+
+class Linear_Classifier(nn.Module):
+    def __init__(self, tree_net):
+        super(Linear_Classifier, self).__init__()
+        self.linear = tree_net.linear
+        self.softmax = tree_net.softmax
+
+    def forward(self, vector):
+        output = self.softmax(self.linear(vector))
+        return output
 
 
 PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
@@ -143,6 +177,7 @@ weight_matrix = torch.tensor(
 tree_net = Tree_Net(test_tree_list, weight_matrix)
 tree_net.load_state_dict(torch.load(condition.path_to_model))
 tree_net.eval()
+linear_classifier = Linear_Classifier(tree_net)
 
 ccg_category_list = CCG_Category_List(test_tree_list)
 
@@ -151,11 +186,11 @@ parser = Parser(
     ccg_category_list,
     test_tree_list.content_to_id,
     test_tree_list.parsing_info,
-    weight_matrix)
+    weight_matrix,
+    linear_classifier)
 for tree in test_tree_list.tree_list:
-    chart, possible_category = parser.parse(tree.sentence)
-
-    print('{}:{}'.format(tree.self_id, possible_category))
+    print(tree.self_id)
+    chart = parser.parse(tree.sentence)
 
 
 for tree in test_tree_list.tree_list[1:3]:
