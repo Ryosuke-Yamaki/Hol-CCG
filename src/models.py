@@ -98,6 +98,19 @@ class Tree:
             if not node.is_leaf and node.ready:
                 node.ready = False
 
+    def convert_node_list_for_eval(self):
+        sentence = self.sentence.split()
+        converted_node_list = []
+        for node in self.node_list:
+            content = node.content.split()
+            for idx in range(len(sentence) - len(content) + 1):
+                if content[0] == sentence[idx] and content == sentence[idx:idx + len(content)]:
+                    break
+            scope_start = idx
+            scope_end = idx + len(content)
+            converted_node_list.append((scope_start, scope_end, node.category_id))
+        return converted_node_list
+
 
 class Tree_List:
     def __init__(self, PATH_TO_DATA, REGULARIZED):
