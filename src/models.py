@@ -229,6 +229,17 @@ class Tree_List:
             batch_tree_list.append(sampled_tree_list[idx:idx + BATCH_SIZE])
         return batch_tree_list
 
+    def set_info_for_parsing(self):
+        parsing_info = {}
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    if node.content_id not in parsing_info:
+                        parsing_info[node.content_id] = [node.category_id]
+                    elif node.category_id not in parsing_info[node.content_id]:
+                        parsing_info[node.content_id].append(node.category_id)
+        self.parsing_info = parsing_info
+
 
 class Tree_Net(nn.Module):
     def __init__(self, tree_list, initial_weight_matrix):

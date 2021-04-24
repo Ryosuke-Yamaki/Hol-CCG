@@ -66,4 +66,4 @@ tree_net.load_state_dict(torch.load(condition.path_to_model))
 tree_net.eval()
 
 analyzer = Analyzer(test_tree_list, tree_net)
-analyzer.analyze([1, 2])
+analyzer.analyze()
