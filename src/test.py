@@ -52,21 +52,21 @@
 # output.backward()
 # print(weight_matrix.grad)
 
-# from utils import load_weight_matrix
-# from models import Tree_List, Tree_Net, Condition_Setter
-# import torch
-# import torch.nn as nn
-# PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
+from utils import load_weight_matrix
+from models import Tree_List, Tree_Net, Condition_Setter
+import torch
+import torch.nn as nn
+PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
 
-# condition = Condition_Setter(PATH_TO_DIR)
+condition = Condition_Setter(PATH_TO_DIR)
 
-# # initialize tree_list from toy_data
-# train_tree_list = Tree_List(condition.path_to_train_data, condition.REGULARIZED)
-# test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
-# test_tree_list.content_to_id = train_tree_list.content_to_id
-# test_tree_list.category_to_id = train_tree_list.category_to_id
-# test_tree_list.set_content_category_id()
-# test_tree_list.set_info_for_training()
+# initialize tree_list from toy_data
+train_tree_list = Tree_List(condition.path_to_train_data, condition.REGULARIZED)
+test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
+# match the vocab and category between train and test data
+test_tree_list.replace_vocab_category(train_tree_list.content_to_id, train_tree_list.category_to_id)
+
+a = 1
 
 # weight_matrix = torch.tensor(
 #     load_weight_matrix(
@@ -90,16 +90,3 @@
 # import gensim.downloader
 
 # print(list(gensim.downloader.info()['models'].keys()))
-
-from utils import circular_correlation
-import torch
-
-for i in range(100):
-    a = torch.rand(5)
-    b = torch.rand(5)
-    c = torch.rand(5)
-
-    d = circular_correlation(a, circular_correlation(b, c, True), True)
-    e = circular_correlation(circular_correlation(a, b, True), c, True)
-    if torch.sum(torch.abs(d - e)) < 1e-3:
-        print('same')

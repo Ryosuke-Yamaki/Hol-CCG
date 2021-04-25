@@ -5,6 +5,7 @@ import numpy as np
 import csv
 import random
 from parsed_tree import Parsed_Tree
+import copy
 
 
 class Node:
@@ -63,13 +64,17 @@ class Tree:
                 node.vector = vector
 
     # when initialize tree_list, each info of tree is automatically set
-    def set_info_for_training(self):
+    def set_info_for_training(self, num_category):
         leaf_node_info = []
         label_list = []
         for node in self.node_list:
             if node.is_leaf:
-                leaf_node_info.append([node.self_id, node.content_id])
-            label_list.append(node.category_id)
+                leaf_node_info.append([node.self_id, node.content_id[0]])
+            # label with multiple bit corresponding to possible category id
+            label = [0] * num_category
+            for category_id in node.possible_category_id:
+                label[category_id] = 1
+            label_list.append(label)
 
         node_pair_list = self.node_pair_list
         composition_info = []
@@ -81,7 +86,6 @@ class Tree:
                 if left_node.ready and right_node.ready:
                     composition_info.append(
                         [left_node.self_id, right_node.self_id, left_node.parent_id])
-                    parent_node.content = left_node.content + ' ' + right_node.content
                     parent_node.ready = True
                     node_pair_list.remove(node_pair)
             if node_pair_list == []:
@@ -117,7 +121,9 @@ class Tree_List:
     def __init__(self, PATH_TO_DATA, REGULARIZED):
         self.regularized = REGULARIZED
         self.initialize_tree_list(PATH_TO_DATA)
-        self.make_vocab_category()
+        self.set_vocab_category()
+        self.set_content_category_id()
+        self.set_possible_category_id()
         self.set_info_for_training()
 
     # initialize tree list from txt data
@@ -176,7 +182,7 @@ class Tree_List:
         self.tree_list = tree_list
 
     # create dictionary of contents, categories and thier id
-    def make_vocab_category(self):
+    def set_vocab_category(self):
         self.content_to_id = {}
         self.id_to_content = {}
         self.category_to_id = {}
@@ -190,19 +196,47 @@ class Tree_List:
                         self.content_to_id[node.content] = i
                         self.id_to_content[i] = node.content
                         i += 1
-                    node.content_id = self.content_to_id[node.content]
                 if node.category not in self.category_to_id:
                     self.category_to_id[node.category] = j
                     self.id_to_category[j] = node.category
                     j += 1
-                node.category_id = self.category_to_id[node.category]
 
     def set_content_category_id(self):
         for tree in self.tree_list:
+            tree.set_node_pair_list()
+            while True:
+                node_pair_list = tree.node_pair_list
+                for node_pair in node_pair_list:
+                    left_node = node_pair[0]
+                    right_node = node_pair[1]
+                    if left_node.ready and right_node.ready:
+                        parent_node = tree.node_list[left_node.parent_id]
+                        if left_node.is_leaf:
+                            left_node.content_id = [self.content_to_id[left_node.content]]
+                        if right_node.is_leaf:
+                            right_node.content_id = [self.content_to_id[right_node.content]]
+                        parent_node.content_id = []
+                        for content_id in left_node.content_id:
+                            parent_node.content_id.append(content_id)
+                        for content_id in right_node.content_id:
+                            parent_node.content_id.append(content_id)
+                        parent_node.ready = True
+                        node_pair_list.remove(node_pair)
+                if node_pair_list == []:
+                    break
             for node in tree.node_list:
-                if node.is_leaf:
-                    node.content_id = self.content_to_id[node.content]
                 node.category_id = self.category_to_id[node.category]
+            tree.reset_node_status()
+
+    def set_possible_category_id(self):
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                node.possible_category_id = [node.category_id]
+                for opponent_tree in self.tree_list:
+                    for opponent_node in opponent_tree.node_list:
+                        if node.content_id == opponent_node.content_id\
+                                and opponent_node.category_id not in node.possible_category_id:
+                            node.possible_category_id.append(opponent_node.category_id)
 
     def prepare_inf_for_visualization(self, weight_matrix):
         vector_list = []
@@ -239,7 +273,7 @@ class Tree_List:
     def set_info_for_training(self):
         for tree in self.tree_list:
             tree.set_node_pair_list()
-            tree.set_info_for_training()
+            tree.set_info_for_training(len(self.category_to_id))
 
     def make_batch(self, BATCH_SIZE):
         sampled_tree_list = random.sample(self.tree_list, len(self.tree_list))
@@ -258,6 +292,13 @@ class Tree_List:
                     elif node.category_id not in parsing_info[node.content_id]:
                         parsing_info[node.content_id].append(node.category_id)
         self.parsing_info = parsing_info
+
+    def replace_vocab_category(self, content_to_id, category_to_id):
+        self.content_to_id = content_to_id
+        self.category_to_id = category_to_id
+        self.set_content_category_id()
+        self.set_possible_category_id()
+        self.set_info_for_training()
 
 
 class Tree_Net(nn.Module):
