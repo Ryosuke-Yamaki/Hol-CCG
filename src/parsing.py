@@ -1,7 +1,5 @@
-import torch
-from models import Tree_List, Tree_Net, Condition_Setter
-from utils import load_weight_matrix, circular_correlation
 import torch.nn as nn
+from utils import circular_correlation
 
 
 class CCG_Category:
@@ -59,17 +57,19 @@ class CCG_Category_List:
 class Parser:
     def __init__(
             self,
+            tree_list,
             ccg_category_list,
-            content_to_id,
-            parsing_info,
             weight_matrix,
-            linear_classifier):
+            linear_classifier,
+            THRESHOLD):
+        self.tree_list = tree_list
         self.ccg_category_list = ccg_category_list
         self.category_info = ccg_category_list.category_info
-        self.content_to_id = content_to_id
-        self.parsing_info = parsing_info
+        self.content_to_id = tree_list.content_to_id
         self.weight_matrix = weight_matrix
         self.linear_classifier = linear_classifier
+        self.THRESHOLD = THRESHOLD
+        self.chart_list = []
 
     def parse(self, sentence):
         chart = {}
@@ -79,19 +79,8 @@ class Parser:
         for i in range(n):
             word = sentence[i]
             word_id = self.content_to_id[word]
-            cell = {}
-            possible_category_id_list = self.parsing_info[word_id]
-            for possible_category_id in possible_category_id_list:
-                possible_category_info = {}
-                # set vector
-                vector = self.weight_matrix[word_id]
-                # set probability for corresponding possible category id
-                prob = self.linear_classifier(torch.reshape(
-                    vector, (1, -1)))[0][possible_category_id]
-                possible_category_info['vector'] = vector
-                possible_category_info['prob'] = prob
-                possible_category_info['category'] = self.ccg_category_list.id_to_category[possible_category_id]
-                cell[possible_category_id] = possible_category_info
+            vector = self.weight_matrix[word_id]
+            cell = self.make_leaf_node_cell(vector)
             chart[(i, i + 1)] = cell
 
         for l in range(2, n + 1):
@@ -102,37 +91,54 @@ class Parser:
                     left_cell = chart[(i, k)]
                     right_cell = chart[(k, j)]
                     if left_cell is not None and right_cell is not None:
+                        # extract category_id of left cell
                         for left_category_id in left_cell.keys():
+                            # define ccg category in left cell
                             left_category = self.category_info[left_category_id]
+                            # extract category_id of right cell
                             for right_category_id in right_cell.keys():
+                                # define ccg category in right cell
                                 right_category = self.category_info[right_category_id]
+                                # output possible category id from left and right ccg category
                                 possible_category_id = self.compose_categories(
                                     left_category, right_category)
                                 if possible_category_id is not None:
                                     possible_category_info = {}
                                     left_vector = left_cell[left_category_id]['vector']
+                                    left_prob = left_cell[left_category_id]['prob']
                                     right_vector = right_cell[right_category_id]['vector']
+                                    right_prob = right_cell[right_category_id]['prob']
                                     vector = circular_correlation(left_vector, right_vector, True)
-                                    prob = self.linear_classifier(torch.reshape(
-                                        vector, (1, -1)))[0][possible_category_id]
+                                    prob = self.linear_classifier(vector)[possible_category_id]
                                     possible_category_info['vector'] = vector
-                                    possible_category_info['prob'] = prob
+                                    possible_category_info['prob'] = prob * left_prob * right_prob
                                     possible_category_info['back_pointer'] = (
                                         (i, k, left_category_id), (k, j, right_category_id))
-                                    possible_category_info['category'] = self.ccg_category_list.id_to_category[possible_category_id]
+                                    # when the category is subscribed to cell first time
                                     if possible_category_id not in cell:
                                         cell[possible_category_id] = possible_category_info
+                                    # when the probability is higher than existing one
                                     elif possible_category_info['prob'] > cell[possible_category_id]['prob']:
                                         cell[possible_category_id] = possible_category_info
-                        if len(cell) > 0:
-                            chart[(i, j)] = cell
-                if (i, j) not in chart:
+                # when composition candidate founded
+                if len(cell) > 0:
+                    chart[(i, j)] = cell
+                # when no composition candidate founded
+                else:
                     chart[(i, j)] = None
-        # for possible_category_info in chart[(0, n)].values():
-        #     print('category: {}'.format(possible_category_info['category']))
-        #     print('prob: {}'.format(possible_category_info['prob']))
-        #     print('backpointer: {}'.format(possible_category_info['back_pointer']))
         return chart
+
+    def make_leaf_node_cell(self, vector):
+        output = self.linear_classifier(vector)
+        cell = {}
+        for i in range(len(output)):
+            if output[i] >= self.THRESHOLD:
+                pred_category_info = {}
+                pred_category_info['vector'] = vector
+                pred_category_info['prob'] = output[i]
+                pred_category_info['category'] = self.ccg_category_list.id_to_category[i]
+                cell[i] = pred_category_info
+        return cell
 
     def compose_categories(self, left_category, right_category):
         if left_category.direction_of_slash == 'R'\
@@ -142,63 +148,154 @@ class Parser:
                 and right_category.sibling_category_id == left_category.self_category_id:
             return right_category.parent_category_id
 
+    def validation(self):
+        f1 = 0.0
+        precision = 0.0
+        recall = 0.0
+        for tree in self.tree_list.tree_list:
+            chart = self.parse(tree.sentence)
+            parsed_tree = Parsed_Tree(tree.sentence, chart, self.tree_list.id_to_category)
+            score = parsed_tree.cal_f1_score(tree.convert_node_list_for_eval())
+            f1 += score[0]
+            precision += score[1]
+            recall += score[2]
+            self.chart_list.append((chart, score[0]))
+        self.f1 = f1 / len(self.tree_list.tree_list)
+        self.precision = precision / len(self.tree_list.tree_list)
+        self.recall = recall / len(self.tree_list.tree_list)
+        return self.f1, self.precision, self.recall
+
+    def print_stat(self):
+        print('f1: {}'.format(self.f1))
+        print('precision: {}'.format(self.precision))
+        print('recall: {}'.format(self.recall))
+
 
 class Linear_Classifier(nn.Module):
     def __init__(self, tree_net):
         super(Linear_Classifier, self).__init__()
         self.linear = tree_net.linear
-        self.softmax = tree_net.softmax
+        self.sigmoid = tree_net.sigmoid
 
     def forward(self, vector):
-        output = self.softmax(self.linear(vector))
+        output = self.sigmoid(self.linear(vector))
         return output
 
 
-# PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
+class Node:
+    def __init__(self, self_id, scope, content, cell, category_id=None, top=False):
+        self.self_id = self_id
+        self.scope = scope
+        self.content = content
+        self.cell = cell
+        self.find_max_prob()
+        if top:
+            self.category_id = self.max_prob_category_id
+        else:
+            self.category_id = category_id
 
-# condition = Condition_Setter(PATH_TO_DIR)
+    def find_max_prob(self):
+        self.max_prob = 0.0
+        for possible_category_id, possible_category_info in self.cell.items():
+            if possible_category_info['prob'] > self.max_prob:
+                self.max_prob = possible_category_info['prob']
+                self.max_prob_category_id = possible_category_id
 
-# train_tree_list = Tree_List(condition.path_to_train_data, condition.REGULARIZED)
-# test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
-# # use same vocablary and category as train_tree_list
-# test_tree_list.content_to_id = train_tree_list.content_to_id
-# test_tree_list.category_to_id = train_tree_list.category_to_id
-# test_tree_list.id_to_content = train_tree_list.id_to_content
-# test_tree_list.id_to_category = train_tree_list.id_to_category
-# test_tree_list.set_content_category_id()
-# test_tree_list.set_info_for_training()
-# test_tree_list.set_info_for_parsing()
+    def extract_back_pointer(self):
+        if 'back_pointer' in self.cell[self.category_id]:
+            backpointer = self.cell[self.category_id]['back_pointer']
+            left_pointer = backpointer[0]
+            right_pointer = backpointer[1]
+            return left_pointer, right_pointer
+        else:
+            return None, None
 
-# weight_matrix = torch.tensor(
-#     load_weight_matrix(
-#         condition.path_to_initial_weight_matrix,
-#         condition.REGULARIZED))
-# tree_net = Tree_Net(test_tree_list, weight_matrix)
-# tree_net.load_state_dict(torch.load(condition.path_to_model))
-# tree_net.eval()
-# linear_classifier = Linear_Classifier(tree_net)
 
-# ccg_category_list = CCG_Category_List(test_tree_list)
+class Parsed_Tree:
+    def __init__(self, sentence, chart, id_to_category):
+        self.sentence = sentence
+        self.length_of_sentence = len(sentence.split())
+        self.chart = chart
+        self.sentence = sentence.split()
+        self.id_to_category = id_to_category
+        self.node_list = []
+        self.pointers_before_define = []
+        self.define_top_node()
+        self.define_other_nodes()
+        self.convert_node_list_for_eval()
 
-# weight_matrix = tree_net.embedding.weight.detach()
-# parser = Parser(
-#     ccg_category_list,
-#     test_tree_list.content_to_id,
-#     test_tree_list.parsing_info,
-#     weight_matrix,
-#     linear_classifier)
-# f1_list = []
-# precision_list = []
-# recall_list = []
-# for tree in test_tree_list.tree_list:
-#     chart = parser.parse(tree.sentence)
-#     parsed_tree = Parsed_Tree(len(tree.sentence.split()), chart,
-#                               tree.sentence, test_tree_list.id_to_category)
-#     converted_node_list = tree.convert_node_list_for_eval()
-#     f1, precision, recall = parsed_tree.cal_f1_score(converted_node_list)
-#     f1_list.append(f1)
-#     precision_list.append(precision)
-#     recall_list.append(recall)
-# print('f1: {}'.format(sum(f1_list) / len(f1_list)))
-# print('precision: {}'.format(sum(precision_list) / len(precision_list)))
-# print('recall: {}'.format(sum(recall_list) / len(recall_list)))
+    def define_top_node(self):
+        if self.chart[(0, self.length_of_sentence)] is not None:
+            top_node = Node(0, (0, self.length_of_sentence), (' ').join(self.sentence),
+                            self.chart[(0, self.length_of_sentence)], top=True)
+            left_pointer, right_pointer = top_node.extract_back_pointer()
+            self.node_list.append(top_node)
+            self.pointers_before_define.append(left_pointer)
+            self.pointers_before_define.append(right_pointer)
+        # when parsing is not done well
+        else:
+            top_node = None
+            self.node_list.append(top_node)
+
+    def define_other_nodes(self):
+        node_id = 1
+        if self.pointers_before_define != []:
+            while True:
+                pointer = self.pointers_before_define.pop(0)
+                node = Node(node_id,
+                            scope=pointer[:2],
+                            content=(' ').join(self.sentence[pointer[0]:pointer[1]]),
+                            cell=self.chart[pointer[:2]],
+                            category_id=pointer[2])
+                left_pointer, right_pointer = node.extract_back_pointer()
+                self.node_list.append(node)
+                if left_pointer is not None and right_pointer is not None:
+                    self.pointers_before_define.append(left_pointer)
+                    self.pointers_before_define.append(right_pointer)
+                    node_id += 1
+                if self.pointers_before_define == []:
+                    break
+
+    def convert_node_list_for_eval(self):
+        converted_node_list = []
+        if len(self.node_list) > 1:
+            for node in self.node_list:
+                scope = node.scope
+                category_id = node.category_id
+                converted_node_list.append((scope[0], scope[1], category_id))
+            self.converted_node_list = converted_node_list
+        else:
+            self.converted_node_list = None
+
+    def cal_f1_score(self, correct_node_list):
+        pred_node_list = self.converted_node_list
+        if pred_node_list is not None:
+            precision = 0.0
+            for node in pred_node_list:
+                if node in correct_node_list:
+                    precision += 1.0
+            precision = precision / len(pred_node_list)
+
+            recall = 0.0
+            for node in correct_node_list:
+                if node in pred_node_list:
+                    recall += 1.0
+            recall = recall / len(correct_node_list)
+            # avoid zero division
+            if precision == 0.0 and recall == 0.0:
+                f1 = 0.0
+            else:
+                f1 = (2 * precision * recall) / (precision + recall)
+        # when failed parsing
+        else:
+            f1 = 0.0
+            precision = 0.0
+            recall = 0.0
+
+        return f1, precision, recall
+
+    def visualize_parsing_result(self):
+        for node in self.node_list:
+            print('content: {}'.format(node.content))
+            print('category :{}'.format(self.id_to_category[node.category_id]))
+            print()

@@ -4,8 +4,6 @@ from utils import circular_correlation
 import numpy as np
 import csv
 import random
-from parsed_tree import Parsed_Tree
-import copy
 
 
 class Node:
@@ -58,7 +56,7 @@ class Tree:
     def set_leaf_node_vector(self, weight_matrix):
         for node in self.node_list:
             if node.is_leaf:
-                vector = weight_matrix[node.content_id]
+                vector = weight_matrix[node.content_id[0]]
                 if self.regularized:
                     vector = vector / torch.norm(vector)
                 node.vector = vector
@@ -91,7 +89,7 @@ class Tree:
             if node_pair_list == []:
                 break
         leaf_node_info = torch.tensor(leaf_node_info, dtype=torch.int, requires_grad=False)
-        label_list = torch.tensor(label_list, dtype=torch.long, requires_grad=False)
+        label_list = torch.tensor(label_list, dtype=torch.float, requires_grad=False)
         composition_info = torch.tensor(composition_info, dtype=torch.int, requires_grad=False)
         self.leaf_node_info = leaf_node_info
         self.label_list = label_list
@@ -104,17 +102,17 @@ class Tree:
                 node.ready = False
 
     def convert_node_list_for_eval(self):
-        sentence = self.sentence.split()
         converted_node_list = []
+        sentence = self.node_list[-1].content_id
         for node in self.node_list:
-            content = node.content.split()
+            content = node.content_id
             for idx in range(len(sentence) - len(content) + 1):
                 if content[0] == sentence[idx] and content == sentence[idx:idx + len(content)]:
                     break
             scope_start = idx
             scope_end = idx + len(content)
             converted_node_list.append((scope_start, scope_end, node.category_id))
-        self.converted_node_list = converted_node_list
+        return converted_node_list
 
 
 class Tree_List:
@@ -238,7 +236,7 @@ class Tree_List:
                                 and opponent_node.category_id not in node.possible_category_id:
                             node.possible_category_id.append(opponent_node.category_id)
 
-    def prepare_inf_for_visualization(self, weight_matrix):
+    def prepare_info_for_visualization(self, weight_matrix):
         vector_list = []
         content_info_dict = {}
         # content_info_dict : contains dicts of each content's info in the type of dict
@@ -282,20 +280,11 @@ class Tree_List:
             batch_tree_list.append(sampled_tree_list[idx:idx + BATCH_SIZE])
         return batch_tree_list
 
-    def set_info_for_parsing(self):
-        parsing_info = {}
-        for tree in self.tree_list:
-            for node in tree.node_list:
-                if node.is_leaf:
-                    if node.content_id not in parsing_info:
-                        parsing_info[node.content_id] = [node.category_id]
-                    elif node.category_id not in parsing_info[node.content_id]:
-                        parsing_info[node.content_id].append(node.category_id)
-        self.parsing_info = parsing_info
-
-    def replace_vocab_category(self, content_to_id, category_to_id):
-        self.content_to_id = content_to_id
-        self.category_to_id = category_to_id
+    def replace_vocab_category(self, tree_list):
+        self.content_to_id = tree_list.content_to_id
+        self.category_to_id = tree_list.category_to_id
+        self.id_to_content = tree_list.id_to_content
+        self.id_to_category = tree_list.id_to_category
         self.set_content_category_id()
         self.set_possible_category_id()
         self.set_info_for_training()
@@ -313,7 +302,7 @@ class Tree_Net(nn.Module):
             self.embedding_dim,
             _weight=initial_weight_matrix)
         self.linear = nn.Linear(self.embedding_dim, self.num_category)
-        self.softmax = nn.Softmax(dim=1)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, leaf_node_info, composition_info):
         num_leaf_node = len(leaf_node_info)
@@ -333,60 +322,59 @@ class Tree_Net(nn.Module):
             node_vectors[parent_node_id] = circular_correlation(
                 node_vectors[left_node_id], node_vectors[right_node_id], True)
         node_vectors = torch.stack(node_vectors, dim=0)
-        output = self.softmax(self.linear(node_vectors))
+        output = self.sigmoid(self.linear(node_vectors))
         return output
 
 
 class History:
-    def __init__(self, tree_net, tree_list, criteria, parser):
+    def __init__(self, tree_net, tree_list, criteria, THRESHOLD):
         self.tree_net = tree_net
         self.tree_list = tree_list
         self.criteria = criteria
-        self.parser = parser
-        self.convert_node_list_for_eval()
+        self.THRESHOLD = THRESHOLD
         self.loss_history = np.array([])
         self.acc_history = np.array([])
-        self.f1_history = np.array([])
 
     def cal_stat(self):
         loss = 0.0
         acc = 0.0
-        f1 = 0.0
         for tree in self.tree_list.tree_list:
             leaf_node_info = tree.leaf_node_info
             label_list = tree.label_list
             composition_info = tree.composition_info
             output = self.tree_net(leaf_node_info, composition_info)
             loss += self.criteria(output, label_list)
-            acc += self.cal_acc(output, label_list)
-            chart = self.parser.parse(tree.sentence)
-            parsed_tree = Parsed_Tree(len(tree.sentence.split()), chart,
-                                      tree.sentence, self.tree_list.id_to_category)
-            f1 += parsed_tree.cal_f1_score(tree.converted_node_list)[0]
+            acc += self.cal_acc(output, label_list, self.THRESHOLD)
         loss = loss.detach().numpy() / len(self.tree_list.tree_list)
-        acc = acc.detach().numpy() / len(self.tree_list.tree_list)
-        f1 = f1 / len(self.tree_list.tree_list)
+        acc = np.array(acc) / len(self.tree_list.tree_list)
         self.loss_history = np.append(self.loss_history, loss)
         self.acc_history = np.append(self.acc_history, acc)
-        self.f1_history = np.append(self.f1_history, f1)
+        self.min_loss = np.min(self.loss_history)
+        self.min_loss_idx = np.argmin(self.loss_history)
         self.max_acc = np.max(self.acc_history)
         self.max_acc_idx = np.argmax(self.acc_history)
 
-    def cal_acc(self, output, label_list):
-        pred = torch.argmax(output, dim=1)
-        num_correct = torch.count_nonzero(pred == label_list)
+    def cal_acc(self, output, label_list, THRESHOLD):
+        num_correct = 0
+        for i in range(output.shape[0]):
+            for j in range(output.shape[1]):
+                if output[i][j] >= THRESHOLD:
+                    output[i][j] = 1.0
+                else:
+                    output[i][j] = 0.0
+            if torch.count_nonzero(output[i] == label_list[i]) == output.shape[1]:
+                num_correct += 1
         return num_correct / output.shape[0]
+
+    def print_current_stat(self, name):
+        print('{}-loss: {}'.format(name, self.loss_history[-1]))
+        print('{}-acc: {}'.format(name, self.acc_history[-1]))
 
     def save(self, path):
         with open(path, 'w') as f:
             writer = csv.writer(f, lineterminator='\n')
             writer.writerow(self.loss_history)
             writer.writerow(self.acc_history)
-            writer.writerow(self.f1_history)
-
-    def convert_node_list_for_eval(self):
-        for tree in self.tree_list.tree_list:
-            tree.convert_node_list_for_eval()
 
 
 class Condition_Setter:

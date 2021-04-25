@@ -40,12 +40,17 @@ class Parsed_Tree:
         self.convert_node_list_for_eval()
 
     def define_top_node(self):
-        top_node = Node(0, (0, self.length_of_sentence), (' ').join(self.sentence),
-                        self.chart[(0, self.length_of_sentence)], top=True)
-        left_pointer, right_pointer = top_node.extract_back_pointer()
-        self.node_list.append(top_node)
-        self.pointers_before_define.append(left_pointer)
-        self.pointers_before_define.append(right_pointer)
+        if self.chart[(0, self.length_of_sentence)] is not None:
+            top_node = Node(0, (0, self.length_of_sentence), (' ').join(self.sentence),
+                            self.chart[(0, self.length_of_sentence)], top=True)
+            left_pointer, right_pointer = top_node.extract_back_pointer()
+            self.node_list.append(top_node)
+            self.pointers_before_define.append(left_pointer)
+            self.pointers_before_define.append(right_pointer)
+        # when parsing is not done well
+        else:
+            top_node = None
+            self.node_list.append(top_node)
 
     def define_other_nodes(self):
         node_id = 1
@@ -67,26 +72,39 @@ class Parsed_Tree:
 
     def convert_node_list_for_eval(self):
         converted_node_list = []
-        for node in self.node_list:
-            scope = node.scope
-            category_id = node.category_id
-            converted_node_list.append((scope[0], scope[1], category_id))
-        self.converted_node_list = converted_node_list
+        if len(self.node_list) > 1:
+            for node in self.node_list:
+                scope = node.scope
+                category_id = node.category_id
+                converted_node_list.append((scope[0], scope[1], category_id))
+            self.converted_node_list = converted_node_list
+        else:
+            self.converted_node_list = None
 
     def cal_f1_score(self, correct_node_list):
         pred_node_list = self.converted_node_list
-        precision = 0.0
-        for node in pred_node_list:
-            if node in correct_node_list:
-                precision += 1.0
-        precision = precision / len(pred_node_list)
+        if pred_node_list is not None:
+            precision = 0.0
+            for node in pred_node_list:
+                if node in correct_node_list:
+                    precision += 1.0
+            precision = precision / len(pred_node_list)
 
-        recall = 0.0
-        for node in correct_node_list:
-            if node in pred_node_list:
-                recall += 1.0
-        recall = recall / len(correct_node_list)
-        f1 = (2 * precision * recall) / (precision + recall)
+            recall = 0.0
+            for node in correct_node_list:
+                if node in pred_node_list:
+                    recall += 1.0
+            recall = recall / len(correct_node_list)
+            # avoid zero division
+            if precision == 0.0 and recall == 0.0:
+                f1 = 0.0
+            else:
+                f1 = (2 * precision * recall) / (precision + recall)
+        # when failed parsing
+        else:
+            f1 = 0.0
+            precision = 0.0
+            recall = 0.0
 
         return f1, precision, recall
 

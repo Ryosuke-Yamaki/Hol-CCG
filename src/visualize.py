@@ -294,7 +294,7 @@ color_list = ['black', 'gray', 'lightcoral', 'red', 'saddlebrown', 'orange', 'ye
 set_random_seed(0)
 
 # make the map of trained state
-vector_list, content_info_dict = tree_list.prepare_inf_for_visualization(
+vector_list, content_info_dict = tree_list.prepare_info_for_visualization(
     trained_weight_matrix)
 print("t-SNE working.....")
 tsne = TSNE()
