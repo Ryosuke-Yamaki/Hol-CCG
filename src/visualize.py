@@ -100,8 +100,10 @@ def interactive_visualize(
         visualize_tree_list,
         group_list,
         color_list,
-        content_info_dict):
+        content_info_dict,
+        fig_name):
     ax = fig.add_subplot()
+    ax.set_title(fig_name)
     scatter_x_list = []
     scatter_y_list = []
     plotted_content_list = []
@@ -271,22 +273,51 @@ if USE_ORIGINAL_LOSS:
 fig_name += " " + str(embedding_dim) + "d"
 
 group_list = []
-group_list.append([1, 4])  # 1 名詞・名詞句
-group_list.append([6])  # 2 文
-group_list.append([0, 13])  # 3 冠詞・形容詞的な働きをする名詞
-group_list.append([10, 15, 17, 20, 23])  # 4 名詞にかかる前置詞
-group_list.append([8, 21])  # 5 動詞句にかかる前置詞
-group_list.append([3, 7, 12, 22, 27])  # 6 他動詞
-group_list.append([5])  # 7 自動詞
-group_list.append([2])  # 8 助動詞・受動態のbe動詞
-group_list.append([14])  # 9 疑問詞
-group_list.append([11, 16, 24])  # 10 名詞句を修飾
-group_list.append([9, 18, 25])  # 11 動詞句を修飾
-group_list.append([19])  # 12 to不定詞
-group_list.append([26])  # 13 接続詞
+group_list.append([1])  # N
+group_list.append([4])  # NP
+group_list.append([6])  # S
+group_list.append([0, 13])  # left node, become NP
+group_list.append([11, 16])  # right node, become NP
+group_list.append([14])  # left node, become S
+group_list.append([5])  # right node, become S
+group_list.append([10, 20, 23, 15, 17])  # left node, become (NP\N) or (NP\NP)
+group_list.append([24, 25])  # left node, become(NP/N)
+group_list.append([2, 3, 7, 22])  # left node, become (S\NP)
+group_list.append([9])  # right node, become (S\NP)
+group_list.append([8, 19, 21, 26])  # left node, become ((S\NP)\(S\NP))
+group_list.append([18])  # right node, become ((S\NP)\(S\NP))
+group_list.append([12, 27])  # left node, become ((S\\NP) / (S\\NP)) or ((S\\NP) / NP)
 
-color_list = ['black', 'gray', 'lightcoral', 'red', 'saddlebrown', 'orange', 'yellowgreen',
-              'forestgreen', 'turquoise', 'deepskyblue', 'blue', 'darkviolet', 'magenta']
+# group_list = []
+# group_list.append([1, 4])  # 1 名詞・名詞句
+# group_list.append([6])  # 2 文
+# group_list.append([0, 13])  # 3 冠詞・形容詞的な働きをする名詞
+# group_list.append([10, 15, 17, 20, 23])  # 4 名詞にかかる前置詞
+# group_list.append([8, 21])  # 5 動詞句にかかる前置詞
+# group_list.append([3, 7, 12, 22, 27])  # 6 他動詞
+# group_list.append([5])  # 7 自動詞
+# group_list.append([2])  # 8 助動詞・受動態のbe動詞
+# group_list.append([14])  # 9 疑問詞
+# group_list.append([11, 16, 24])  # 10 名詞句を修飾
+# group_list.append([9, 18, 25])  # 11 動詞句を修飾
+# group_list.append([19])  # 12 to不定詞
+# group_list.append([26])  # 13 接続詞
+
+color_list = [
+    'black',
+    'gray',
+    'lightcoral',
+    'red',
+    'saddlebrown',
+    'orange',
+    'yellow',
+    'yellowgreen',
+    'forestgreen',
+    'turquoise',
+    'deepskyblue',
+    'blue',
+    'darkviolet',
+    'magenta']
 
 # reset random seed for t-SNE
 set_random_seed(0)
@@ -307,8 +338,7 @@ visualize(
     content_info_dict=copy.deepcopy(content_info_dict),
     group_list=group_list,
     color_list=color_list,
-    fig_name=fig_name +
-    " trained",
+    fig_name=fig_name,
     WITH_ARROW=WITH_ARROW)
 if not WITH_ARROW:
     fig0.savefig(
@@ -325,5 +355,6 @@ interactive_visualize(
     visualize_tree_list=visualize_tree_list,
     content_info_dict=copy.deepcopy(content_info_dict),
     group_list=group_list,
-    color_list=color_list)
+    color_list=color_list,
+    fig_name=fig_name)
 plt.show()

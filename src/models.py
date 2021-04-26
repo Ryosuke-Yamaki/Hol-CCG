@@ -380,26 +380,41 @@ class History:
             writer.writerow(self.loss_history)
             writer.writerow(self.acc_history)
 
+    def export_stat_list(self, path):
+        stat_list = []
+        stat_list.append(str(self.min_loss))
+        stat_list.append(str(self.max_acc))
+        with open(path, 'a') as f:
+            f.write(', '.join(stat_list) + '\n')
+
 
 class Condition_Setter:
     def __init__(self, PATH_TO_DIR):
+        self.param_list = []
         if int(input("random(0) or GloVe(1): ")) == 1:
             self.RANDOM = False
+            self.param_list.append('GloVe')
         else:
             self.RANDOM = True
+            self.param_list.append('random')
         if int(input("reg(0) or not_reg(1): ")) == 1:
             self.REGULARIZED = False
+            self.param_list.append('not_reg')
         else:
             self.REGULARIZED = True
+            self.param_list.append('reg')
         if int(input("normal_loss(0) or original_loss(1): ")) == 1:
             self.USE_ORIGINAL_LOSS = True
+            self.param_list.append('original_loss')
         else:
             self.USE_ORIGINAL_LOSS = False
+            self.param_list.append('normal_loss')
         embedding_dim = input("embedding_dim(default=100d): ")
         if embedding_dim != "":
             self.embedding_dim = int(embedding_dim)
         else:
             self.embedding_dim = 100
+        self.param_list.append(str(self.embedding_dim))
         self.set_path(PATH_TO_DIR)
 
     def set_path(self, PATH_TO_DIR):
@@ -438,3 +453,11 @@ class Condition_Setter:
         self.path_to_test_data_history = path_list[3] + "_test_history.csv"
         self.path_to_history_fig = path_list[4] + "_history.png"
         self.fig_name = path_list[5].replace('_', ' ')
+
+    def export_param_list(self, path, roop_count):
+        if roop_count == 0:
+            with open(path, 'w') as f:
+                f.write(', '.join(self.param_list) + '\n')
+        else:
+            with open(path, 'a') as f:
+                f.write(', '.join(self.param_list) + '\n')

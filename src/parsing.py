@@ -166,6 +166,14 @@ class Parser:
         self.recall = recall / len(self.tree_list.tree_list)
         return self.f1, self.precision, self.recall
 
+    def export_stat_list(self, path):
+        stat_list = []
+        stat_list.append(str(self.f1))
+        stat_list.append(str(self.precision))
+        stat_list.append(str(self.recall))
+        with open(path, 'a') as f:
+            f.write(', '.join(stat_list) + '\n\n')
+
     def print_stat(self):
         print('f1: {}'.format(self.f1))
         print('precision: {}'.format(self.precision))
