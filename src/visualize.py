@@ -1,6 +1,6 @@
 import torch
 import matplotlib.pyplot as plt
-from utils import load_weight_matrix, set_random_seed
+from utils import set_random_seed
 from models import Tree_List, Tree_Net
 from sklearn.manifold import TSNE
 import copy
@@ -253,10 +253,8 @@ else:
     for tree_id in target_tree_id:
         visualize_tree_list.append(tree_list.tree_list[tree_id])
 
-initial_weight_matrix = load_weight_matrix(path_to_initial_weight_matrix, REGULARIZED)
-initial_weight_matrix = torch.from_numpy(initial_weight_matrix)
-tree_net = Tree_Net(tree_list, torch.zeros_like(initial_weight_matrix))
-tree_net.load_state_dict(torch.load(path_to_model))
+tree_net = Tree_Net(tree_list, embedding_dim)
+tree_net = torch.load(path_to_model)
 tree_net.eval()
 trained_weight_matrix = tree_net.embedding.weight
 

@@ -1,6 +1,5 @@
 import torch
 from models import Tree_List, Tree_Net, Condition_Setter
-from utils import load_weight_matrix
 
 
 class Analyzer:
@@ -9,7 +8,7 @@ class Analyzer:
         self.id_to_category = tree_list.id_to_category
         self.tree_net = tree_net
 
-    def analyze(self, target_tree_id=None):
+    def analyze(self, THRESHOLD, target_tree_id=None):
         if target_tree_id is None:
             tree_list = self.tree_list.tree_list
         else:
@@ -31,7 +30,7 @@ class Analyzer:
                 pred_category_id = []
                 pred_category = []
                 for i in range(len(prob)):
-                    if prob[i] >= 0.1:
+                    if prob[i] >= THRESHOLD:
                         pred_category_id.append(i)
                         pred_category.append(self.id_to_category[i])
                 if pred_category == []:
@@ -77,13 +76,18 @@ test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
 # match the vocab and category between train and test data
 test_tree_list.replace_vocab_category(train_tree_list)
 
-weight_matrix = torch.tensor(
-    load_weight_matrix(
-        condition.path_to_initial_weight_matrix,
-        condition.REGULARIZED))
-tree_net = Tree_Net(test_tree_list, weight_matrix)
-tree_net.load_state_dict(torch.load(condition.path_to_model))
+tree_net = Tree_Net(test_tree_list, condition.embedding_dim)
+tree_net = torch.load(condition.path_to_model)
 tree_net.eval()
+trained_weight_matrix = tree_net.embedding.weight
+
+THRESHOLD = 0.3
+
+target_tree_id = input("target tree id(default=all): ")
+if target_tree_id != "":
+    target_tree_id = [int(x) for x in target_tree_id.split(",")]
+else:
+    target_tree_id = None
 
 analyzer = Analyzer(test_tree_list, tree_net)
-analyzer.analyze()
+analyzer.analyze(THRESHOLD, target_tree_id)

@@ -1,7 +1,7 @@
-from utils import load_weight_matrix, circular_correlation
+# from utils import load_weight_matrix, circular_correlation
 from models import Tree_List, Tree_Net, Condition_Setter
 import torch
-import torch.nn as nn
+# import torch.nn as nn
 from parsing import Linear_Classifier, Parser, CCG_Category_List
 PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
 

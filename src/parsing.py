@@ -83,9 +83,9 @@ class Parser:
             cell = self.make_leaf_node_cell(vector)
             chart[(i, i + 1)] = cell
 
-        for l in range(2, n + 1):
-            for i in range(n - l + 1):
-                j = i + l
+        for length in range(2, n + 1):
+            for i in range(n - length + 1):
+                j = i + length
                 cell = {}
                 for k in range(i + 1, j):
                     left_cell = chart[(i, k)]
@@ -118,7 +118,8 @@ class Parser:
                                     if possible_category_id not in cell:
                                         cell[possible_category_id] = possible_category_info
                                     # when the probability is higher than existing one
-                                    elif possible_category_info['prob'] > cell[possible_category_id]['prob']:
+                                    elif possible_category_info['prob'] > \
+                                            cell[possible_category_id]['prob']:
                                         cell[possible_category_id] = possible_category_info
                 # when composition candidate founded
                 if len(cell) > 0:

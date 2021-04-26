@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from utils import circular_correlation
+from utils import circular_correlation, generate_random_weight_matrix
 import numpy as np
 import csv
 import random
@@ -291,12 +291,16 @@ class Tree_List:
 
 
 class Tree_Net(nn.Module):
-    def __init__(self, tree_list, initial_weight_matrix):
+    def __init__(self, tree_list, embedding_dim, initial_weight_matrix=None):
         super(Tree_Net, self).__init__()
         self.regularized = tree_list.regularized
-        self.num_embedding = initial_weight_matrix.shape[0]
-        self.embedding_dim = initial_weight_matrix.shape[1]
+        self.num_embedding = len(tree_list.content_to_id)
         self.num_category = len(tree_list.category_to_id)
+        self.embedding_dim = embedding_dim
+        if initial_weight_matrix is None:
+            initial_weight_matrix = generate_random_weight_matrix(
+                self.num_embedding, self.embedding_dim, self.regularized)
+        initial_weight_matrix = torch.from_numpy(initial_weight_matrix).clone()
         self.embedding = nn.Embedding(
             self.num_embedding,
             self.embedding_dim,
