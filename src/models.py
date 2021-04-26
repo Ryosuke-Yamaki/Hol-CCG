@@ -343,7 +343,7 @@ class History:
             label_list = tree.label_list
             composition_info = tree.composition_info
             output = self.tree_net(leaf_node_info, composition_info)
-            loss += self.criteria(output, label_list)
+            loss += self.criteria(output, label_list) / output.shape[0]
             acc += self.cal_acc(output, label_list, self.THRESHOLD)
         loss = loss.detach().numpy() / len(self.tree_list.tree_list)
         acc = np.array(acc) / len(self.tree_list.tree_list)
