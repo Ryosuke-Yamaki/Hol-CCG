@@ -51,7 +51,7 @@ class Tree:
             parent_node = self.node_list[info[2]]
             parent_node.content = left_node.content + ' ' + right_node.content
             parent_node.vector = circular_correlation(
-                left_node.vector, right_node.vector, self.regularized)
+                left_node.vector, right_node.vector)
 
     def set_leaf_node_vector(self, weight_matrix):
         for node in self.node_list:
@@ -314,17 +314,13 @@ class Tree_Net(nn.Module):
         for info in leaf_node_info:
             self_id = info[0]
             content_id = info[1]
-            if self.regularized:
-                node_vectors[self_id] = self.embedding(
-                    content_id) / torch.norm(self.embedding(content_id))
-            else:
-                node_vectors[self_id] = self.embedding(content_id)
+            node_vectors[self_id] = self.embedding(content_id)
         for info in composition_info:
             left_node_id = info[0]
             right_node_id = info[1]
             parent_node_id = info[2]
             node_vectors[parent_node_id] = circular_correlation(
-                node_vectors[left_node_id], node_vectors[right_node_id], True)
+                node_vectors[left_node_id], node_vectors[right_node_id])
         node_vectors = torch.stack(node_vectors, dim=0)
         output = self.sigmoid(self.linear(node_vectors))
         return output

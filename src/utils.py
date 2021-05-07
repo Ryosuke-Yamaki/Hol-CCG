@@ -6,15 +6,12 @@ from torch.fft import fft, ifft
 from torch import conj, mul
 
 
-def circular_correlation(a, b, REGULARIZED):
+def circular_correlation(a, b):
     a = conj(fft(a))
     b = fft(b)
     c = mul(a, b)
     c = ifft(c).real
-    if REGULARIZED:
-        return c / torch.norm(c)
-    else:
-        return c
+    return c / torch.norm(c)
 
 
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX, REGULARIZED):
