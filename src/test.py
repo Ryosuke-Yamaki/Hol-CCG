@@ -19,6 +19,11 @@ test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
 # match the vocab and category between train and test data
 test_tree_list.replace_vocab_category(train_tree_list)
 
-train_tree_list.set_leaf_node_content_id()
-batch_content_id = train_tree_list.make_batch(5)
+device = torch.device('cuda')
+
+train_tree_list.set_info_for_training(device)
+start = time.time()
+batch_content_id, batch_label_list, batch_composition_info, content_label_mask, composition_mask = train_tree_list.make_batch(
+    5, device)
+print(time.time()-start)
 a = 1
