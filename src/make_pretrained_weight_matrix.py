@@ -21,16 +21,16 @@ glove_vectors = api.load('glove-wiki-gigaword-{}'.format(embedding_dim))
 weight_matrix = []
 for word in tree_list.content_to_id:
     if word in glove_vectors.vocab:
-        weight_matrix.append(glove_vectors[word])
+        vector = glove_vectors[word]
     else:
         print('{} not in GloVe!'.format(word))
-        exit()
-        weight_matrix.append(
+        vector = weight_matrix.append(
             np.random.normal(
                 loc=0.0,
                 scale=1 /
                 np.sqrt(embedding_dim),
                 size=embedding_dim))
+    weight_matrix.append(vector / np.linalg.norm(vector))
 
 with open(PATH_TO_PRETRAINED_WEIGHT_MATRIX, 'w') as f:
     writer = csv.writer(f, lineterminator='\n')

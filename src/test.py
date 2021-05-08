@@ -1,38 +1,29 @@
-# from utils import load_weight_matrix, circular_correlation
-from models import Tree_List, Tree_Net, Condition_Setter
 import torch
-# import torch.nn as nn
-from parsing import Linear_Classifier, Parser, CCG_Category_List
-from utils import load_weight_matrix
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+import csv
+import matplotlib.pyplot as plt
+from models import Tree_List, Tree_Net, Condition_Setter, History
+from utils import load_weight_matrix, set_random_seed
+from parsing import CCG_Category_List, Linear_Classifier, Parser
+import time
 
-PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
-
+PATH_TO_DIR = "/home/yamaki-ryosuke/Hol-CCG/"
 condition = Condition_Setter(PATH_TO_DIR)
 
 # initialize tree_list from toy_data
-train_tree_list = Tree_List(condition.path_to_train_data, condition.REGULARIZED)
-print(train_tree_list.category_to_id)
+train_tree_list = Tree_List(
+    condition.path_to_train_data, condition.REGULARIZED)
 test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
 # match the vocab and category between train and test data
 test_tree_list.replace_vocab_category(train_tree_list)
 
-weight_matrix = torch.tensor(
-    load_weight_matrix(
-        condition.path_to_initial_weight_matrix,
-        condition.REGULARIZED))
-tree_net = Tree_Net(test_tree_list, weight_matrix)
-tree_net.load_state_dict(torch.load(condition.path_to_model))
-tree_net.eval()
+device = torch.device('cpu')
 
-# after training, parse test data and print statistics
-ccg_category_list = CCG_Category_List(test_tree_list)
-linear_classifier = Linear_Classifier(tree_net)
-weight_matrix = tree_net.embedding.weight
-parser = Parser(
-    test_tree_list,
-    ccg_category_list,
-    weight_matrix,
-    linear_classifier,
-    THRESHOLD=0.3)
-parser.validation()
-parser.print_stat()
+train_tree_list.set_info_for_training(device)
+start = time.time()
+batch_content_id, batch_label_list, batch_composition_info, content_label_mask, composition_mask = train_tree_list.make_batch(
+    5, device)
+print(time.time() - start)
+a = 1

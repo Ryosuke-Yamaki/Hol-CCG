@@ -1,3 +1,4 @@
+from operator import itemgetter
 import torch
 import torch.nn as nn
 from utils import circular_correlation, generate_random_weight_matrix
@@ -62,12 +63,12 @@ class Tree:
                 node.vector = vector
 
     # when initialize tree_list, each info of tree is automatically set
-    def set_info_for_training(self, num_category):
-        leaf_node_info = []
+    def set_info_for_training(self, num_category, device=torch.device('cpu')):
+        leaf_node_content_id = []
         label_list = []
         for node in self.node_list:
             if node.is_leaf:
-                leaf_node_info.append([node.self_id, node.content_id[0]])
+                leaf_node_content_id.append(node.content_id[0])
             # label with multiple bit corresponding to possible category id
             label = [0] * num_category
             for category_id in node.possible_category_id:
@@ -83,18 +84,16 @@ class Tree:
                 parent_node = self.node_list[left_node.parent_id]
                 if left_node.ready and right_node.ready:
                     composition_info.append(
-                        [left_node.self_id, right_node.self_id, left_node.parent_id])
+                        [parent_node.self_id, left_node.self_id, right_node.self_id])
                     parent_node.ready = True
                     node_pair_list.remove(node_pair)
             if node_pair_list == []:
                 break
-        leaf_node_info = torch.tensor(leaf_node_info, dtype=torch.int, requires_grad=False)
-        label_list = torch.tensor(label_list, dtype=torch.float, requires_grad=False)
-        composition_info = torch.tensor(composition_info, dtype=torch.int, requires_grad=False)
-        self.leaf_node_info = leaf_node_info
-        self.label_list = label_list
-        self.composition_info = composition_info
         self.reset_node_status()
+        return torch.tensor(
+            leaf_node_content_id, device=device), torch.tensor(
+            label_list, device=device), torch.tensor(
+            composition_info, device=device)
 
     def reset_node_status(self):
         for node in self.node_list:
@@ -111,7 +110,8 @@ class Tree:
                     break
             scope_start = idx
             scope_end = idx + len(content)
-            converted_node_list.append((scope_start, scope_end, node.category_id))
+            converted_node_list.append(
+                (scope_start, scope_end, node.category_id))
         return converted_node_list
 
 
@@ -175,7 +175,8 @@ class Tree_List:
                         sibling_id,
                         parent_id,
                         LR))
-            tree_list.append(Tree(tree_id, sentence, node_list, self.regularized))
+            tree_list.append(
+                Tree(tree_id, sentence, node_list, self.regularized))
             tree_id += 1
         self.tree_list = tree_list
 
@@ -210,9 +211,11 @@ class Tree_List:
                     if left_node.ready and right_node.ready:
                         parent_node = tree.node_list[left_node.parent_id]
                         if left_node.is_leaf:
-                            left_node.content_id = [self.content_to_id[left_node.content]]
+                            left_node.content_id = [
+                                self.content_to_id[left_node.content]]
                         if right_node.is_leaf:
-                            right_node.content_id = [self.content_to_id[right_node.content]]
+                            right_node.content_id = [
+                                self.content_to_id[right_node.content]]
                         parent_node.content_id = []
                         for content_id in left_node.content_id:
                             parent_node.content_id.append(content_id)
@@ -234,7 +237,8 @@ class Tree_List:
                     for opponent_node in opponent_tree.node_list:
                         if node.content_id == opponent_node.content_id\
                                 and opponent_node.category_id not in node.possible_category_id:
-                            node.possible_category_id.append(opponent_node.category_id)
+                            node.possible_category_id.append(
+                                opponent_node.category_id)
 
     def prepare_info_for_visualization(self, weight_matrix):
         vector_list = []
@@ -262,23 +266,98 @@ class Tree_List:
 
                 # already node.content included, but the category is different
                 elif node.category_id not in content_info_dict[node.content]['category_id_list']:
-                    content_info_dict[node.content]['category_id_list'].append(node.category_id)
+                    content_info_dict[node.content]['category_id_list'].append(
+                        node.category_id)
 
         vector_list = np.array(vector_list)
 
         return vector_list, content_info_dict
 
-    def set_info_for_training(self):
+    def set_info_for_training(self, device=torch.device('cpu')):
+        self.leaf_node_content_id = []
+        self.label_list = []
+        self.composition_info = []
         for tree in self.tree_list:
             tree.set_node_pair_list()
-            tree.set_info_for_training(len(self.category_to_id))
+            info = tree.set_info_for_training(len(self.category_to_id), device)
+            self.leaf_node_content_id.append(info[0])
+            self.label_list.append(info[1])
+            self.composition_info.append(info[2])
 
-    def make_batch(self, BATCH_SIZE):
-        sampled_tree_list = random.sample(self.tree_list, len(self.tree_list))
-        batch_tree_list = []
-        for idx in range(0, len(sampled_tree_list) - BATCH_SIZE, BATCH_SIZE):
-            batch_tree_list.append(sampled_tree_list[idx:idx + BATCH_SIZE])
-        return batch_tree_list
+    def make_batch(self, BATCH_SIZE, device=torch.device('cpu')):
+        num_tree = len(self.tree_list)
+
+        # shuffle the tree_id in tree_list
+        shuffled_tree_id = torch.randperm(num_tree, device=device)
+
+        # make batch content id includes leaf node content id for each tree belongs to batch
+        batch_content_id = []
+        batch_label_list = []
+        batch_composition_info = []
+        for idx in range(0, num_tree - BATCH_SIZE, BATCH_SIZE):
+            batch_tree_id_list = shuffled_tree_id[idx:idx + BATCH_SIZE]
+            batch_content_id.append(list(itemgetter(
+                *batch_tree_id_list)(self.leaf_node_content_id)))
+            batch_label_list.append(list(itemgetter(
+                *batch_tree_id_list)(self.label_list)))
+            batch_composition_info.append(list(itemgetter(
+                *batch_tree_id_list)(self.composition_info)))
+        # the part cannot devided by BATCH_SIZE
+        batch_content_id.append(list(itemgetter(
+            *shuffled_tree_id[idx + BATCH_SIZE:])(self.leaf_node_content_id)))
+        batch_label_list.append(list(itemgetter(
+            *shuffled_tree_id[idx + BATCH_SIZE:])(self.label_list)))
+        batch_composition_info.append(list(itemgetter(
+            *shuffled_tree_id[idx + BATCH_SIZE:])(self.composition_info)))
+
+        content_label_mask = []
+        composition_mask = []
+        for idx in range(len(batch_content_id)):
+            content_id = batch_content_id[idx]
+            label_list = batch_label_list[idx]
+            composition_list = batch_composition_info[idx]
+            max_num_leaf_node = max([len(i) for i in content_id])
+            # set the mask for each tree in batch, this batch is shared to label_list
+            true_mask = [torch.ones(len(i), dtype=torch.long, device=device)
+                         for i in content_id]
+            false_mask = [
+                torch.zeros(
+                    2 * max_num_leaf_node - 1 - len(i),
+                    dtype=torch.long,
+                    device=device) for i in content_id]
+            content_label_mask.append(torch.stack(
+                [torch.cat((i, j)) for (i, j) in zip(true_mask, false_mask)]))
+            # make dummy content id to fill blank in batch
+            dummy_content_id = [torch.zeros(
+                max_num_leaf_node - len(i), dtype=torch.long, device=device) for i in content_id]
+            batch_content_id[idx] = torch.stack([torch.cat((i, j)) for (
+                i, j) in zip(content_id, dummy_content_id)])
+            # make dummy label to fill blank in batch
+            dummy_label = [
+                torch.zeros(
+                    2 * max_num_leaf_node - 1 - len(i),
+                    i.shape[1],
+                    dtype=torch.long,
+                    device=device) for i in label_list]
+            batch_label_list[idx] = torch.stack(
+                [torch.cat((i, j)) for (i, j) in zip(label_list, dummy_label)])
+            # set mask for composition info in each batch
+            max_num_composition = max([len(i) for i in composition_list])
+            true_mask = [torch.ones(len(i), dtype=torch.long, device=device)
+                         for i in composition_list]
+            false_mask = [
+                torch.zeros(
+                    max_num_composition - len(i),
+                    dtype=torch.long,
+                    device=device) for i in composition_list]
+            composition_mask.append(torch.stack(
+                [torch.cat((i, j)) for (i, j) in zip(true_mask, false_mask)]))
+            # make dummy compoisition info to fill blank in batch
+            dummy_compositin_info = [torch.zeros(
+                max_num_composition - len(i), i.shape[1], device=device) for i in composition_list]
+            batch_composition_info[idx] = torch.stack(
+                [torch.cat((i, j)) for (i, j) in zip(composition_list, dummy_compositin_info)])
+        return batch_content_id, batch_label_list, batch_composition_info, content_label_mask, composition_mask
 
     def replace_vocab_category(self, tree_list):
         self.content_to_id = tree_list.content_to_id
@@ -345,7 +424,7 @@ class History:
             output = self.tree_net(leaf_node_info, composition_info)
             loss += self.criteria(output, label_list) / output.shape[0]
             acc += self.cal_acc(output, label_list, self.THRESHOLD)
-        loss = loss.detach().numpy() / len(self.tree_list.tree_list)
+        loss = loss.detach().cpu().numpy() / len(self.tree_list.tree_list)
         acc = np.array(acc) / len(self.tree_list.tree_list)
         self.loss_history = np.append(self.loss_history, loss)
         self.acc_history = np.append(self.acc_history, acc)
@@ -443,7 +522,8 @@ class Condition_Setter:
             if self.USE_ORIGINAL_LOSS:
                 path_list[i] += "_original_loss"
             path_list[i] += "_" + str(self.embedding_dim) + "d"
-        self.path_to_initial_weight_matrix = path_list[0] + "_initial_weight_matrix.csv"
+        self.path_to_initial_weight_matrix = path_list[0] + \
+            "_initial_weight_matrix.csv"
         self.path_to_model = path_list[1] + "_model.pth"
         self.path_to_train_data_history = path_list[2] + "_train_history.csv"
         self.path_to_test_data_history = path_list[3] + "_test_history.csv"
