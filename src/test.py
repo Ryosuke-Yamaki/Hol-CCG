@@ -9,7 +9,7 @@ from utils import load_weight_matrix, set_random_seed
 from parsing import CCG_Category_List, Linear_Classifier, Parser
 import time
 
-PATH_TO_DIR = "/home/yamaki-ryosuke/Hol-CCG/"
+PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
 condition = Condition_Setter(PATH_TO_DIR)
 
 # initialize tree_list from toy_data
@@ -23,7 +23,10 @@ device = torch.device('cpu')
 
 train_tree_list.set_info_for_training(device)
 start = time.time()
-batch_content_id, batch_label_list, batch_composition_info, content_label_mask, composition_mask = train_tree_list.make_batch(
-    5, device)
+batch_list = train_tree_list.make_batch(5, device)
+
+for batch in batch_list:
+    break
+
 print(time.time() - start)
 a = 1
