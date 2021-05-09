@@ -431,6 +431,7 @@ class Tree_Net(nn.Module):
 
         vector, content_mask = self.embed_leaf_nodes(leaf_content_id, content_mask)
         vector = self.compose(vector, composition_info, content_mask)
+        return vector
 
     def embed_leaf_nodes(self, leaf_content_id, content_mask):
         vector = torch.zeros(
@@ -460,7 +461,8 @@ class Tree_Net(nn.Module):
             right_vector = vector[(torch.arange(len(right_idx)), right_idx)]
             composed_vector = circular_correlation(left_vector, right_vector)
             vector[content_mask.nonzero(as_tuple=True)] = composed_vector
-            content_mask = torch.roll(content_mask, shift=1, dim=1)
+            content_mask = torch.roll(content_mask, shifts=1, dims=1)
+        return vector
 
 
 class History:
