@@ -9,6 +9,7 @@ from utils import load_weight_matrix, set_random_seed
 from parsing import CCG_Category_List, Linear_Classifier, Parser
 import time
 
+
 PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
 condition = Condition_Setter(PATH_TO_DIR)
 

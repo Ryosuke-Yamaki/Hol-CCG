@@ -11,7 +11,7 @@ def circular_correlation(a, b):
     b = fft(b)
     c = mul(a, b)
     c = ifft(c).real
-    return c / torch.norm(c)
+    return c.div(c.norm(dim=1, keepdim=True) + 1e-6)
 
 
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX, REGULARIZED):
