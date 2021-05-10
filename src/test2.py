@@ -47,6 +47,12 @@ start = time.time()
 batch_list = train_tree_list.make_batch(BATCH_SIZE)
 print(time.time() - start)
 
-for batch in batch_list:
-    vector = tree_net.forward_test(batch)
-    print(vector)
+for epoch in range(EPOCHS):
+    for batch in batch_list:
+        optimizer.zero_grad()
+        output = tree_net(batch)
+        label_list = batch[3]
+        label_mask = batch[4]
+        loss = criteria(output * label_mask, label_list)
+        optimizer.step()
+    print(epoch, loss)

@@ -91,7 +91,7 @@ class Tree:
                 break
         self.reset_node_status()
         return [torch.tensor(leaf_node_content_id, dtype=torch.long, device=device),
-                torch.tensor(label_list, dtype=torch.long, device=device),
+                torch.tensor(label_list, dtype=torch.float, device=device),
                 torch.tensor(composition_info, dtype=torch.long, device=device)]
 
     def reset_node_status(self):
@@ -337,11 +337,16 @@ class Tree_List:
                 i, j) in zip(content_id, dummy_content_id)])
 
             max_num_label = max([len(i) for i in label_list])
+            num_category = label_list[0].shape[1]
             # set the mask for label of each node in tree
-            true_mask = [torch.ones(len(i), dtype=torch.bool, device=device) for i in label_list]
+            true_mask = [
+                torch.ones(
+                    (len(i), num_category),
+                    dtype=torch.bool,
+                    device=device) for i in label_list]
             false_mask = [
                 torch.zeros(
-                    max_num_label - len(i),
+                    (max_num_label - len(i), num_category),
                     dtype=torch.bool,
                     device=device) for i in label_list]
             label_mask.append(torch.stack([torch.cat((i, j))
@@ -351,7 +356,7 @@ class Tree_List:
                 torch.zeros(
                     2 * max_num_leaf_node - 1 - len(i),
                     i.shape[1],
-                    dtype=torch.long,
+                    dtype=torch.float,
                     device=device) for i in label_list]
             batch_label_list[idx] = torch.stack(
                 [torch.cat((i, j)) for (i, j) in zip(label_list, dummy_label)])
@@ -404,25 +409,8 @@ class Tree_Net(nn.Module):
         self.linear = nn.Linear(self.embedding_dim, self.num_category)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, leaf_node_info, composition_info):
-        num_leaf_node = len(leaf_node_info)
-        node_vectors = [0] * (2 * num_leaf_node - 1)
-        for info in leaf_node_info:
-            self_id = info[0]
-            content_id = info[1]
-            node_vectors[self_id] = self.embedding(content_id)
-        for info in composition_info:
-            left_node_id = info[0]
-            right_node_id = info[1]
-            parent_node_id = info[2]
-            node_vectors[parent_node_id] = circular_correlation(
-                node_vectors[left_node_id], node_vectors[right_node_id])
-        node_vectors = torch.stack(node_vectors, dim=0)
-        output = self.sigmoid(self.linear(node_vectors))
-        return output
-
     # input batch as tuple of training info
-    def forward_test(self, batch):
+    def forward(self, batch):
         # the content_id of leaf nodes
         leaf_content_id = batch[0]
         content_mask = batch[1]
@@ -431,7 +419,8 @@ class Tree_Net(nn.Module):
 
         vector, content_mask = self.embed_leaf_nodes(leaf_content_id, content_mask)
         vector = self.compose(vector, composition_info, content_mask)
-        return vector
+        output = self.sigmoid(self.linear(vector))
+        return output
 
     def embed_leaf_nodes(self, leaf_content_id, content_mask):
         vector = torch.zeros(
