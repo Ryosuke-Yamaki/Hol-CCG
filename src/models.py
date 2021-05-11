@@ -115,8 +115,9 @@ class Tree:
 
 
 class Tree_List:
-    def __init__(self, PATH_TO_DATA, REGULARIZED):
+    def __init__(self, PATH_TO_DATA, REGULARIZED, device=torch.device('cpu')):
         self.regularized = REGULARIZED
+        self.device = device
         self.initialize_tree_list(PATH_TO_DATA)
         self.set_vocab_category()
         self.set_content_category_id()
@@ -272,22 +273,21 @@ class Tree_List:
 
         return vector_list, content_info_dict
 
-    def set_info_for_training(self, device=torch.device('cpu')):
+    def set_info_for_training(self):
         self.leaf_node_content_id = []
         self.label_list = []
         self.composition_info = []
         for tree in self.tree_list:
             tree.set_node_pair_list()
-            info = tree.set_info_for_training(len(self.category_to_id), device)
+            info = tree.set_info_for_training(len(self.category_to_id), device=self.device)
             self.leaf_node_content_id.append(info[0])
             self.label_list.append(info[1])
             self.composition_info.append(info[2])
 
-    def make_batch(self, BATCH_SIZE, device=torch.device('cpu')):
+    def make_batch(self, BATCH_SIZE):
         num_tree = len(self.tree_list)
-
         # shuffle the tree_id in tree_list
-        shuffled_tree_id = torch.randperm(num_tree, device=device)
+        shuffled_tree_id = torch.randperm(num_tree, device=self.device)
 
         # make batch content id includes leaf node content id for each tree belongs to batch
         batch_leaf_content_id = []
@@ -321,18 +321,21 @@ class Tree_List:
             # content mask is used for two purpose,
             # 1 - embedding leaf node vector
             # 2 - decide the incex of insert position of composed vector
-            true_mask = [torch.ones(len(i), dtype=torch.bool, device=device)
+            true_mask = [torch.ones(len(i), dtype=torch.bool, device=self.device)
                          for i in content_id]
             false_mask = [
                 torch.zeros(
                     2 * max_num_leaf_node - 1 - len(i),
                     dtype=torch.bool,
-                    device=device) for i in content_id]
+                    device=self.device) for i in content_id]
             content_mask.append(torch.stack(
                 [torch.cat((i, j)) for (i, j) in zip(true_mask, false_mask)]))
             # make dummy content id to fill blank in batch
-            dummy_content_id = [torch.zeros(
-                max_num_leaf_node - len(i), dtype=torch.long, device=device) for i in content_id]
+            dummy_content_id = [
+                torch.zeros(
+                    max_num_leaf_node - len(i),
+                    dtype=torch.long,
+                    device=self.device) for i in content_id]
             batch_leaf_content_id[idx] = torch.stack([torch.cat((i, j)) for (
                 i, j) in zip(content_id, dummy_content_id)])
 
@@ -343,12 +346,12 @@ class Tree_List:
                 torch.ones(
                     (len(i), num_category),
                     dtype=torch.bool,
-                    device=device) for i in label_list]
+                    device=self.device) for i in label_list]
             false_mask = [
                 torch.zeros(
                     (max_num_label - len(i), num_category),
                     dtype=torch.bool,
-                    device=device) for i in label_list]
+                    device=self.device) for i in label_list]
             label_mask.append(torch.stack([torch.cat((i, j))
                                            for (i, j) in zip(true_mask, false_mask)]))
             # make dummy label to fill blank in batch
@@ -357,7 +360,7 @@ class Tree_List:
                     2 * max_num_leaf_node - 1 - len(i),
                     i.shape[1],
                     dtype=torch.float,
-                    device=device) for i in label_list]
+                    device=self.device) for i in label_list]
             batch_label_list[idx] = torch.stack(
                 [torch.cat((i, j)) for (i, j) in zip(label_list, dummy_label)])
 
@@ -369,7 +372,7 @@ class Tree_List:
                     max_num_composition - len(i),
                     i.shape[1],
                     dtype=torch.long,
-                    device=device) for i in composition_list]
+                    device=self.device) for i in composition_list]
             batch_composition_info[idx] = torch.stack(
                 [torch.cat((i, j)) for (i, j) in zip(composition_list, dummy_compositin_info)])
         # return zipped batch information, when training extract each batch from zip itteration
@@ -394,13 +397,12 @@ class Tree_List:
 class Tree_Net(nn.Module):
     def __init__(self, tree_list, embedding_dim, initial_weight_matrix=None):
         super(Tree_Net, self).__init__()
-        self.regularized = tree_list.regularized
         self.num_embedding = len(tree_list.content_to_id)
         self.num_category = len(tree_list.category_to_id)
         self.embedding_dim = embedding_dim
         if initial_weight_matrix is None:
             initial_weight_matrix = generate_random_weight_matrix(
-                self.num_embedding, self.embedding_dim, self.regularized)
+                self.num_embedding, self.embedding_dim)
         initial_weight_matrix = torch.from_numpy(initial_weight_matrix).clone()
         self.embedding = nn.Embedding(
             self.num_embedding,
@@ -526,12 +528,6 @@ class Condition_Setter:
         else:
             self.REGULARIZED = True
             self.param_list.append('reg')
-        if int(input("normal_loss(0) or original_loss(1): ")) == 1:
-            self.USE_ORIGINAL_LOSS = True
-            self.param_list.append('original_loss')
-        else:
-            self.USE_ORIGINAL_LOSS = False
-            self.param_list.append('normal_loss')
         embedding_dim = input("embedding_dim(default=100d): ")
         if embedding_dim != "":
             self.embedding_dim = int(embedding_dim)
@@ -567,8 +563,6 @@ class Condition_Setter:
                 path_list[i] += "_reg"
             else:
                 path_list[i] += "_not_reg"
-            if self.USE_ORIGINAL_LOSS:
-                path_list[i] += "_original_loss"
             path_list[i] += "_" + str(self.embedding_dim) + "d"
         self.path_to_initial_weight_matrix = path_list[0] + \
             "_initial_weight_matrix.csv"

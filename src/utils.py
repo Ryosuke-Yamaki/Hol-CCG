@@ -15,23 +15,21 @@ def circular_correlation(a, b):
 
 
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
-    weight_matrix = []
     with open(PATH_TO_WEIGHT_MATRIX, 'r') as f:
         reader = csv.reader(f)
-        for row in reader:
-            weight_matrix.append(row)
-    weight_matrix = np.array(weight_matrix).astype(np.float32)
-    return weight_matrix
+        weight_matrix = [row for row in reader]
+    return np.array(weight_matrix).astype(np.float32)
 
 
-def generate_random_weight_matrix(NUM_VOCAB, EMBEDDING_DIM, REGULARIZED):
-    weight_matrix = np.empty((NUM_VOCAB, EMBEDDING_DIM))
-    for i in range(weight_matrix.shape[0]):
-        weight_matrix[i] = np.random.normal(
-            loc=0.0, scale=1 / np.sqrt(EMBEDDING_DIM), size=EMBEDDING_DIM)
-        if REGULARIZED:
-            weight_matrix[i] = weight_matrix[i] / np.linalg.norm(weight_matrix[i], ord=2)
-    return weight_matrix.astype(np.float32)
+def generate_random_weight_matrix(NUM_VOCAB, EMBEDDING_DIM):
+    weight_matrix = [
+        np.random.normal(
+            loc=0.0,
+            scale=1 /
+            np.sqrt(EMBEDDING_DIM),
+            size=EMBEDDING_DIM) for i in range(NUM_VOCAB)]
+    return np.array([i / j for (i, j) in zip(weight_matrix,
+                                             np.linalg.norm(weight_matrix, axis=1))]).astype(np.float32)
 
 
 def cal_norm_mean_std(tree):
