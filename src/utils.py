@@ -14,17 +14,13 @@ def circular_correlation(a, b):
     return c.div(c.norm(dim=1, keepdim=True) + 1e-6)
 
 
-def load_weight_matrix(PATH_TO_WEIGHT_MATRIX, REGULARIZED):
+def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
     weight_matrix = []
     with open(PATH_TO_WEIGHT_MATRIX, 'r') as f:
         reader = csv.reader(f)
         for row in reader:
             weight_matrix.append(row)
     weight_matrix = np.array(weight_matrix).astype(np.float32)
-
-    if REGULARIZED:
-        for i in range(weight_matrix.shape[0]):
-            weight_matrix[i] = weight_matrix[i] / np.linalg.norm(weight_matrix[i], ord=2)
     return weight_matrix
 
 
