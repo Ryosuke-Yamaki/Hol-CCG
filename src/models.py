@@ -1,10 +1,8 @@
-from operator import itemgetter
+import numpy as np
 import torch
 import torch.nn as nn
+from operator import itemgetter
 from utils import circular_correlation, generate_random_weight_matrix
-import numpy as np
-import csv
-import random
 
 
 class Node:
@@ -384,6 +382,7 @@ class Tree_List:
             batch_label_list,
             label_mask)
 
+    # the function use for the transfer of vocab & category from training to test tree
     def replace_vocab_category(self, tree_list):
         self.content_to_id = tree_list.content_to_id
         self.category_to_id = tree_list.category_to_id
@@ -453,145 +452,3 @@ class Tree_Net(nn.Module):
             vector[content_mask.nonzero(as_tuple=True)] = composed_vector
             content_mask = torch.roll(content_mask, shifts=1, dims=1)
         return vector
-
-
-class History:
-    def __init__(self, tree_net, tree_list, criteria, THRESHOLD):
-        self.tree_net = tree_net
-        self.tree_list = tree_list
-        self.criteria = criteria
-        self.THRESHOLD = THRESHOLD
-        self.batch_loss = []
-        self.batch_acc = []
-        self.loss_history = np.array([])
-        self.acc_history = np.array([])
-
-    # record the loss and acc of each batch and add them to list
-    def record_batch_loss_acc(self, loss, batch_output, batch_label, batch_label_mask):
-        self.batch_loss.append(loss.item())
-        self.batch_acc.append(self.cal_acc(batch_output, batch_label, batch_label_mask))
-
-    def record_loss_acc_for_all_batches(self):
-        loss = sum(self.batch_loss) / len(self.batch_loss)
-        acc = sum(self.batch_acc) / len(self.batch_acc)
-        self.loss_history = np.append(self.loss_history, loss)
-        self.acc_history = np.append(self.acc_history, acc)
-        self.min_loss = np.min(self.loss_history)
-        self.min_loss_idx = np.argmin(self.loss_history)
-        self.max_acc = np.max(self.acc_history)
-        self.max_acc_idx = np.argmax(self.acc_history)
-        # reset batch_loss and batch_acc for next epoch
-        self.batch_loss = []
-        self.batch_acc = []
-
-    # when calcurate stat for test data initial state and after each epoch
-    def cal_stat_from_batch_list(self, batch_list):
-        for batch in batch_list:
-            output = self.tree_net(batch)
-            label_list = batch[3]
-            label_mask = batch[4]
-            loss = self.criteria(output * label_mask, label_list)
-            self.record_batch_loss_acc(loss, output, label_list, label_mask)
-        self.record_loss_acc_for_all_batches()
-
-    def cal_acc(self, batch_output, batch_label, batch_label_mask):
-        # extract the element over threshold
-        prediction = batch_output > self.THRESHOLD
-        # matching the prediction and label, dummy node always become correct
-        matching = (prediction * batch_label_mask) == batch_label
-        matching = torch.count_nonzero(matching, dim=2) == batch_output.shape[2]
-        # the number of nodes the prediction is correct
-        num_correct_node = torch.count_nonzero(matching).item()
-        # the number of actually existing nodes(not a dummy nodes for fulling batch)
-        num_existing_node = torch.count_nonzero(torch.all(batch_label_mask, dim=2)).item()
-        # the number of dummy nodes
-        num_dummy_node = batch_label_mask.shape[0] * batch_label_mask.shape[1] - num_existing_node
-        # for the dummy nodes the prediction always become correct because they are zero
-        # so, subtruct them when calculate the acc
-        return (num_correct_node - num_dummy_node) / num_existing_node
-
-    def print_current_stat(self, name):
-        print('{}-loss: {}'.format(name, self.loss_history[-1]))
-        print('{}-acc: {}'.format(name, self.acc_history[-1]))
-
-    def save(self, path):
-        with open(path, 'w') as f:
-            writer = csv.writer(f, lineterminator='\n')
-            writer.writerow(self.loss_history)
-            writer.writerow(self.acc_history)
-
-    def export_stat_list(self, path):
-        stat_list = []
-        stat_list.append(str(self.min_loss))
-        stat_list.append(str(self.max_acc))
-        with open(path, 'a') as f:
-            f.write(', '.join(stat_list) + '\n')
-
-
-class Condition_Setter:
-    def __init__(self, PATH_TO_DIR):
-        self.param_list = []
-        if int(input("random(0) or GloVe(1): ")) == 1:
-            self.RANDOM = False
-            self.param_list.append('GloVe')
-        else:
-            self.RANDOM = True
-            self.param_list.append('random')
-        self.REGULARIZED = True
-        # if int(input("reg(0) or not_reg(1): ")) == 1:
-        #     self.REGULARIZED = False
-        #     self.param_list.append('not_reg')
-        # else:
-        #     self.REGULARIZED = True
-        #     self.param_list.append('reg')
-        embedding_dim = input("embedding_dim(default=100d): ")
-        if embedding_dim != "":
-            self.embedding_dim = int(embedding_dim)
-        else:
-            self.embedding_dim = 100
-        self.param_list.append(str(self.embedding_dim))
-        self.set_path(PATH_TO_DIR)
-
-    def set_path(self, PATH_TO_DIR):
-        self.path_to_train_data = PATH_TO_DIR + "data/train.txt"
-        self.path_to_test_data = PATH_TO_DIR + "data/test.txt"
-        self.path_to_pretrained_weight_matrix = PATH_TO_DIR + \
-            "data/glove_{}d.csv".format(self.embedding_dim)
-        path_to_initial_weight_matrix = PATH_TO_DIR + "result/data/"
-        path_to_model = PATH_TO_DIR + "result/model/"
-        path_to_train_data_history = PATH_TO_DIR + "result/data/"
-        path_to_test_data_history = PATH_TO_DIR + "result/data/"
-        path_to_history_fig = PATH_TO_DIR + "result/fig/"
-        fig_name = ""
-        path_list = [
-            path_to_initial_weight_matrix,
-            path_to_model,
-            path_to_train_data_history,
-            path_to_test_data_history,
-            path_to_history_fig,
-            fig_name]
-        for i in range(len(path_list)):
-            if self.RANDOM:
-                path_list[i] += "random"
-            else:
-                path_list[i] += "GloVe"
-            # if self.REGULARIZED:
-            #     path_list[i] += "_reg"
-            # else:
-            #     path_list[i] += "_not_reg"
-            path_list[i] += "_" + str(self.embedding_dim) + "d"
-        self.path_to_initial_weight_matrix = path_list[0] + \
-            "_initial_weight_matrix.csv"
-        self.path_to_model = path_list[1] + "_model.pth"
-        self.path_to_train_data_history = path_list[2] + "_train_history.csv"
-        self.path_to_test_data_history = path_list[3] + "_test_history.csv"
-        self.path_to_history_fig = path_list[4] + "_history.png"
-        self.fig_name = path_list[5].replace('_', ' ')
-
-    def export_param_list(self, path, roop_count):
-        if roop_count == 0:
-            with open(path, 'w') as f:
-                f.write(', '.join(self.param_list) + '\n')
-        else:
-            with open(path, 'a') as f:
-                f.write(', '.join(self.param_list) + '\n')
