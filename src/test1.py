@@ -4,18 +4,14 @@ import csv
 import random
 from torch.fft import fft, ifft
 from torch import conj, mul
+import time
 
+start = time.time()
+m = []
+for i in range(10000000):
+    m.append(i)
+print(time.time() - start)
 
-def circular_correlation(a, b):
-    a = conj(fft(a))
-    b = fft(b)
-    c = mul(a, b)
-    c = ifft(c).real
-    return c.div(c.norm(dim=1, keepdim=True) + 1e-6)
-
-
-a = torch.tensor([[1, 2, 3, 4, 5], [5, 4, 3, 2, 1], [2, 3, 4, 5, 6]])
-b = torch.tensor([[5, 4, 3, 2, 1], [1, 2, 3, 4, 5], [6, 5, 4, 3, 2]])
-
-c = circular_correlation(a, b)
-print(c)
+start = time.time()
+m = [i for i in range(10000000)]
+print(time.time() - start)
