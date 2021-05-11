@@ -35,7 +35,7 @@ else:
 
 # convert from ndarray to torch.tensor
 tree_net = Tree_Net(train_tree_list, condition.embedding_dim, initial_weight_matrix)
-criteria = nn.BCELoss(reduction='sum')
+criteria = nn.BCELoss()
 optimizer = optim.Adam(tree_net.parameters())
 
 # save weight matrix as initial state
@@ -43,16 +43,19 @@ with open(condition.path_to_initial_weight_matrix, 'w') as f:
     writer = csv.writer(f, lineterminator='\n')
     writer.writerows(tree_net.embedding.weight)
 
-start = time.time()
 batch_list = train_tree_list.make_batch(BATCH_SIZE)
-print(time.time() - start)
 
 for epoch in range(EPOCHS):
+    batch_list = train_tree_list.make_batch(BATCH_SIZE)
+    average_loss = 0.0
     for batch in batch_list:
         optimizer.zero_grad()
         output = tree_net(batch)
         label_list = batch[3]
         label_mask = batch[4]
         loss = criteria(output * label_mask, label_list)
+        loss.backward()
+        average_loss += loss
         optimizer.step()
-    print(epoch, loss)
+    if epoch % 10 == 0:
+        print(epoch, average_loss / BATCH_SIZE)

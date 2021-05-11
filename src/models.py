@@ -416,7 +416,6 @@ class Tree_Net(nn.Module):
         content_mask = batch[1]
         # the composition info of each tree
         composition_info = batch[2]
-
         vector, content_mask = self.embed_leaf_nodes(leaf_content_id, content_mask)
         vector = self.compose(vector, composition_info, content_mask)
         output = self.sigmoid(self.linear(vector))
