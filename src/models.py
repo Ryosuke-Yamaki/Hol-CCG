@@ -427,7 +427,7 @@ class Tree_Net(nn.Module):
         vector = torch.zeros(
             (leaf_content_id.shape[0],
              2 * leaf_content_id.shape[1] - 1,
-             self.embedding_dim))
+             self.embedding_dim), device=content_mask.device)
         # leaf_node_vector including padding tokens
         leaf_node_vector = self.embedding(leaf_content_id)
         # extract leaf node vector not padding tokens, using content_mask

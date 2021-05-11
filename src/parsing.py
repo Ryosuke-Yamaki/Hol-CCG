@@ -108,7 +108,7 @@ class Parser:
                                     left_prob = left_cell[left_category_id]['prob']
                                     right_vector = right_cell[right_category_id]['vector']
                                     right_prob = right_cell[right_category_id]['prob']
-                                    vector = circular_correlation(left_vector, right_vector, True)
+                                    vector = circular_correlation(left_vector, right_vector)
                                     prob = self.linear_classifier(vector)[possible_category_id]
                                     possible_category_info['vector'] = vector
                                     possible_category_info['prob'] = prob * left_prob * right_prob
