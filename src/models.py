@@ -432,6 +432,8 @@ class Tree_Net(nn.Module):
         # extract leaf node vector not padding tokens, using content_mask
         vector[content_mask.nonzero(as_tuple=True)
                ] = leaf_node_vector[content_mask.nonzero(as_tuple=True)]
+        # calculate norm for normalization
+        norm = vector.norm(dim=2, keepdim=True) + 1e-6
 
         # record the number of leaf node of each tree in batch
         num_true = torch.count_nonzero(content_mask, dim=1)
@@ -439,7 +441,7 @@ class Tree_Net(nn.Module):
         content_mask[content_mask.nonzero(as_tuple=True)] = False
         # add True mask for up coming composition
         content_mask[(torch.arange(content_mask.shape[0]), num_true)] = True
-        return vector, content_mask
+        return vector / norm, content_mask
 
     def compose(self, vector, composition_info, content_mask):
         # itteration of composition
