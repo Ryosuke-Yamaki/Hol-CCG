@@ -2,16 +2,16 @@ import csv
 import random
 import numpy as np
 import torch
-from torch import conj, mul
+from torch import conj
 from torch.fft import fft, ifft
 
 
 def circular_correlation(a, b):
     a = conj(fft(a))
     b = fft(b)
-    c = mul(a, b)
-    c = ifft(c).real
-    return c.div(c.norm(dim=1, keepdim=True) + 1e-6)
+    c = ifft(a * b).real
+    norm = c.norm(dim=1, keepdim=True) + 1e-6
+    return c / norm
 
 
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
