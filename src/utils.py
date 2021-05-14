@@ -28,8 +28,7 @@ def generate_random_weight_matrix(NUM_VOCAB, EMBEDDING_DIM):
             scale=1 /
             np.sqrt(EMBEDDING_DIM),
             size=EMBEDDING_DIM) for i in range(NUM_VOCAB)]
-    return np.array([i / j for (i, j) in zip(weight_matrix,
-                                             np.linalg.norm(weight_matrix, axis=1))]).astype(np.float32)
+    return np.array(weight_matrix).astype(np.float32)
 
 
 def cal_norm_mean_std(tree):
@@ -98,6 +97,7 @@ class History:
             label_list = batch[3]
             label_mask = batch[4]
             loss = self.criteria(output * label_mask, label_list)
+            loss = torch.sum(loss) / torch.count_nonzero(torch.all(label_mask, dim=2))
             self.record_batch_loss_acc(loss, output, label_list, label_mask)
         self.record_loss_acc_for_all_batches()
 
