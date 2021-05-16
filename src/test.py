@@ -1,33 +1,36 @@
+from utils import circular_correlation
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-import csv
-import matplotlib.pyplot as plt
-from models import Tree_List, Tree_Net, Condition_Setter, History
-from utils import load_weight_matrix, set_random_seed
-from parsing import CCG_Category_List, Linear_Classifier, Parser
-import time
 
 
-PATH_TO_DIR = "/home/yryosuke0519/Hol-CCG/"
-condition = Condition_Setter(PATH_TO_DIR)
+a = torch.ones(5, requires_grad=True)
+b = torch.rand(5)
+c = torch.zeros(5)
+d = torch.zeros(5)
+label = torch.tensor([[1, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]], dtype=torch.float)
 
-# initialize tree_list from toy_data
-train_tree_list = Tree_List(
-    condition.path_to_train_data, condition.REGULARIZED)
-test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED)
-# match the vocab and category between train and test data
-test_tree_list.replace_vocab_category(train_tree_list)
+criteria = nn.BCELoss(reduction='sum')
 
-device = torch.device('cpu')
+loss = criteria(torch.stack((a * b, a * c, a * d)), label)
+loss.backward()
+print(a.grad)
 
-train_tree_list.set_info_for_training(device)
-start = time.time()
-batch_list = train_tree_list.make_batch(5, device)
+a = torch.ones(5, requires_grad=True)
+loss = criteria(a * c, label[1])
+loss.backward()
+print(a.grad)
 
-for batch in batch_list:
-    break
+a = torch.ones(5, requires_grad=True)
+loss = criteria(a * b, label[0])
+loss.backward()
+print(a.grad)
 
-print(time.time() - start)
-a = 1
+a = torch.rand((5, 5))
+b = torch.rand((5, 5))
+c = circular_correlation(a, b)
+print(a)
+print(b)
+print(c)
+print(c.norm(dim=1))

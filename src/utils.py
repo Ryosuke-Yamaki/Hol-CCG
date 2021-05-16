@@ -14,6 +14,13 @@ def circular_correlation(a, b):
     return c / norm
 
 
+def single_circular_correlation(a, b):
+    a = conj(fft(a))
+    b = fft(b)
+    c = ifft(a * b).real
+    return c / torch.norm(c)
+
+
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
     with open(PATH_TO_WEIGHT_MATRIX, 'r') as f:
         reader = csv.reader(f)
@@ -72,43 +79,32 @@ class History:
         self.loss_history = np.array([])
         self.acc_history = np.array([])
 
-    # record the loss and acc of each batch and add them to list
-    def record_batch_loss_acc(self, loss, batch_output, batch_label, batch_label_mask):
-        self.batch_loss.append(loss.item())
-        self.batch_acc.append(self.cal_acc(batch_output, batch_label, batch_label_mask))
-
-    def record_loss_acc_for_all_batches(self):
-        loss = sum(self.batch_loss) / len(self.batch_loss)
-        acc = sum(self.batch_acc) / len(self.batch_acc)
+    # when calcurate stat for test data initial state and after each epoch
+    @torch.no_grad()
+    def cal_stat(self, batch):
+        batch = batch[0]
+        output = self.tree_net(batch)
+        label_list = batch[3]
+        label_mask = batch[4]
+        loss = self.criteria(output * label_mask, label_list)
+        loss = torch.sum(loss) / torch.count_nonzero(torch.all(label_mask, dim=2))
+        acc = self.cal_acc(output, label_list, label_mask)
         self.loss_history = np.append(self.loss_history, loss)
         self.acc_history = np.append(self.acc_history, acc)
         self.min_loss = np.min(self.loss_history)
         self.min_loss_idx = np.argmin(self.loss_history)
         self.max_acc = np.max(self.acc_history)
         self.max_acc_idx = np.argmax(self.acc_history)
-        # reset batch_loss and batch_acc for next epoch
-        self.batch_loss = []
-        self.batch_acc = []
 
-    # when calcurate stat for test data initial state and after each epoch
-    def cal_stat_from_batch_list(self, batch_list):
-        for batch in batch_list:
-            output = self.tree_net(batch)
-            label_list = batch[3]
-            label_mask = batch[4]
-            loss = self.criteria(output * label_mask, label_list)
-            loss = torch.sum(loss) / torch.count_nonzero(torch.all(label_mask, dim=2))
-            self.record_batch_loss_acc(loss, output, label_list, label_mask)
-        self.record_loss_acc_for_all_batches()
-
+    @torch.no_grad()
     def cal_acc(self, batch_output, batch_label, batch_label_mask):
         # extract the element over threshold
         prediction = batch_output > self.THRESHOLD
         # matching the prediction and label, dummy node always become correct
         matching = (prediction * batch_label_mask) == batch_label
-        matching = torch.count_nonzero(matching, dim=2) == batch_output.shape[2]
+        # matching = torch.count_nonzero(matching, dim=2) == batch_output.shape[2]
         # the number of nodes the prediction is correct
-        num_correct_node = torch.count_nonzero(matching).item()
+        num_correct_node = torch.count_nonzero(torch.all(matching, dim=2)).item()
         # the number of actually existing nodes(not a dummy nodes for fulling batch)
         num_existing_node = torch.count_nonzero(torch.all(batch_label_mask, dim=2)).item()
         # the number of dummy nodes
@@ -182,10 +178,10 @@ class Condition_Setter:
                 path_list[i] += "random"
             else:
                 path_list[i] += "GloVe"
-            # if self.REGULARIZED:
-            #     path_list[i] += "_reg"
-            # else:
-            #     path_list[i] += "_not_reg"
+            if self.REGULARIZED:
+                path_list[i] += "_reg"
+            else:
+                path_list[i] += "_not_reg"
             path_list[i] += "_" + str(self.embedding_dim) + "d"
         self.path_to_initial_weight_matrix = path_list[0] + \
             "_initial_weight_matrix.csv"
