@@ -87,9 +87,10 @@ class History:
         label_list = batch[3]
         label_mask = batch[4]
         loss = self.criteria(output * label_mask, label_list)
-        loss = torch.sum(loss) / torch.count_nonzero(torch.all(label_mask, dim=2))
+        loss = torch.sum(loss) / \
+            torch.count_nonzero(torch.all(label_mask, dim=2))
         acc = self.cal_acc(output, label_list, label_mask)
-        self.loss_history = np.append(self.loss_history, loss)
+        self.loss_history = np.append(self.loss_history, loss.item())
         self.acc_history = np.append(self.acc_history, acc)
         self.min_loss = np.min(self.loss_history)
         self.min_loss_idx = np.argmin(self.loss_history)
@@ -104,11 +105,14 @@ class History:
         matching = (prediction * batch_label_mask) == batch_label
         # matching = torch.count_nonzero(matching, dim=2) == batch_output.shape[2]
         # the number of nodes the prediction is correct
-        num_correct_node = torch.count_nonzero(torch.all(matching, dim=2)).item()
+        num_correct_node = torch.count_nonzero(
+            torch.all(matching, dim=2)).item()
         # the number of actually existing nodes(not a dummy nodes for fulling batch)
-        num_existing_node = torch.count_nonzero(torch.all(batch_label_mask, dim=2)).item()
+        num_existing_node = torch.count_nonzero(
+            torch.all(batch_label_mask, dim=2)).item()
         # the number of dummy nodes
-        num_dummy_node = batch_label_mask.shape[0] * batch_label_mask.shape[1] - num_existing_node
+        num_dummy_node = batch_label_mask.shape[0] * \
+            batch_label_mask.shape[1] - num_existing_node
         # for the dummy nodes the prediction always become correct because they are zero
         # so, subtruct them when calculate the acc
         return (num_correct_node - num_dummy_node) / num_existing_node
