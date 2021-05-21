@@ -1,3 +1,5 @@
+import re
+import copy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,28 +7,76 @@ from operator import itemgetter
 from utils import circular_correlation, generate_random_weight_matrix, single_circular_correlation
 
 
+# class Node:
+#     def __init__(self, content, category, self_id, sibling_id, parent_id, LR):
+#         self.content = content
+#         self.category = category
+#         self.self_id = self_id
+#         self.sibling_id = sibling_id
+#         self.parent_id = parent_id
+#         self.LR = LR
+#         if content == 'None':
+#             self.ready = False
+#             self.is_leaf = False
+#         else:
+#             self.ready = True
+#             self.is_leaf = True
+
+
 class Node:
-    def __init__(self, content, category, self_id, sibling_id, parent_id, LR):
-        self.content = content
-        self.category = category
-        self.self_id = self_id
-        self.sibling_id = sibling_id
-        self.parent_id = parent_id
-        self.LR = LR
-        if content == 'None':
-            self.ready = False
-            self.is_leaf = False
-        else:
-            self.ready = True
+    def __init__(self, node_info):
+        if node_info[0] == 'True':
             self.is_leaf = True
+        else:
+            self.is_leaf = False
+        self.self_id = int(node_info[1])
+        if self.is_leaf:
+            content = node_info[2].lower()
+            content = re.sub(r'\d+', '0', content)
+            content = re.sub(r'\d,\d', '0', content)
+            self.content = content
+            self.category = node_info[3]
+            self.ready = True
+        else:
+            self.category = node_info[2]
+            self.num_child = int(node_info[3])
+            self.ready = False
+            if self.num_child == 1:
+                self.child_node_id = int(node_info[4])
+            else:
+                self.left_child_node_id = int(node_info[4])
+                self.right_child_node_id = int(node_info[5])
 
 
 class Tree:
-    def __init__(self, self_id, sentence, node_list, REGULARIZED):
+    def __init__(self, self_id, node_list):
         self.self_id = self_id
-        self.sentence = sentence
         self.node_list = node_list
-        self.regularized = REGULARIZED
+        self.set_composition_info()
+
+    def set_composition_info(self):
+        node_list = copy.deepcopy(self.node_list)
+        self.composition_info = []
+        while True:
+            num_ready_node = 0
+            for node in node_list:
+                if node.ready:
+                    num_ready_node += 1
+                elif not node.is_leaf and not node.ready:
+                    if node.num_child == 1:
+                        child_node = node_list[node.child_node_id]
+                        if child_node.ready:
+                            node.ready = True
+                            self.composition_info.append([child_node.self_id, node.self_id])
+                    else:  # when node has two children
+                        left_child_node = node_list[node.left_child_node_id]
+                        right_child_node = node_list[node.right_child_node_id]
+                        if left_child_node.ready and right_child_node.ready:
+                            node.ready = True
+                            self.composition_info.append(
+                                [left_child_node.self_id, right_child_node.self_id, node.self_id])
+            if num_ready_node == len(node_list):
+                break
 
     def set_node_pair_list(self):
         left_nodes = []
@@ -114,90 +164,46 @@ class Tree:
 
 
 class Tree_List:
-    def __init__(self, PATH_TO_DATA, REGULARIZED, device=torch.device('cpu')):
-        self.regularized = REGULARIZED
+    def __init__(self, PATH_TO_DATA, device=torch.device('cpu')):
         self.device = device
-        self.initialize_tree_list(PATH_TO_DATA)
-        self.set_vocab_category()
-        self.set_content_category_id()
-        self.set_possible_category_id()
-        self.set_info_for_training()
+        self.set_tree_list(PATH_TO_DATA)
+        # self.set_content_category_id()
+        # self.set_possible_category_id()
+        # self.set_info_for_training()
 
-    # initialize tree list from txt data
-    def initialize_tree_list(self, PATH_TO_DATA):
+    # set tree_list, vocablary and category list
+    # give each nodes its content_id and category_id
+    def set_tree_list(self, PATH_TO_DATA):
         with open(PATH_TO_DATA, 'r') as f:
-            data_list = [data.strip() for data in f.readlines()]
-        data_list = data_list[2:]
-        data_list = [data.replace('\n', '') for data in data_list]
+            node_info_list = [node_info.strip() for node_info in f.readlines()]
+        node_info_list = [node_info.replace('\n', '') for node_info in node_info_list]
 
-        block = []
-        block_list = []
-        for data in data_list:
-            if data != '':
-                block.append(data)
-            else:
-                block_list.append(block)
-                block = []
-        block_list.append(block)
-
-        tree_list = []
-        tree_id = 0
-        for block in block_list:
-            sentence = block[0]
-            # remove 'num:' at the top of sentence
-            for idx in range(len(sentence)):
-                if sentence[idx] == ':':
-                    sentence = sentence[idx + 1:]
-                    break
-            node_list = []
-            for node_inf in block[1:]:
-                node_inf = node_inf.split()
-                content = node_inf[0]
-                category = node_inf[1]
-                self_id = int(node_inf[2])
-                sibling_id = node_inf[3]
-                if sibling_id != 'None':
-                    sibling_id = int(sibling_id)
-                else:
-                    sibling_id = None
-                parent_id = node_inf[4]
-                if parent_id != 'None':
-                    parent_id = int(parent_id)
-                else:
-                    parent_id = None
-                LR = node_inf[5]
-                node_list.append(
-                    Node(
-                        content,
-                        category,
-                        self_id,
-                        sibling_id,
-                        parent_id,
-                        LR))
-            tree_list.append(
-                Tree(tree_id, sentence, node_list, self.regularized))
-            tree_id += 1
-        self.tree_list = tree_list
-
-    # create dictionary of contents, categories and thier id
-    def set_vocab_category(self):
+        self.tree_list = []
         self.content_to_id = {}
         self.id_to_content = {}
         self.category_to_id = {}
         self.id_to_category = {}
-        i = 0
-        j = 0
-        for tree in self.tree_list:
-            for node in tree.node_list:
-                if node.is_leaf:  # only when node is leaf add to vocablary
+        tree_id = 0
+        node_list = []
+        for node_info in node_info_list:
+            if node_info != '':
+                node = Node(node_info.split())
+                if node.is_leaf:
                     if node.content not in self.content_to_id:
-                        self.content_to_id[node.content] = i
-                        self.id_to_content[i] = node.content
-                        i += 1
+                        content_id = len(self.content_to_id)
+                        self.content_to_id[node.content] = content_id
+                        self.id_to_content[content_id] = node.content
+                    node.content_id = self.content_to_id[node.content]
                 if node.category not in self.category_to_id:
-                    self.category_to_id[node.category] = j
-                    self.id_to_category[j] = node.category
-                    j += 1
+                    category_id = len(self.category_to_id)
+                    self.category_to_id[node.category] = category_id
+                    self.id_to_category[category_id] = node.category
+                node.category_id = self.category_to_id[node.category]
+                node_list.append(Node(node_info.split()))
+            elif node_list != []:
+                self.tree_list.append(Tree(tree_id, node_list))
+                node_list = []
+                tree_id += 1
 
     def set_content_category_id(self):
         for tree in self.tree_list:
