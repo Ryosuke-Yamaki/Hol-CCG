@@ -1,5 +1,6 @@
 import re
 import numpy as np
+from numpy.core.numeric import normalize_axis_tuple
 import torch
 import torch.nn as nn
 from operator import itemgetter
@@ -185,26 +186,26 @@ class Tree_List:
         return vector_list, content_info_dict
 
     def set_info_for_training(self):
+        self.num_node = []
         self.leaf_node_content_id = []
         self.label_list = []
         self.composition_info = []
-        num_category = len(self.category_to_id)
         for tree in self.tree_list:
+            self.num_node.append(len(tree.node_list))
             leaf_node_content_id = []
             label_list = []
             for node in tree.node_list:
                 if node.is_leaf:
-                    leaf_node_content_id.append(node.content_id[0])
-                # label with multiple bit corresponding to possible category id
-                label = np.zeros(num_category)
-                label[self.possible_category_dict[tuple(node.content_id)]] = 1
-                label_list.append(label)
+                    # save the index of leaf node and its content
+                    leaf_node_content_id.append([node.self_id, node.content_id[0]])
+                    # label with multiple bit corresponding to possible category id
+                label_list.append(self.possible_category_dict[tuple(node.content_id)])
             self.leaf_node_content_id.append(
                 torch.tensor(
                     leaf_node_content_id,
                     dtype=torch.long,
                     device=self.device))
-            self.label_list.append(torch.tensor(label_list, dtype=torch.float, device=self.device))
+            self.label_list.append(label_list)
             self.composition_info.append(
                 torch.tensor(
                     tree.composition_info,
@@ -213,6 +214,7 @@ class Tree_List:
 
     def make_batch(self, BATCH_SIZE=None):
         # make batch content id includes leaf node content id for each tree belongs to batch
+        batch_num_node = []
         batch_leaf_content_id = []
         batch_label_list = []
         batch_composition_info = []
@@ -220,6 +222,7 @@ class Tree_List:
 
         if BATCH_SIZE is None:
             batch_tree_id_list = list(range(num_tree))
+            batch_num_node.append(list(itemgetter(*batch_tree_id_list)(self.num_node)))
             batch_leaf_content_id.append(list(itemgetter(
                 *batch_tree_id_list)(self.leaf_node_content_id)))
             batch_label_list.append(list(itemgetter(
@@ -232,6 +235,7 @@ class Tree_List:
             shuffled_tree_id = torch.randperm(num_tree, device=self.device)
             for idx in range(0, num_tree - BATCH_SIZE, BATCH_SIZE):
                 batch_tree_id_list = shuffled_tree_id[idx:idx + BATCH_SIZE]
+                batch_num_node.append(list(itemgetter(*batch_tree_id_list)(self.num_node)))
                 batch_leaf_content_id.append(list(itemgetter(
                     *batch_tree_id_list)(self.leaf_node_content_id)))
                 batch_label_list.append(list(itemgetter(
@@ -239,6 +243,8 @@ class Tree_List:
                 batch_composition_info.append(list(itemgetter(
                     *batch_tree_id_list)(self.composition_info)))
             # the part cannot devided by BATCH_SIZE
+            batch_num_node.append(list(itemgetter(
+                *shuffled_tree_id[idx + BATCH_SIZE:])(self.num_node)))
             batch_leaf_content_id.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.leaf_node_content_id)))
             batch_label_list.append(list(itemgetter(
@@ -247,10 +253,8 @@ class Tree_List:
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.composition_info)))
 
         content_mask = []
-        label_mask = []
-        for idx in range(len(batch_leaf_content_id)):
+        for idx in range(len(batch_num_node)):
             content_id = batch_leaf_content_id[idx]
-            label_list = batch_label_list[idx]
             composition_list = batch_composition_info[idx]
 
             max_num_leaf_node = max([len(i) for i in content_id])
@@ -268,36 +272,36 @@ class Tree_List:
             # make dummy content id to fill blank in batch
             dummy_content_id = [
                 torch.zeros(
-                    max_num_leaf_node - len(i),
+                    (max_num_leaf_node - len(i), 2),
                     dtype=torch.long,
                     device=self.device) for i in content_id]
             batch_leaf_content_id[idx] = torch.stack([torch.cat((i, j)) for (
                 i, j) in zip(content_id, dummy_content_id)])
 
-            max_num_label = max([len(i) for i in label_list])
-            num_category = label_list[0].shape[1]
-            # set the mask for label of each node in tree
-            true_mask = [
-                torch.ones(
-                    (len(i), num_category),
-                    dtype=torch.bool,
-                    device=self.device) for i in label_list]
-            false_mask = [
-                torch.zeros(
-                    (max_num_label - len(i), num_category),
-                    dtype=torch.bool,
-                    device=self.device) for i in label_list]
-            label_mask.append(torch.stack([torch.cat((i, j))
-                                           for (i, j) in zip(true_mask, false_mask)]))
-            # make dummy label to fill blank in batch
-            dummy_label = [
-                torch.zeros(
-                    max_num_label - len(i),
-                    i.shape[1],
-                    dtype=torch.float,
-                    device=self.device) for i in label_list]
-            batch_label_list[idx] = torch.stack(
-                [torch.cat((i, j)) for (i, j) in zip(label_list, dummy_label)])
+            # max_num_label = max([len(i) for i in label_list])
+            # num_category = label_list[0].shape[1]
+            # # set the mask for label of each node in tree
+            # true_mask = [
+            #     torch.ones(
+            #         (len(i), num_category),
+            #         dtype=torch.bool,
+            #         device=self.device) for i in label_list]
+            # false_mask = [
+            #     torch.zeros(
+            #         (max_num_label - len(i), num_category),
+            #         dtype=torch.bool,
+            #         device=self.device) for i in label_list]
+            # label_mask.append(torch.stack([torch.cat((i, j))
+            #                                for (i, j) in zip(true_mask, false_mask)]))
+            # # make dummy label to fill blank in batch
+            # dummy_label = [
+            #     torch.zeros(
+            #         max_num_label - len(i),
+            #         i.shape[1],
+            #         dtype=torch.float,
+            #         device=self.device) for i in label_list]
+            # batch_label_list[idx] = torch.stack(
+            #     [torch.cat((i, j)) for (i, j) in zip(label_list, dummy_label)])
 
             # set mask for composition info in each batch
             max_num_composition = max([len(i) for i in composition_list])
@@ -305,7 +309,7 @@ class Tree_List:
             dummy_compositin_info = [
                 torch.ones(
                     max_num_composition - len(i),
-                    i.shape[1],
+                    4,
                     dtype=torch.long,
                     device=self.device) * -1 for i in composition_list]
             batch_composition_info[idx] = torch.stack(
@@ -313,11 +317,11 @@ class Tree_List:
 
         # return zipped batch information, when training, extract each batch from zip itteration
         return list(zip(
+            batch_num_node,
             batch_leaf_content_id,
             content_mask,
             batch_composition_info,
-            batch_label_list,
-            label_mask))
+            batch_label_list))
 
     # the function use for the transfer of vocab & category from training to test tree
     def replace_vocab_category(self, tree_list):
@@ -350,25 +354,27 @@ class Tree_Net(nn.Module):
     # input batch as tuple of training info
     def forward(self, batch):
         # the content_id of leaf nodes
-        leaf_content_id = batch[0]
-        content_mask = batch[1]
+        num_node = batch[0]
+        leaf_content_id = batch[1]
+        content_mask = batch[2]
         # the composition info of each tree
-        composition_info = batch[2]
-        vector = self.embed_leaf_nodes(leaf_content_id, content_mask)
+        composition_info = batch[3]
+        vector = self.embed_leaf_nodes(num_node, leaf_content_id, content_mask)
         vector = self.compose(vector, composition_info)
         output = self.sigmoid(self.linear(vector))
         return output
 
-    def embed_leaf_nodes(self, leaf_content_id, content_mask):
+    def embed_leaf_nodes(self, num_node, leaf_content_id, content_mask):
         vector = torch.zeros(
             (leaf_content_id.shape[0],
-             2 * leaf_content_id.shape[1] - 1,  # *****************************************target
+             torch.tensor(max(num_node)),  # *****************************************target
              self.embedding_dim), device=content_mask.device)
         # leaf_node_vector including padding tokens
-        leaf_node_vector = self.embedding(leaf_content_id)
+        leaf_node_index = leaf_content_id[:, :, 0]
+        leaf_node_vector = self.embedding(leaf_content_id[:, :, 1])
         # extract leaf node vector not padding tokens, using content_mask
-        vector[content_mask.nonzero(as_tuple=True)
-               ] = leaf_node_vector[content_mask.nonzero(as_tuple=True)]
+        vector[(content_mask.nonzero(as_tuple=True)[0], leaf_node_index[content_mask.nonzero(
+            as_tuple=True)])] = leaf_node_vector[content_mask.nonzero(as_tuple=True)]
         # calculate norm for normalization
         norm = vector.norm(dim=2, keepdim=True) + 1e-6
         return vector / norm
@@ -384,8 +390,8 @@ class Tree_Net(nn.Module):
             left_vector = vector[(torch.arange(len(left_idx)), left_idx)]
             right_vector = vector[(torch.arange(len(right_idx)), right_idx)]
             # unit_vector don't change opponent vector during circular correlation
-            unit_vector = torch.zeros(self.embedding_dim)
-            unit_vector[0] = 1
+            unit_vector = torch.zeros(self.embedding_dim, requires_grad=False)
+            unit_vector[0] = 1.0
             right_vector[one_child_node_index] = unit_vector
             composed_vector = circular_correlation(left_vector, right_vector)
             vector[(torch.arange(len(parent_idx)), parent_idx)] = composed_vector

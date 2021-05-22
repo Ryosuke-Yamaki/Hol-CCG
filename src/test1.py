@@ -1,19 +1,25 @@
 import time
-from models import Tree_List
+from models import Tree_List, Tree_Net
+from utils import set_random_seed
 
+set_random_seed(0)
 path_to_train_data = '/home/yryosuke0519/CCGbank/converted/train.txt'
 path_to_dev_data = '/home/yryosuke0519/CCGbank/converted/dev.txt'
 path_to_test_data = '/home/yryosuke0519/CCGbank/converted/test.txt'
 start = time.time()
 print('loading_data...')
-# train_tree_list = Tree_List(path_to_train_data)
+train_tree_list = Tree_List(path_to_train_data)
 # dev_tree_list = Tree_List(path_to_dev_data)
-test_tree_list = Tree_List(path_to_test_data)
-end = time.time()
-print(end - start)
-for i in range(10):
+# test_tree_list = Tree_List(path_to_test_data)
+tree_net = Tree_Net(train_tree_list, 10)
+print('fnish loading!')
+print(time.time() - start)
+
+for i in range(100):
     start = time.time()
-    batch_list = test_tree_list.make_batch(100)
+    batch_list = train_tree_list.make_batch(25)
+    for batch in batch_list:
+        tree_net(batch)
     print(time.time() - start)
 
 # for tree_list in [train_tree_list, dev_tree_list, test_tree_list]:
