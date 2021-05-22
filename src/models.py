@@ -1,26 +1,9 @@
 import re
-import copy
 import numpy as np
 import torch
 import torch.nn as nn
 from operator import itemgetter
 from utils import circular_correlation, generate_random_weight_matrix, single_circular_correlation
-
-
-# class Node:
-#     def __init__(self, content, category, self_id, sibling_id, parent_id, LR):
-#         self.content = content
-#         self.category = category
-#         self.self_id = self_id
-#         self.sibling_id = sibling_id
-#         self.parent_id = parent_id
-#         self.LR = LR
-#         if content == 'None':
-#             self.ready = False
-#             self.is_leaf = False
-#         else:
-#             self.ready = True
-#             self.is_leaf = True
 
 
 class Node:
@@ -52,46 +35,33 @@ class Tree:
     def __init__(self, self_id, node_list):
         self.self_id = self_id
         self.node_list = node_list
-        self.set_composition_info()
+        self.set_node_composition_info()
 
-    def set_composition_info(self):
-        node_list = copy.deepcopy(self.node_list)
+    def set_node_composition_info(self):
         self.composition_info = []
         while True:
             num_ready_node = 0
-            for node in node_list:
+            for node in self.node_list:
                 if node.ready:
                     num_ready_node += 1
                 elif not node.is_leaf and not node.ready:
                     if node.num_child == 1:
-                        child_node = node_list[node.child_node_id]
+                        child_node = self.node_list[node.child_node_id]
                         if child_node.ready:
-                            node.ready = True
-                            self.composition_info.append([child_node.self_id, node.self_id])
-                    else:  # when node has two children
-                        left_child_node = node_list[node.left_child_node_id]
-                        right_child_node = node_list[node.right_child_node_id]
-                        if left_child_node.ready and right_child_node.ready:
+                            node.content_id = child_node.content_id
                             node.ready = True
                             self.composition_info.append(
-                                [left_child_node.self_id, right_child_node.self_id, node.self_id])
-            if num_ready_node == len(node_list):
+                                [node.num_child, node.self_id, child_node.self_id, 0])
+                    else:  # when node has two children
+                        left_child_node = self.node_list[node.left_child_node_id]
+                        right_child_node = self.node_list[node.right_child_node_id]
+                        if left_child_node.ready and right_child_node.ready:
+                            node.content_id = left_child_node.content_id + right_child_node.content_id
+                            node.ready = True
+                            self.composition_info.append(
+                                [node.num_child, node.self_id, left_child_node.self_id, right_child_node.self_id])
+            if num_ready_node == len(self.node_list):
                 break
-
-    def set_node_pair_list(self):
-        left_nodes = []
-        right_nodes = []
-        for node in self.node_list:
-            if node.LR == 'L':
-                left_nodes.append(node)
-            elif node.LR == 'R':
-                right_nodes.append(node)
-        node_pair_list = []
-        for left_node in left_nodes:
-            for right_node in right_nodes:
-                if left_node.sibling_id == right_node.self_id:
-                    node_pair_list.append((left_node, right_node))
-        self.node_pair_list = node_pair_list
 
     def climb(self):
         for info in self.composition_info:
@@ -109,39 +79,6 @@ class Tree:
                 if self.regularized:
                     vector = vector / torch.norm(vector)
                 node.vector = vector
-
-    # when initialize tree_list, each info of tree is automatically set
-    def set_info_for_training(self, num_category, device=torch.device('cpu')):
-        leaf_node_content_id = []
-        label_list = []
-        for node in self.node_list:
-            if node.is_leaf:
-                leaf_node_content_id.append(node.content_id[0])
-            # label with multiple bit corresponding to possible category id
-            label = [0] * num_category
-            for category_id in node.possible_category_id:
-                label[category_id] = 1
-            label_list.append(label)
-        self.label_list = label_list
-        node_pair_list = self.node_pair_list
-        composition_info = []
-        while True:
-            for node_pair in node_pair_list:
-                left_node = node_pair[0]
-                right_node = node_pair[1]
-                parent_node = self.node_list[left_node.parent_id]
-                if left_node.ready and right_node.ready:
-                    composition_info.append(
-                        [left_node.self_id, right_node.self_id, parent_node.self_id])
-                    parent_node.ready = True
-                    node_pair_list.remove(node_pair)
-            if node_pair_list == []:
-                break
-        self.composition_info = composition_info
-        self.reset_node_status()
-        return [torch.tensor(leaf_node_content_id, dtype=torch.long, device=device),
-                torch.tensor(label_list, dtype=torch.float, device=device),
-                torch.tensor(composition_info, dtype=torch.long, device=device)]
 
     def reset_node_status(self):
         for node in self.node_list:
@@ -167,9 +104,8 @@ class Tree_List:
     def __init__(self, PATH_TO_DATA, device=torch.device('cpu')):
         self.device = device
         self.set_tree_list(PATH_TO_DATA)
-        # self.set_content_category_id()
-        # self.set_possible_category_id()
-        # self.set_info_for_training()
+        self.set_possible_category_id()
+        self.set_info_for_training()
 
     # set tree_list, vocablary and category list
     # give each nodes its content_id and category_id
@@ -193,57 +129,27 @@ class Tree_List:
                         content_id = len(self.content_to_id)
                         self.content_to_id[node.content] = content_id
                         self.id_to_content[content_id] = node.content
-                    node.content_id = self.content_to_id[node.content]
+                    node.content_id = [self.content_to_id[node.content]]
                 if node.category not in self.category_to_id:
                     category_id = len(self.category_to_id)
                     self.category_to_id[node.category] = category_id
                     self.id_to_category[category_id] = node.category
                 node.category_id = self.category_to_id[node.category]
-                node_list.append(Node(node_info.split()))
+                node_list.append(node)
             elif node_list != []:
                 self.tree_list.append(Tree(tree_id, node_list))
                 node_list = []
                 tree_id += 1
 
-    def set_content_category_id(self):
-        for tree in self.tree_list:
-            tree.set_node_pair_list()
-            while True:
-                node_pair_list = tree.node_pair_list
-                for node_pair in node_pair_list:
-                    left_node = node_pair[0]
-                    right_node = node_pair[1]
-                    if left_node.ready and right_node.ready:
-                        parent_node = tree.node_list[left_node.parent_id]
-                        if left_node.is_leaf:
-                            left_node.content_id = [
-                                self.content_to_id[left_node.content]]
-                        if right_node.is_leaf:
-                            right_node.content_id = [
-                                self.content_to_id[right_node.content]]
-                        parent_node.content_id = []
-                        for content_id in left_node.content_id:
-                            parent_node.content_id.append(content_id)
-                        for content_id in right_node.content_id:
-                            parent_node.content_id.append(content_id)
-                        parent_node.ready = True
-                        node_pair_list.remove(node_pair)
-                if node_pair_list == []:
-                    break
-            for node in tree.node_list:
-                node.category_id = self.category_to_id[node.category]
-            tree.reset_node_status()
-
     def set_possible_category_id(self):
+        self.possible_category_dict = {}
         for tree in self.tree_list:
             for node in tree.node_list:
-                node.possible_category_id = [node.category_id]
-                for opponent_tree in self.tree_list:
-                    for opponent_node in opponent_tree.node_list:
-                        if node.content_id == opponent_node.content_id\
-                                and opponent_node.category_id not in node.possible_category_id:
-                            node.possible_category_id.append(
-                                opponent_node.category_id)
+                key = tuple(node.content_id)
+                if key not in self.possible_category_dict:
+                    self.possible_category_dict[key] = [node.category_id]
+                elif node.category_id not in self.possible_category_dict[key]:
+                    self.possible_category_dict[key].append(node.category_id)
 
     def prepare_info_for_visualization(self, weight_matrix):
         vector_list = []
@@ -282,12 +188,28 @@ class Tree_List:
         self.leaf_node_content_id = []
         self.label_list = []
         self.composition_info = []
+        num_category = len(self.category_to_id)
         for tree in self.tree_list:
-            tree.set_node_pair_list()
-            info = tree.set_info_for_training(len(self.category_to_id), device=self.device)
-            self.leaf_node_content_id.append(info[0])
-            self.label_list.append(info[1])
-            self.composition_info.append(info[2])
+            leaf_node_content_id = []
+            label_list = []
+            for node in self.node_list:
+                if node.is_leaf:
+                    leaf_node_content_id.append(node.content_id[0])
+                # label with multiple bit corresponding to possible category id
+                label = np.zeros(num_category)
+                label[self.possible_category_id[tuple(node.category_id)]] = 1
+                label_list.append(label)
+            self.leaf_node_content_id.append(
+                torch.tensor(
+                    leaf_node_content_id,
+                    dtype=torch.long,
+                    device=self.device))
+            self.label_list.append(torch.tensor(label_list, dtype=torch.float, device=self.device))
+            self.composition_info.append(
+                torch.tensor(
+                    tree.composition_info,
+                    dtype=torch.long,
+                    device=self.device))
 
     def make_batch(self, BATCH_SIZE=None):
         # make batch content id includes leaf node content id for each tree belongs to batch
@@ -454,11 +376,12 @@ class Tree_Net(nn.Module):
     def compose(self, vector, composition_info):
         # itteration of composition
         for idx in range(composition_info.shape[1]):
-            left_idx = composition_info[:, idx, 0]
-            right_idx = composition_info[:, idx, 1]
+            num_child_node = composition_info[:, idx, 0]
+            parent_idx = composition_info[:, idx, 1]
+            left_idx = composition_info[:, idx, 2]
+            right_idx = composition_info[:, idx, 3]
             left_vector = vector[(torch.arange(len(left_idx)), left_idx)]
             right_vector = vector[(torch.arange(len(right_idx)), right_idx)]
             composed_vector = circular_correlation(left_vector, right_vector)
-            parent_idx = composition_info[:, idx, 2]
             vector[(torch.arange(len(parent_idx)), parent_idx)] = composed_vector
         return vector

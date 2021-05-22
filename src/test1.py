@@ -6,13 +6,14 @@ path_to_dev_data = '/home/yryosuke0519/CCGbank/converted/dev.txt'
 path_to_test_data = '/home/yryosuke0519/CCGbank/converted/test.txt'
 start = time.time()
 train_tree_list = Tree_List(path_to_train_data)
-dev_tree_list = Tree_List(path_to_dev_data)
-test_tree_list = Tree_List(path_to_test_data)
+# dev_tree_list = Tree_List(path_to_dev_data)
+# test_tree_list = Tree_List(path_to_test_data)
 end = time.time()
 print(end - start)
 
-for tree_list in [train_tree_list, dev_tree_list, test_tree_list]:
-    for tree in tree_list.tree_list:
+# for tree_list in [train_tree_list, dev_tree_list, test_tree_list]:
+for tree in train_tree_list.tree_list:
+    if len(tree.node_list) == 1:
         for composition_info in tree.composition_info:
             if len(composition_info) == 2:
                 child_node = tree.node_list[composition_info[0]]
@@ -32,7 +33,7 @@ for tree_list in [train_tree_list, dev_tree_list, test_tree_list]:
                                                        parent_node.content,
                                                        parent_node.category))
 
-    print('')
+    # print('')
 print('total={}'.format(len(train_tree_list.content_to_id)))
 num = 0
 for word in dev_tree_list.content_to_id.keys():
