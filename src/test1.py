@@ -5,11 +5,16 @@ path_to_train_data = '/home/yryosuke0519/CCGbank/converted/train.txt'
 path_to_dev_data = '/home/yryosuke0519/CCGbank/converted/dev.txt'
 path_to_test_data = '/home/yryosuke0519/CCGbank/converted/test.txt'
 start = time.time()
-train_tree_list = Tree_List(path_to_train_data)
+print('loading_data...')
+# train_tree_list = Tree_List(path_to_train_data)
 # dev_tree_list = Tree_List(path_to_dev_data)
-# test_tree_list = Tree_List(path_to_test_data)
+test_tree_list = Tree_List(path_to_test_data)
 end = time.time()
 print(end - start)
+for i in range(10):
+    start = time.time()
+    batch_list = test_tree_list.make_batch(100)
+    print(time.time() - start)
 
 # for tree_list in [train_tree_list, dev_tree_list, test_tree_list]:
 for tree in train_tree_list.tree_list:

@@ -192,12 +192,12 @@ class Tree_List:
         for tree in self.tree_list:
             leaf_node_content_id = []
             label_list = []
-            for node in self.node_list:
+            for node in tree.node_list:
                 if node.is_leaf:
                     leaf_node_content_id.append(node.content_id[0])
                 # label with multiple bit corresponding to possible category id
                 label = np.zeros(num_category)
-                label[self.possible_category_id[tuple(node.category_id)]] = 1
+                label[self.possible_category_dict[tuple(node.content_id)]] = 1
                 label_list.append(label)
             self.leaf_node_content_id.append(
                 torch.tensor(
@@ -292,7 +292,7 @@ class Tree_List:
             # make dummy label to fill blank in batch
             dummy_label = [
                 torch.zeros(
-                    2 * max_num_leaf_node - 1 - len(i),
+                    max_num_label - len(i),
                     i.shape[1],
                     dtype=torch.float,
                     device=self.device) for i in label_list]
@@ -303,11 +303,11 @@ class Tree_List:
             max_num_composition = max([len(i) for i in composition_list])
             # make dummy compoisition info to fill blank in batch
             dummy_compositin_info = [
-                torch.zeros(
+                torch.ones(
                     max_num_composition - len(i),
                     i.shape[1],
                     dtype=torch.long,
-                    device=self.device) for i in composition_list]
+                    device=self.device) * -1 for i in composition_list]
             batch_composition_info[idx] = torch.stack(
                 [torch.cat((i, j)) for (i, j) in zip(composition_list, dummy_compositin_info)])
 
@@ -362,7 +362,7 @@ class Tree_Net(nn.Module):
     def embed_leaf_nodes(self, leaf_content_id, content_mask):
         vector = torch.zeros(
             (leaf_content_id.shape[0],
-             2 * leaf_content_id.shape[1] - 1,
+             2 * leaf_content_id.shape[1] - 1,  # *****************************************target
              self.embedding_dim), device=content_mask.device)
         # leaf_node_vector including padding tokens
         leaf_node_vector = self.embedding(leaf_content_id)
@@ -377,11 +377,16 @@ class Tree_Net(nn.Module):
         # itteration of composition
         for idx in range(composition_info.shape[1]):
             num_child_node = composition_info[:, idx, 0]
+            one_child_node_index = torch.nonzero(num_child_node == 1)
             parent_idx = composition_info[:, idx, 1]
             left_idx = composition_info[:, idx, 2]
             right_idx = composition_info[:, idx, 3]
             left_vector = vector[(torch.arange(len(left_idx)), left_idx)]
             right_vector = vector[(torch.arange(len(right_idx)), right_idx)]
+            # unit_vector don't change opponent vector during circular correlation
+            unit_vector = torch.zeros(self.embedding_dim)
+            unit_vector[0] = 1
+            right_vector[one_child_node_index] = unit_vector
             composed_vector = circular_correlation(left_vector, right_vector)
             vector[(torch.arange(len(parent_idx)), parent_idx)] = composed_vector
         return vector
