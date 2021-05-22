@@ -278,31 +278,6 @@ class Tree_List:
             batch_leaf_content_id[idx] = torch.stack([torch.cat((i, j)) for (
                 i, j) in zip(content_id, dummy_content_id)])
 
-            # max_num_label = max([len(i) for i in label_list])
-            # num_category = label_list[0].shape[1]
-            # # set the mask for label of each node in tree
-            # true_mask = [
-            #     torch.ones(
-            #         (len(i), num_category),
-            #         dtype=torch.bool,
-            #         device=self.device) for i in label_list]
-            # false_mask = [
-            #     torch.zeros(
-            #         (max_num_label - len(i), num_category),
-            #         dtype=torch.bool,
-            #         device=self.device) for i in label_list]
-            # label_mask.append(torch.stack([torch.cat((i, j))
-            #                                for (i, j) in zip(true_mask, false_mask)]))
-            # # make dummy label to fill blank in batch
-            # dummy_label = [
-            #     torch.zeros(
-            #         max_num_label - len(i),
-            #         i.shape[1],
-            #         dtype=torch.float,
-            #         device=self.device) for i in label_list]
-            # batch_label_list[idx] = torch.stack(
-            #     [torch.cat((i, j)) for (i, j) in zip(label_list, dummy_label)])
-
             # set mask for composition info in each batch
             max_num_composition = max([len(i) for i in composition_list])
             # make dummy compoisition info to fill blank in batch
@@ -332,6 +307,37 @@ class Tree_List:
         self.set_content_category_id()
         self.set_possible_category_id()
         self.set_info_for_training()
+
+
+def make_n_hot_label(batch_label, num_category, device=torch.device('cpu')):
+    max_num_label = max([len(i) for i in batch_label])
+    batch_n_hot_label_list = []
+    for label_list in batch_label:
+        n_hot_label_list = []
+        for label in label_list:
+            n_hot_label = torch.zeros(num_category, dtype=torch.float, device=device)
+            n_hot_label[label] = 1.0
+            n_hot_label_list.append(n_hot_label)
+        batch_n_hot_label_list.append(torch.stack(n_hot_label_list))
+
+    true_mask = [torch.ones((len(i), num_category), dtype=torch.bool, device=device)
+                 for i in batch_n_hot_label_list]
+    false_mask = [
+        torch.zeros(
+            (max_num_label - len(i),
+             num_category),
+            dtype=torch.bool,
+            device=device) for i in batch_n_hot_label_list]
+    mask = torch.stack([torch.cat((i, j)) for (i, j) in zip(true_mask, false_mask)])
+    dummy_label = [
+        torch.zeros(
+            max_num_label - len(i),
+            i.shape[1],
+            dtype=torch.float,
+            device=device) for i in batch_n_hot_label_list]
+    batch_n_hot_label_list = torch.stack([torch.cat((i, j))
+                                          for (i, j) in zip(batch_n_hot_label_list, dummy_label)])
+    return batch_n_hot_label_list, mask
 
 
 class Tree_Net(nn.Module):
@@ -367,7 +373,7 @@ class Tree_Net(nn.Module):
     def embed_leaf_nodes(self, num_node, leaf_content_id, content_mask):
         vector = torch.zeros(
             (leaf_content_id.shape[0],
-             torch.tensor(max(num_node)),  # *****************************************target
+             torch.tensor(max(num_node)),
              self.embedding_dim), device=content_mask.device)
         # leaf_node_vector including padding tokens
         leaf_node_index = leaf_content_id[:, :, 0]
@@ -380,6 +386,8 @@ class Tree_Net(nn.Module):
         return vector / norm
 
     def compose(self, vector, composition_info):
+        unit_vector = torch.zeros(self.embedding_dim, requires_grad=False, device=vector.device)
+        unit_vector[0] = 1.0
         # itteration of composition
         for idx in range(composition_info.shape[1]):
             num_child_node = composition_info[:, idx, 0]
@@ -390,8 +398,6 @@ class Tree_Net(nn.Module):
             left_vector = vector[(torch.arange(len(left_idx)), left_idx)]
             right_vector = vector[(torch.arange(len(right_idx)), right_idx)]
             # unit_vector don't change opponent vector during circular correlation
-            unit_vector = torch.zeros(self.embedding_dim, requires_grad=False)
-            unit_vector[0] = 1.0
             right_vector[one_child_node_index] = unit_vector
             composed_vector = circular_correlation(left_vector, right_vector)
             vector[(torch.arange(len(parent_idx)), parent_idx)] = composed_vector
