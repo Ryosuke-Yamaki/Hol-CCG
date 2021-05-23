@@ -74,24 +74,10 @@ class History:
         self.tree_list = tree_list
         self.criteria = criteria
         self.THRESHOLD = THRESHOLD
-        self.batch_loss = []
-        self.batch_acc = []
         self.loss_history = np.array([])
         self.acc_history = np.array([])
 
-    # when calcurate stat for test data initial state and after each epoch
-    @torch.no_grad()
-    def cal_stat(self, batch):
-        batch = batch[0]
-        output = self.tree_net(batch)
-        label_list = batch[3]
-        label_mask = batch[4]
-        loss = self.criteria(output * label_mask, label_list)
-        loss = torch.sum(loss) / \
-            torch.count_nonzero(torch.all(label_mask, dim=2))
-        acc = self.cal_acc(output, label_list, label_mask)
-        self.loss_history = np.append(self.loss_history, loss.item())
-        self.acc_history = np.append(self.acc_history, acc)
+    def update(self):
         self.min_loss = np.min(self.loss_history)
         self.min_loss_idx = np.argmin(self.loss_history)
         self.max_acc = np.max(self.acc_history)
