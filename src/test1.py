@@ -9,15 +9,31 @@ path_to_train_data = '/home/yryosuke0519/CCGbank/converted/train.txt'
 path_to_dev_data = '/home/yryosuke0519/CCGbank/converted/dev.txt'
 path_to_test_data = '/home/yryosuke0519/CCGbank/converted/test.txt'
 start = time.time()
-print('loading_data...')
+print('processing data...')
 train_tree_list = Tree_List(path_to_train_data)
-# dev_tree_list = Tree_List(path_to_dev_data)
-test_tree_list = Tree_List(path_to_test_data)
+dev_tree_list = Tree_List(
+    path_to_dev_data,
+    train_tree_list.content_vocab,
+    train_tree_list.category_vocab)
+test_tree_list = Tree_List(
+    path_to_test_data,
+    train_tree_list.content_vocab,
+    train_tree_list.category_vocab)
+possible_category_dict_for_train_dev = {}
+possible_category_dict_for_test = {}
+train_tree_list.set_possible_category_id(possible_category_dict_for_train_dev)
+dev_tree_list.set_possible_category_id(possible_category_dict_for_train_dev)
+test_tree_list.set_possible_category_id(possible_category_dict_for_test)
+train_tree_list.set_info_for_training(possible_category_dict_for_train_dev)
+dev_tree_list.set_info_for_training(possible_category_dict_for_train_dev)
+test_tree_list.set_info_for_training(possible_category_dict_for_test)
+print('fnish!')
+print(time.time() - start)
+
 tree_net = Tree_Net(train_tree_list, 100)
 criteria = nn.BCELoss(reduction='sum')
 optimizer = optim.Adam(tree_net.parameters())
-print('fnish loading!')
-print(time.time() - start)
+
 
 for tree in test_tree_list.tree_list:
     for node in tree.node_list:

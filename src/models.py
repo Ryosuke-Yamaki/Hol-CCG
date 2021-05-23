@@ -2,8 +2,10 @@ import re
 import numpy as np
 import torch
 import torch.nn as nn
+from torchtext.vocab import Vocab
 from operator import itemgetter
 from utils import circular_correlation, generate_random_weight_matrix, single_circular_correlation
+from collections import Counter
 
 
 class Node:
@@ -35,7 +37,6 @@ class Tree:
     def __init__(self, self_id, node_list):
         self.self_id = self_id
         self.node_list = node_list
-        self.set_node_composition_info()
 
     def set_node_composition_info(self):
         self.composition_info = []
@@ -101,55 +102,65 @@ class Tree:
 
 
 class Tree_List:
-    def __init__(self, PATH_TO_DATA, device=torch.device('cpu')):
+    def __init__(
+            self,
+            PATH_TO_DATA,
+            content_vocab=None,
+            category_vocab=None,
+            device=torch.device('cpu')):
         self.device = device
         self.set_tree_list(PATH_TO_DATA)
-        self.set_possible_category_id()
-        self.set_info_for_training()
+        if content_vocab is None and category_vocab is None:
+            self.make_vocab()
+            self.set_content_category_id(self.content_vocab, self.category_vocab)
+        else:
+            self.set_content_category_id(content_vocab, category_vocab)
+        # self.set_possible_category_id()
+        # self.set_info_for_training()
 
-    # set tree_list, vocablary and category list
-    # give each nodes its content_id and category_id
     def set_tree_list(self, PATH_TO_DATA):
+        self.tree_list = []
+        tree_id = 0
+        node_list = []
         with open(PATH_TO_DATA, 'r') as f:
             node_info_list = [node_info.strip() for node_info in f.readlines()]
         node_info_list = [node_info.replace('\n', '') for node_info in node_info_list]
-
-        self.tree_list = []
-        self.content_to_id = {}
-        self.id_to_content = {}
-        self.category_to_id = {}
-        self.id_to_category = {}
-        tree_id = 0
-        node_list = []
         for node_info in node_info_list:
             if node_info != '':
                 node = Node(node_info.split())
-                if node.is_leaf:
-                    if node.content not in self.content_to_id:
-                        content_id = len(self.content_to_id)
-                        self.content_to_id[node.content] = content_id
-                        self.id_to_content[content_id] = node.content
-                    node.content_id = [self.content_to_id[node.content]]
-                if node.category not in self.category_to_id:
-                    category_id = len(self.category_to_id)
-                    self.category_to_id[node.category] = category_id
-                    self.id_to_category[category_id] = node.category
-                node.category_id = self.category_to_id[node.category]
                 node_list.append(node)
             elif node_list != []:
                 self.tree_list.append(Tree(tree_id, node_list))
                 node_list = []
                 tree_id += 1
 
-    def set_possible_category_id(self):
-        self.possible_category_dict = {}
+    def make_vocab(self):
+        content_counter = Counter()
+        category_counter = Counter()
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    content_counter[node.content] += 1
+                category_counter[node.category] += 1
+        self.content_vocab = Vocab(content_counter, specials=['<unk>'])
+        self.category_vocab = Vocab(category_counter, specials=['<unk>'])
+
+    def set_content_category_id(self, content_vocab, category_vocab):
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    node.content_id = [content_vocab[node.content]]
+                node.category_id = category_vocab[node.category]
+            tree.set_node_composition_info()
+
+    def set_possible_category_id(self, possible_category_dict):
         for tree in self.tree_list:
             for node in tree.node_list:
                 key = tuple(node.content_id)
-                if key not in self.possible_category_dict:
-                    self.possible_category_dict[key] = [node.category_id]
-                elif node.category_id not in self.possible_category_dict[key]:
-                    self.possible_category_dict[key].append(node.category_id)
+                if key not in possible_category_dict:
+                    possible_category_dict[key] = [node.category_id]
+                elif node.category_id not in possible_category_dict[key]:
+                    possible_category_dict[key].append(node.category_id)
 
     def prepare_info_for_visualization(self, weight_matrix):
         vector_list = []
@@ -184,7 +195,7 @@ class Tree_List:
 
         return vector_list, content_info_dict
 
-    def set_info_for_training(self):
+    def set_info_for_training(self, possible_category_dict):
         self.num_node = []
         self.leaf_node_content_id = []
         self.label_list = []
@@ -198,7 +209,7 @@ class Tree_List:
                     # save the index of leaf node and its content
                     leaf_node_content_id.append([node.self_id, node.content_id[0]])
                     # label with multiple bit corresponding to possible category id
-                label_list.append(self.possible_category_dict[tuple(node.content_id)])
+                label_list.append(possible_category_dict[tuple(node.content_id)])
             self.leaf_node_content_id.append(
                 torch.tensor(
                     leaf_node_content_id,
@@ -296,28 +307,12 @@ class Tree_List:
             batch_composition_info,
             batch_label_list))
 
-    # the function use for the transfer of vocab & category from training to test tree
-    def replace_vocab_category(self, tree_list):
-        self.content_to_id = tree_list.content_to_id
-        self.category_to_id = tree_list.category_to_id
-        self.id_to_content = tree_list.id_to_content
-        self.id_to_category = tree_list.id_to_category
-        self.possible_category_dict = tree_list.possible_category_dict
-        for tree in self.tree_list:
-            for node in tree.node_list:
-                if node.is_leaf:
-                    node.content_id = self.content_to_id[node.content]
-                node.category_id = self.category_to_id[node.category]
-        self.set_info_for_training()
-
-# the function for making n_hot_vector from batch_label
-
 
 class Tree_Net(nn.Module):
     def __init__(self, tree_list, embedding_dim, initial_weight_matrix=None):
         super(Tree_Net, self).__init__()
-        self.num_embedding = len(tree_list.content_to_id)
-        self.num_category = len(tree_list.category_to_id)
+        self.num_embedding = len(tree_list.content_vocab)
+        self.num_category = len(tree_list.category_vocab)
         self.embedding_dim = embedding_dim
         if initial_weight_matrix is None:
             initial_weight_matrix = generate_random_weight_matrix(
