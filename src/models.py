@@ -1,6 +1,5 @@
 import re
 import numpy as np
-from numpy.core.numeric import normalize_axis_tuple
 import torch
 import torch.nn as nn
 from operator import itemgetter
@@ -229,7 +228,6 @@ class Tree_List:
                 *batch_tree_id_list)(self.label_list)))
             batch_composition_info.append(list(itemgetter(
                 *batch_tree_id_list)(self.composition_info)))
-
         else:
             # shuffle the tree_id in tree_list
             shuffled_tree_id = torch.randperm(num_tree, device=self.device)
@@ -304,9 +302,15 @@ class Tree_List:
         self.category_to_id = tree_list.category_to_id
         self.id_to_content = tree_list.id_to_content
         self.id_to_category = tree_list.id_to_category
-        self.set_content_category_id()
-        self.set_possible_category_id()
+        self.possible_category_dict = tree_list.possible_category_dict
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    node.content_id = self.content_to_id[node.content]
+                node.category_id = self.category_to_id[node.category]
         self.set_info_for_training()
+
+# the function for making n_hot_vector from batch_label
 
 
 def make_n_hot_label(batch_label, num_category, device=torch.device('cpu')):

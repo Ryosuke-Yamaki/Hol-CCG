@@ -160,15 +160,16 @@ class Condition_Setter:
         self.set_path(PATH_TO_DIR)
 
     def set_path(self, PATH_TO_DIR):
-        self.path_to_train_data = PATH_TO_DIR + "data/train.txt"
-        self.path_to_test_data = PATH_TO_DIR + "data/test.txt"
+        self.path_to_train_data = PATH_TO_DIR + "CCGbank/converted/train.txt"
+        self.path_to_dev_data = PATH_TO_DIR + "CCGbank/converted/dev.txt"
+        self.path_to_test_data = PATH_TO_DIR + "CCGbank/converted/test.txt"
         self.path_to_pretrained_weight_matrix = PATH_TO_DIR + \
-            "data/glove_{}d.csv".format(self.embedding_dim)
-        path_to_initial_weight_matrix = PATH_TO_DIR + "result/data/"
-        path_to_model = PATH_TO_DIR + "result/model/"
-        path_to_train_data_history = PATH_TO_DIR + "result/data/"
-        path_to_test_data_history = PATH_TO_DIR + "result/data/"
-        path_to_history_fig = PATH_TO_DIR + "result/fig/"
+            "Hol-CCG/data/glove_{}d.csv".format(self.embedding_dim)
+        path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"
+        path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
+        path_to_train_data_history = PATH_TO_DIR + "Hol-CCG/result/data/"
+        path_to_test_data_history = PATH_TO_DIR + "Hol-CCG/result/data/"
+        path_to_history_fig = PATH_TO_DIR + "Hol-CCG/result/fig/"
         fig_name = ""
         path_list = [
             path_to_initial_weight_matrix,
