@@ -8,7 +8,6 @@ set_random_seed(0)
 path_to_train_data = '/home/yryosuke0519/CCGbank/converted/train.txt'
 path_to_dev_data = '/home/yryosuke0519/CCGbank/converted/dev.txt'
 path_to_test_data = '/home/yryosuke0519/CCGbank/converted/test.txt'
-start = time.time()
 print('processing data...')
 train_tree_list = Tree_List(path_to_train_data)
 dev_tree_list = Tree_List(
@@ -28,7 +27,6 @@ train_tree_list.set_info_for_training(possible_category_dict_for_train_dev)
 dev_tree_list.set_info_for_training(possible_category_dict_for_train_dev)
 test_tree_list.set_info_for_training(possible_category_dict_for_test)
 print('fnish!')
-print(time.time() - start)
 
 tree_net = Tree_Net(train_tree_list, 100)
 criteria = nn.BCELoss(reduction='sum')
