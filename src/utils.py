@@ -150,6 +150,11 @@ class History:
         # so, subtruct them when calculate the acc
         return float((num_correct_node - num_dummy_node) / num_existing_node)
 
+    @torch.no_grad()
+    def cal_f1(self, output, n_hot_label, mask):
+        prediction = output > self.THRESHOLD
+        TP = torch.count_nonzero(n_hot_label)
+
     def print_current_stat(self, name):
         print('{}-loss: {}'.format(name, self.loss_history[-1]))
         print('{}-acc: {}'.format(name, self.acc_history[-1]))
