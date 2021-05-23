@@ -74,7 +74,8 @@ def make_n_hot_label(batch_label, num_category, device=torch.device('cpu')):
     for label_list in batch_label:
         n_hot_label_list = []
         for label in label_list:
-            n_hot_label = torch.zeros(num_category, dtype=torch.float, device=device)
+            n_hot_label = torch.zeros(
+                num_category, dtype=torch.float, device=device)
             n_hot_label[label] = 1.0
             n_hot_label_list.append(n_hot_label)
         batch_n_hot_label_list.append(torch.stack(n_hot_label_list))
@@ -87,7 +88,8 @@ def make_n_hot_label(batch_label, num_category, device=torch.device('cpu')):
              num_category),
             dtype=torch.bool,
             device=device) for i in batch_n_hot_label_list]
-    mask = torch.stack([torch.cat((i, j)) for (i, j) in zip(true_mask, false_mask)])
+    mask = torch.stack([torch.cat((i, j))
+                        for (i, j) in zip(true_mask, false_mask)])
     dummy_label = [
         torch.zeros(
             max_num_label - len(i),
@@ -121,11 +123,12 @@ class History:
             total = 0
             for batch in batch_list:
                 output = self.tree_net(batch)
-                n_hot_label, mask = make_n_hot_label(batch[4], output.shape[-1], device=device)
+                n_hot_label, mask = make_n_hot_label(
+                    batch[4], output.shape[-1], device=device)
                 loss = self.criteria(output * mask, n_hot_label)
                 f1 = self.cal_f1(output, n_hot_label)
                 total_loss += loss.item()
-                total_f1 += f1
+                total_f1 += f1.item()
                 total += output.shape[0]
         self.loss_history = np.append(self.loss_history, total_loss / total)
         self.f1_history = np.append(self.f1_history, total_f1 / total)
