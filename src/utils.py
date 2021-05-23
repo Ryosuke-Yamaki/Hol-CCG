@@ -103,7 +103,6 @@ class History:
         prediction = batch_output > self.THRESHOLD
         # matching the prediction and label, dummy node always become correct
         matching = (prediction * batch_label_mask) == batch_label
-        # matching = torch.count_nonzero(matching, dim=2) == batch_output.shape[2]
         # the number of nodes the prediction is correct
         num_correct_node = torch.count_nonzero(
             torch.all(matching, dim=2)).item()
@@ -115,7 +114,7 @@ class History:
             batch_label_mask.shape[1] - num_existing_node
         # for the dummy nodes the prediction always become correct because they are zero
         # so, subtruct them when calculate the acc
-        return (num_correct_node - num_dummy_node) / num_existing_node
+        return float((num_correct_node - num_dummy_node) / num_existing_node)
 
     def print_current_stat(self, name):
         print('{}-loss: {}'.format(name, self.loss_history[-1]))
