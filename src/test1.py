@@ -1,24 +1,28 @@
 import time
 from models import Tree_List, Tree_Net
-from utils import set_random_seed
-from models import make_n_hot_label
+from utils import set_random_seed, make_n_hot_label
 import torch.nn as nn
 import torch.optim as optim
 
 set_random_seed(0)
-# path_to_train_data = '/home/yryosuke0519/CCGbank/converted/train.txt'
-# path_to_dev_data = '/home/yryosuke0519/CCGbank/converted/dev.txt'
+path_to_train_data = '/home/yryosuke0519/CCGbank/converted/train.txt'
+path_to_dev_data = '/home/yryosuke0519/CCGbank/converted/dev.txt'
 path_to_test_data = '/home/yryosuke0519/CCGbank/converted/test.txt'
 start = time.time()
 print('loading_data...')
-# train_tree_list = Tree_List(path_to_train_data)
+train_tree_list = Tree_List(path_to_train_data)
 # dev_tree_list = Tree_List(path_to_dev_data)
 test_tree_list = Tree_List(path_to_test_data)
-tree_net = Tree_Net(test_tree_list, 100)
+tree_net = Tree_Net(train_tree_list, 100)
 criteria = nn.BCELoss(reduction='sum')
 optimizer = optim.Adam(tree_net.parameters())
 print('fnish loading!')
 print(time.time() - start)
+
+for tree in test_tree_list.tree_list:
+    for node in tree.node_list:
+        if node.category not in train_tree_list.category_to_id:
+            print(node.category)
 
 num_category = len(test_tree_list.category_to_id)
 for i in range(100):

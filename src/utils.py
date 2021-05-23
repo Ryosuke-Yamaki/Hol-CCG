@@ -68,6 +68,37 @@ def original_loss(output, label, criteria, tree):
     return loss + norm_loss
 
 
+def make_n_hot_label(batch_label, num_category, device=torch.device('cpu')):
+    max_num_label = max([len(i) for i in batch_label])
+    batch_n_hot_label_list = []
+    for label_list in batch_label:
+        n_hot_label_list = []
+        for label in label_list:
+            n_hot_label = torch.zeros(num_category, dtype=torch.float, device=device)
+            n_hot_label[label] = 1.0
+            n_hot_label_list.append(n_hot_label)
+        batch_n_hot_label_list.append(torch.stack(n_hot_label_list))
+
+    true_mask = [torch.ones((len(i), num_category), dtype=torch.bool, device=device)
+                 for i in batch_n_hot_label_list]
+    false_mask = [
+        torch.zeros(
+            (max_num_label - len(i),
+             num_category),
+            dtype=torch.bool,
+            device=device) for i in batch_n_hot_label_list]
+    mask = torch.stack([torch.cat((i, j)) for (i, j) in zip(true_mask, false_mask)])
+    dummy_label = [
+        torch.zeros(
+            max_num_label - len(i),
+            i.shape[1],
+            dtype=torch.float,
+            device=device) for i in batch_n_hot_label_list]
+    batch_n_hot_label_list = torch.stack([torch.cat((i, j))
+                                          for (i, j) in zip(batch_n_hot_label_list, dummy_label)])
+    return batch_n_hot_label_list, mask
+
+
 class History:
     def __init__(self, tree_net, tree_list, criteria, THRESHOLD):
         self.tree_net = tree_net
@@ -82,6 +113,23 @@ class History:
         self.min_loss_idx = np.argmin(self.loss_history)
         self.max_acc = np.max(self.acc_history)
         self.max_acc_idx = np.argmax(self.acc_history)
+
+    def validation(self, batch_list, device=torch.device('cpu')):
+        with torch.no_grad():
+            total_loss = 0.0
+            total_acc = 0.0
+            total = 0
+            for batch in batch_list:
+                output = self.tree_net(batch)
+                n_hot_label, mask = make_n_hot_label(batch[4], output.shape[-1], device=device)
+                loss = self.criteria(output * mask, n_hot_label)
+                acc = self.cal_acc(output, n_hot_label, mask)
+                total_loss += loss.item()
+                total_acc += acc
+                total += output.shape[0]
+        self.loss_history = np.append(self.loss_history, total_loss / total)
+        self.acc_history = np.append(self.acc_history, total_acc / total)
+        self.update()
 
     @torch.no_grad()
     def cal_acc(self, batch_output, batch_label, batch_label_mask):

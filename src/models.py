@@ -313,37 +313,6 @@ class Tree_List:
 # the function for making n_hot_vector from batch_label
 
 
-def make_n_hot_label(batch_label, num_category, device=torch.device('cpu')):
-    max_num_label = max([len(i) for i in batch_label])
-    batch_n_hot_label_list = []
-    for label_list in batch_label:
-        n_hot_label_list = []
-        for label in label_list:
-            n_hot_label = torch.zeros(num_category, dtype=torch.float, device=device)
-            n_hot_label[label] = 1.0
-            n_hot_label_list.append(n_hot_label)
-        batch_n_hot_label_list.append(torch.stack(n_hot_label_list))
-
-    true_mask = [torch.ones((len(i), num_category), dtype=torch.bool, device=device)
-                 for i in batch_n_hot_label_list]
-    false_mask = [
-        torch.zeros(
-            (max_num_label - len(i),
-             num_category),
-            dtype=torch.bool,
-            device=device) for i in batch_n_hot_label_list]
-    mask = torch.stack([torch.cat((i, j)) for (i, j) in zip(true_mask, false_mask)])
-    dummy_label = [
-        torch.zeros(
-            max_num_label - len(i),
-            i.shape[1],
-            dtype=torch.float,
-            device=device) for i in batch_n_hot_label_list]
-    batch_n_hot_label_list = torch.stack([torch.cat((i, j))
-                                          for (i, j) in zip(batch_n_hot_label_list, dummy_label)])
-    return batch_n_hot_label_list, mask
-
-
 class Tree_Net(nn.Module):
     def __init__(self, tree_list, embedding_dim, initial_weight_matrix=None):
         super(Tree_Net, self).__init__()

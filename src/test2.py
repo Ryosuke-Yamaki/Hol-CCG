@@ -105,6 +105,12 @@ test_tree_list = Tree_List(condition.path_to_test_data, condition.REGULARIZED, d
 # match the vocab and category between train and test data
 test_tree_list.replace_vocab_category(train_tree_list)
 
+for tree in test_tree_list:
+    for node in tree.node_list:
+        if node.category in train_tree_list.category_to_id:
+            print(node.category)
+
+
 EPOCHS = 100
 BATCH_SIZE = 5
 THRESHOLD = 0.3
