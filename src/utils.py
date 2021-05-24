@@ -126,7 +126,7 @@ class History:
                 n_hot_label, mask = make_n_hot_label(
                     batch[4], output.shape[-1], device=device)
                 loss = self.criteria(output * mask, n_hot_label)
-                f1 = self.cal_f1(output, n_hot_label)
+                f1 = self.cal_f1(output * mask, n_hot_label)
                 total_loss += loss.item()
                 total_f1 += f1.item()
                 num_tree += output.shape[0]
