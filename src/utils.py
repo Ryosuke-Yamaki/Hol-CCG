@@ -120,7 +120,7 @@ class History:
         with torch.no_grad():
             total_loss = 0.0
             total_f1 = 0.0
-            total = 0
+            num_tree = 0
             for batch in batch_list:
                 output = self.tree_net(batch)
                 n_hot_label, mask = make_n_hot_label(
@@ -129,9 +129,9 @@ class History:
                 f1 = self.cal_f1(output, n_hot_label)
                 total_loss += loss.item()
                 total_f1 += f1.item()
-                total += output.shape[0]
-        self.loss_history = np.append(self.loss_history, total_loss / total)
-        self.f1_history = np.append(self.f1_history, total_f1 / total)
+                num_tree += output.shape[0]
+        self.loss_history = np.append(self.loss_history, total_loss / num_tree)
+        self.f1_history = np.append(self.f1_history, total_f1 / len(batch_list))
         self.update()
 
     @torch.no_grad()
