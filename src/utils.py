@@ -108,44 +108,33 @@ class History:
         self.criteria = criteria
         self.THRESHOLD = THRESHOLD
         self.loss_history = np.array([])
-        self.precision_history = np.array([])
-        self.recall_history = np.array([])
-        self.f1_history = np.array([])
+        self.acc_history = np.array([])
 
     def update(self):
         self.min_loss = np.min(self.loss_history)
         self.min_loss_idx = np.argmin(self.loss_history)
-        self.max_precision = np.max(self.precision_history)
-        self.max_precision_idx = np.argmax(self.precision_history)
-        self.max_recall = np.max(self.recall_history)
-        self.max_recall_idx = np.argmax(self.recall_history)
-        self.max_f1 = np.max(self.f1_history)
-        self.max_f1_idx = np.argmax(self.f1_history)
+        self.max_acc = np.max(self.acc_history)
+        self.max_acc_idx = np.argmax(self.acc_history)
 
     def validation(self, batch_list, device=torch.device('cpu')):
         with torch.no_grad():
             total_loss = 0.0
-            total_precision = 0.0
-            total_recall = 0.0
-            total_f1 = 0.0
+            total_acc = 0.0
             num_tree = 0
             for batch in batch_list:
                 output = self.tree_net(batch)
                 n_hot_label, mask = make_n_hot_label(
                     batch[4], output.shape[-1], device=device)
-                loss = self.criteria(output * mask, n_hot_label)
-                precision, recall, f1 = self.cal_f1(output * mask, n_hot_label)
+                output = output[torch.nonzero(torch.all(mask, dim=2), as_tuple=True)]
+                n_hot_label = n_hot_label[torch.nonzero(torch.all(mask, dim=2), as_tuple=True)]
+                label = torch.nonzero(n_hot_label)[:, -1]
+                loss = self.criteria(output, label)
+                acc = self.cal_top_k_acc(output, label)
                 total_loss += loss.item()
-                total_precision += precision.item()
-                total_recall += recall.item()
-                total_f1 += f1.item()
+                total_acc += acc.item()
                 num_tree += output.shape[0]
         self.loss_history = np.append(self.loss_history, total_loss / num_tree)
-        self.precision_history = np.append(
-            self.precision_history,
-            total_precision / len(batch_list))
-        self.recall_history = np.append(self.recall_history, total_recall / len(batch_list))
-        self.f1_history = np.append(self.f1_history, total_f1 / len(batch_list))
+        self.acc_history = np.append(self.acc_history / len(batch))
         self.update()
 
     @torch.no_grad()
@@ -177,26 +166,34 @@ class History:
         f1 = (2 * precision * recall) / (precision + recall)
         return precision, recall, f1
 
+    @torch.no_grad()
+    def cal_top_k_acc(self, output, label, k=10):
+        output = torch.topk(output, k=k)[1]
+        label = torch.reshape(label, (output.shape[0], -1))
+        comperison = output - label
+        num_sample = output.shape[0]
+        num_false = torch.count_nonzero(torch.all(comperison, dim=1))
+        num_true = num_sample - num_false
+        return num_true / num_sample
+
     def print_current_stat(self, name):
         print('{}-loss: {}'.format(name, self.loss_history[-1]))
-        print('{}-precision: {}'.format(name, self.precision_history[-1]))
-        print('{}-recall: {}'.format(name, self.recall_history[-1]))
-        print('{}-f1: {}'.format(name, self.f1_history[-1]))
+        print('{}-acc: {}'.formta(name, self.acc_history[-1]))
+
+    def print_best_stat(self, name):
+        print('{}-min loss: {}'.format(name, self.loss_history[-1]))
+        print('{}-best acc: {}'.format(name, self.acc_history[-1]))
 
     def save(self, path):
         with open(path, 'w') as f:
             writer = csv.writer(f, lineterminator='\n')
             writer.writerow(self.loss_history)
-            writer.writerow(self.precision_history)
-            writer.writerow(self.recall_history)
-            writer.writerow(self.f1_history)
+            writer.writerow(self.acc_history)
 
     def export_stat_list(self, path):
         stat_list = []
         stat_list.append(str(self.min_loss))
-        stat_list.append(str(self.max_precision))
-        stat_list.append(str(self.max_recall))
-        stat_list.append(str(self.max_f1))
+        stat_list.append(str(self.max_acc))
         with open(path, 'a') as f:
             f.write(', '.join(stat_list) + '\n')
 
