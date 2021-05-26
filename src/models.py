@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torchtext.vocab import Vocab
 from operator import itemgetter
-from utils import circular_correlation, generate_random_weight_matrix, single_circular_correlation
+from utils import circular_correlation, generate_random_weight_matrix, make_n_hot_label, single_circular_correlation
 from collections import Counter
 
 
@@ -115,8 +115,6 @@ class Tree_List:
             self.set_content_category_id(self.content_vocab, self.category_vocab)
         else:
             self.set_content_category_id(content_vocab, category_vocab)
-        # self.set_possible_category_id()
-        # self.set_info_for_training()
 
     def set_tree_list(self, PATH_TO_DATA):
         self.tree_list = []
@@ -307,6 +305,18 @@ class Tree_List:
             batch_composition_info,
             batch_label_list))
 
+    def clean_tree_list(self):
+        cleaned_tree_list = []
+        check_bit = 0
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if 0 in node.content_id or node.category_id == 0:
+                    check_bit = 1
+            if check_bit == 0:
+                cleaned_tree_list.append(tree)
+            check_bit = 0
+        self.tree_list = cleaned_tree_list
+
 
 class Tree_Net(nn.Module):
     def __init__(self, tree_list, embedding_dim, initial_weight_matrix=None):
@@ -370,3 +380,19 @@ class Tree_Net(nn.Module):
             composed_vector = circular_correlation(left_vector, right_vector)
             vector[(torch.arange(len(parent_idx)), parent_idx)] = composed_vector
         return vector
+
+    @torch.no_grad()
+    def set_info_for_visualization(self, tree_list, BATCH_SIZE=25):
+        vector_list = []
+        batch_list = tree_list.make_batch(BATCH_SIZE)
+        for batch in batch_list:
+            # the content_id of leaf nodes
+            num_node = batch[0]
+            leaf_content_id = batch[1]
+            content_mask = batch[2]
+            # the composition info of each tree
+            composition_info = batch[3]
+            vector = self.embed_leaf_nodes(num_node, leaf_content_id, content_mask)
+            vector = self.compose(vector, composition_info)
+            n_hot_label, mask = make_n_hot_label(batch[4], self.num_category)
+            vector = vector[torch.nonzero(torch.all(mask, dim=2), as_tuple=True)]

@@ -167,10 +167,10 @@ i = 0
 for path in path_to_data:
     if '.auto' in path:
         idx = int(path[-10:-6])
-        if 200 <= idx and idx < 2200:
-            path_to_save = path_to_train
-        elif 2200 <= idx and idx < 2300:
+        if idx < 100:
             path_to_save = path_to_dev
+        elif 200 <= idx and idx < 2200:
+            path_to_save = path_to_train
         elif 2300 <= idx and idx < 2400:
             path_to_save = path_to_test
         else:

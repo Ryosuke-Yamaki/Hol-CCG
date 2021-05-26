@@ -108,17 +108,25 @@ class History:
         self.criteria = criteria
         self.THRESHOLD = THRESHOLD
         self.loss_history = np.array([])
+        self.precision_history = np.array([])
+        self.recall_history = np.array([])
         self.f1_history = np.array([])
 
     def update(self):
         self.min_loss = np.min(self.loss_history)
         self.min_loss_idx = np.argmin(self.loss_history)
+        self.max_precision = np.max(self.precision_history)
+        self.max_precision_idx = np.argmax(self.precision_history)
+        self.max_recall = np.max(self.recall_history)
+        self.max_recall_idx = np.argmax(self.recall_history)
         self.max_f1 = np.max(self.f1_history)
         self.max_f1_idx = np.argmax(self.f1_history)
 
     def validation(self, batch_list, device=torch.device('cpu')):
         with torch.no_grad():
             total_loss = 0.0
+            total_precision = 0.0
+            total_recall = 0.0
             total_f1 = 0.0
             num_tree = 0
             for batch in batch_list:
@@ -126,11 +134,17 @@ class History:
                 n_hot_label, mask = make_n_hot_label(
                     batch[4], output.shape[-1], device=device)
                 loss = self.criteria(output * mask, n_hot_label)
-                f1 = self.cal_f1(output * mask, n_hot_label)
+                precision, recall, f1 = self.cal_f1(output * mask, n_hot_label)
                 total_loss += loss.item()
+                total_precision += precision.item()
+                total_recall += recall.item()
                 total_f1 += f1.item()
                 num_tree += output.shape[0]
         self.loss_history = np.append(self.loss_history, total_loss / num_tree)
+        self.precision_history = np.append(
+            self.precision_history,
+            total_precision / len(batch_list))
+        self.recall_history = np.append(self.recall_history, total_recall / len(batch_list))
         self.f1_history = np.append(self.f1_history, total_f1 / len(batch_list))
         self.update()
 
@@ -161,21 +175,27 @@ class History:
         recall = torch.count_nonzero(prediction[torch.nonzero(
             n_hot_label, as_tuple=True)]) / torch.count_nonzero(n_hot_label)
         f1 = (2 * precision * recall) / (precision + recall)
-        return f1
+        return precision, recall, f1
 
     def print_current_stat(self, name):
         print('{}-loss: {}'.format(name, self.loss_history[-1]))
+        print('{}-precision: {}'.format(name, self.precision_history[-1]))
+        print('{}-recall: {}'.format(name, self.recall_history[-1]))
         print('{}-f1: {}'.format(name, self.f1_history[-1]))
 
     def save(self, path):
         with open(path, 'w') as f:
             writer = csv.writer(f, lineterminator='\n')
             writer.writerow(self.loss_history)
+            writer.writerow(self.precision_history)
+            writer.writerow(self.recall_history)
             writer.writerow(self.f1_history)
 
     def export_stat_list(self, path):
         stat_list = []
         stat_list.append(str(self.min_loss))
+        stat_list.append(str(self.max_precision))
+        stat_list.append(str(self.max_recall))
         stat_list.append(str(self.max_f1))
         with open(path, 'a') as f:
             f.write(', '.join(stat_list) + '\n')
