@@ -338,7 +338,6 @@ class Tree_Net(nn.Module):
             self.embedding_dim,
             _weight=initial_weight_matrix)
         self.linear = nn.Linear(self.embedding_dim, self.num_category)
-        self.softmax = nn.Softmax(dim=2)
 
     # input batch as tuple of training info
     def forward(self, batch):
@@ -351,7 +350,6 @@ class Tree_Net(nn.Module):
         vector = self.embed_leaf_nodes(num_node, leaf_content_id, content_mask)
         vector = self.compose(vector, composition_info)
         output = self.linear(vector)
-        # output = self.softmax(self.linear(vector))
         return output
 
     def embed_leaf_nodes(self, num_node, leaf_content_id, content_mask):
