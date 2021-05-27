@@ -116,6 +116,7 @@ class History:
         self.max_acc = np.max(self.acc_history)
         self.max_acc_idx = np.argmax(self.acc_history)
 
+    @torch.no_grad()
     def validation(self, batch_list, device=torch.device('cpu')):
         with torch.no_grad():
             total_loss = 0.0
@@ -125,8 +126,10 @@ class History:
                 output = self.tree_net(batch)
                 n_hot_label, mask = make_n_hot_label(
                     batch[4], output.shape[-1], device=device)
-                output = output[torch.nonzero(torch.all(mask, dim=2), as_tuple=True)]
-                n_hot_label = n_hot_label[torch.nonzero(torch.all(mask, dim=2), as_tuple=True)]
+                output = output[torch.nonzero(
+                    torch.all(mask, dim=2), as_tuple=True)]
+                n_hot_label = n_hot_label[torch.nonzero(
+                    torch.all(mask, dim=2), as_tuple=True)]
                 label = torch.nonzero(n_hot_label)[:, -1]
                 loss = self.criteria(output, label)
                 acc = self.cal_top_k_acc(output, label)
@@ -134,7 +137,8 @@ class History:
                 total_acc += acc.item()
                 num_tree += output.shape[0]
         self.loss_history = np.append(self.loss_history, total_loss / num_tree)
-        self.acc_history = np.append(self.acc_history / len(batch))
+        self.acc_history = np.append(
+            self.acc_history, total_acc / len(batch_list))
         self.update()
 
     @torch.no_grad()
@@ -167,7 +171,7 @@ class History:
         return precision, recall, f1
 
     @torch.no_grad()
-    def cal_top_k_acc(self, output, label, k=10):
+    def cal_top_k_acc(self, output, label, k=5):
         output = torch.topk(output, k=k)[1]
         label = torch.reshape(label, (output.shape[0], -1))
         comperison = output - label
@@ -178,7 +182,7 @@ class History:
 
     def print_current_stat(self, name):
         print('{}-loss: {}'.format(name, self.loss_history[-1]))
-        print('{}-acc: {}'.formta(name, self.acc_history[-1]))
+        print('{}-acc: {}'.format(name, self.acc_history[-1]))
 
     def print_best_stat(self, name):
         print('{}-min loss: {}'.format(name, self.loss_history[-1]))

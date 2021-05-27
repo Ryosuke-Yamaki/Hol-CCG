@@ -112,7 +112,8 @@ class Tree_List:
         self.set_tree_list(PATH_TO_DATA)
         if content_vocab is None and category_vocab is None:
             self.make_vocab()
-            self.set_content_category_id(self.content_vocab, self.category_vocab)
+            self.set_content_category_id(
+                self.content_vocab, self.category_vocab)
         else:
             self.set_content_category_id(content_vocab, category_vocab)
 
@@ -122,7 +123,8 @@ class Tree_List:
         node_list = []
         with open(PATH_TO_DATA, 'r') as f:
             node_info_list = [node_info.strip() for node_info in f.readlines()]
-        node_info_list = [node_info.replace('\n', '') for node_info in node_info_list]
+        node_info_list = [node_info.replace(
+            '\n', '') for node_info in node_info_list]
         for node_info in node_info_list:
             if node_info != '':
                 node = Node(node_info.split())
@@ -205,7 +207,8 @@ class Tree_List:
             for node in tree.node_list:
                 if node.is_leaf:
                     # save the index of leaf node and its content
-                    leaf_node_content_id.append([node.self_id, node.content_id[0]])
+                    leaf_node_content_id.append(
+                        [node.self_id, node.content_id[0]])
                     # label with multiple bit corresponding to possible category id
                 label_list.append([node.category_id])
             self.leaf_node_content_id.append(
@@ -230,7 +233,8 @@ class Tree_List:
 
         if BATCH_SIZE is None:
             batch_tree_id_list = list(range(num_tree))
-            batch_num_node.append(list(itemgetter(*batch_tree_id_list)(self.num_node)))
+            batch_num_node.append(
+                list(itemgetter(*batch_tree_id_list)(self.num_node)))
             batch_leaf_content_id.append(list(itemgetter(
                 *batch_tree_id_list)(self.leaf_node_content_id)))
             batch_label_list.append(list(itemgetter(
@@ -242,7 +246,8 @@ class Tree_List:
             shuffled_tree_id = torch.randperm(num_tree, device=self.device)
             for idx in range(0, num_tree - BATCH_SIZE, BATCH_SIZE):
                 batch_tree_id_list = shuffled_tree_id[idx:idx + BATCH_SIZE]
-                batch_num_node.append(list(itemgetter(*batch_tree_id_list)(self.num_node)))
+                batch_num_node.append(
+                    list(itemgetter(*batch_tree_id_list)(self.num_node)))
                 batch_leaf_content_id.append(list(itemgetter(
                     *batch_tree_id_list)(self.leaf_node_content_id)))
                 batch_label_list.append(list(itemgetter(
@@ -345,7 +350,8 @@ class Tree_Net(nn.Module):
         composition_info = batch[3]
         vector = self.embed_leaf_nodes(num_node, leaf_content_id, content_mask)
         vector = self.compose(vector, composition_info)
-        output = self.softmax(self.linear(vector))
+        output = self.linear(vector)
+        # output = self.softmax(self.linear(vector))
         return output
 
     def embed_leaf_nodes(self, num_node, leaf_content_id, content_mask):
@@ -364,7 +370,8 @@ class Tree_Net(nn.Module):
         return vector / norm
 
     def compose(self, vector, composition_info):
-        unit_vector = torch.zeros(self.embedding_dim, requires_grad=False, device=vector.device)
+        unit_vector = torch.zeros(
+            self.embedding_dim, requires_grad=False, device=vector.device)
         unit_vector[0] = 1.0
         # itteration of composition
         for idx in range(composition_info.shape[1]):
@@ -392,7 +399,9 @@ class Tree_Net(nn.Module):
             content_mask = batch[2]
             # the composition info of each tree
             composition_info = batch[3]
-            vector = self.embed_leaf_nodes(num_node, leaf_content_id, content_mask)
+            vector = self.embed_leaf_nodes(
+                num_node, leaf_content_id, content_mask)
             vector = self.compose(vector, composition_info)
             n_hot_label, mask = make_n_hot_label(batch[4], self.num_category)
-            vector = vector[torch.nonzero(torch.all(mask, dim=2), as_tuple=True)]
+            vector = vector[torch.nonzero(
+                torch.all(mask, dim=2), as_tuple=True)]
