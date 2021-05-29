@@ -368,22 +368,29 @@ class Tree_Net(nn.Module):
         return vector / norm
 
     def compose(self, vector, composition_info):
-        unit_vector = torch.zeros(
-            self.embedding_dim, requires_grad=False, device=vector.device)
-        unit_vector[0] = 1.0
         # itteration of composition
         for idx in range(composition_info.shape[1]):
-            num_child_node = composition_info[:, idx, 0]
-            one_child_node_index = torch.nonzero(num_child_node == 1)
-            parent_idx = composition_info[:, idx, 1]
-            left_idx = composition_info[:, idx, 2]
-            right_idx = composition_info[:, idx, 3]
-            left_vector = vector[(torch.arange(len(left_idx)), left_idx)]
-            right_vector = vector[(torch.arange(len(right_idx)), right_idx)]
-            # unit_vector don't change opponent vector during circular correlation
-            right_vector[one_child_node_index] = unit_vector
-            composed_vector = circular_correlation(left_vector, right_vector)
-            vector[(torch.arange(len(parent_idx)), parent_idx)] = composed_vector
+            # the positional index where the composition info of one child is located in batch
+            one_child_compositino_idx = torch.squeeze(
+                torch.nonzero(composition_info[:, idx, 0] == 1))
+            one_child_composition_info = composition_info[composition_info[:, idx, 0] == 1][:, idx]
+            one_child_parent_idx = one_child_composition_info[:, 1]
+            # the child node index of one child composition
+            child_idx = one_child_composition_info[:, 2]
+            child_vector = vector[(one_child_compositino_idx, child_idx)]
+            vector[(one_child_compositino_idx, one_child_parent_idx)] = child_vector
+            two_child_composition_idx = torch.squeeze(
+                torch.nonzero(composition_info[:, idx, 0] == 2))
+            two_child_composition_info = composition_info[composition_info[:, idx, 0] == 2][:, idx]
+            if len(two_child_composition_info) != 0:
+                two_child_parent_idx = two_child_composition_info[:, 1]
+                # left child node index of two child composition
+                left_child_idx = two_child_composition_info[:, 2]
+                right_child_idx = two_child_composition_info[:, 3]
+                left_child_vector = vector[(two_child_composition_idx, left_child_idx)]
+                right_child_vector = vector[(two_child_composition_idx, right_child_idx)]
+                composed_vector = circular_correlation(left_child_vector, right_child_vector)
+                vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
 
     @torch.no_grad()

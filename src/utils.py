@@ -18,7 +18,14 @@ def single_circular_correlation(a, b):
     a = conj(fft(a))
     b = fft(b)
     c = ifft(a * b).real
-    return c / torch.norm(c)
+    return c / (torch.norm(c) + 1e-6)
+
+
+def cc_with_roll(a, b):
+    c = torch.zeros_like(a, requires_grad=False)
+    for i in range(len(b)):
+        c[i] = torch.sum(a * torch.roll(b, -i))
+    return c
 
 
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
@@ -101,6 +108,21 @@ def make_n_hot_label(batch_label, num_category, device=torch.device('cpu')):
     return batch_n_hot_label_list, mask
 
 
+def make_label_mask(batch, device=torch.device('cpu')):
+    batch_label = batch[4]
+    label = torch.tensor(np.squeeze(np.vstack(batch_label)), dtype=torch.long, device=device)
+    max_num_label = max([len(i) for i in batch_label])
+    true_mask = [torch.ones(len(i), dtype=torch.bool, device=device) for i in batch_label]
+    false_mask = [
+        torch.zeros(
+            max_num_label - len(i),
+            dtype=torch.bool,
+            device=device) for i in batch_label]
+    mask = torch.stack([torch.cat((i, j))
+                        for (i, j) in zip(true_mask, false_mask)])
+    return label, mask
+
+
 class History:
     def __init__(self, tree_net, tree_list, criteria, THRESHOLD):
         self.tree_net = tree_net
@@ -118,25 +140,17 @@ class History:
 
     @torch.no_grad()
     def validation(self, batch_list, device=torch.device('cpu')):
-        with torch.no_grad():
-            total_loss = 0.0
-            total_acc = 0.0
-            num_tree = 0
-            for batch in batch_list:
-                output = self.tree_net(batch)
-                n_hot_label, mask = make_n_hot_label(
-                    batch[4], output.shape[-1], device=device)
-                output = output[torch.nonzero(
-                    torch.all(mask, dim=2), as_tuple=True)]
-                n_hot_label = n_hot_label[torch.nonzero(
-                    torch.all(mask, dim=2), as_tuple=True)]
-                label = torch.nonzero(n_hot_label)[:, -1]
-                loss = self.criteria(output, label)
-                acc = self.cal_top_k_acc(output, label)
-                total_loss += loss.item()
-                total_acc += acc.item()
-                num_tree += output.shape[0]
-        self.loss_history = np.append(self.loss_history, total_loss / num_tree)
+        total_loss = 0.0
+        total_acc = 0.0
+        for batch in batch_list:
+            label, mask = make_label_mask(batch, device=device)
+            output = self.tree_net(batch)
+            output = output[torch.nonzero(mask, as_tuple=True)]
+            loss = self.criteria(output, label)
+            acc = self.cal_top_k_acc(output, label)
+            total_loss += loss.item()
+            total_acc += acc.item()
+        self.loss_history = np.append(self.loss_history, total_loss / len(batch_list))
         self.acc_history = np.append(
             self.acc_history, total_acc / len(batch_list))
         self.update()
@@ -174,9 +188,9 @@ class History:
     def cal_top_k_acc(self, output, label, k=5):
         output = torch.topk(output, k=k)[1]
         label = torch.reshape(label, (output.shape[0], -1))
-        comperison = output - label
+        comparison = output - label
         num_sample = output.shape[0]
-        num_false = torch.count_nonzero(torch.all(comperison, dim=1))
+        num_false = torch.count_nonzero(torch.all(comparison, dim=1))
         num_true = num_sample - num_false
         return num_true / num_sample
 
@@ -185,8 +199,8 @@ class History:
         print('{}-acc: {}'.format(name, self.acc_history[-1]))
 
     def print_best_stat(self, name):
-        print('{}-min loss: {}'.format(name, self.loss_history[-1]))
-        print('{}-best acc: {}'.format(name, self.acc_history[-1]))
+        print('{}-min loss: {}'.format(name, self.min_loss))
+        print('{}-best acc: {}'.format(name, self.max_acc))
 
     def save(self, path):
         with open(path, 'w') as f:
