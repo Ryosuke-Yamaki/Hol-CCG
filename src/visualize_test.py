@@ -243,23 +243,35 @@ counter = Counter()
 vector_list = []
 leaf_vector_idx = []
 phrase_vector_idx = []
+n_vector_idx = []
+np_vector_idx = []
 idx = 0
 for tree in test_tree_list.tree_list:
     for node in tree.node_list:
         if counter[tuple(node.content_id)] == 0:
             counter[tuple(node.content_id)] += 1
             vector_list.append(node.vector.detach().numpy())
-            if node.is_leaf:
-                leaf_vector_idx.append(idx)
+            if node.category == 'N':
+                n_vector_idx.append(idx)
+            elif node.category == 'NP':
+                np_vector_idx.append(idx)
             else:
-                phrase_vector_idx.append(idx)
+                if node.is_leaf:
+                    leaf_vector_idx.append(idx)
+                else:
+                    phrase_vector_idx.append(idx)
             idx += 1
 set_random_seed(0)
 
 print("t-SNE working.....")
 tsne = TSNE(learning_rate=10, n_iter=1000)
 embedded = tsne.fit_transform(vector_list)
-plt.scatter(embedded[leaf_vector_idx][:, 0], embedded[leaf_vector_idx][:, 1], s=10, c='r')
-plt.scatter(embedded[phrase_vector_idx][:, 0], embedded[phrase_vector_idx][:, 1], s=10, c='b')
+plt.scatter(embedded[n_vector_idx][:, 0], embedded[n_vector_idx][:, 1], s=10, c='r', label='N')
+plt.scatter(embedded[np_vector_idx][:, 0], embedded[np_vector_idx][:, 1], s=10, c='g', label='NP')
+plt.scatter(embedded[leaf_vector_idx][:, 0], embedded[leaf_vector_idx]
+            [:, 1], s=10, c='b', label='word')
+plt.scatter(embedded[phrase_vector_idx][:, 0], embedded[phrase_vector_idx]
+            [:, 1], s=10, c='k', label='phrase')
+plt.legend()
 # plt.scatter(embedded[:, 0], embedded[:, 1], s=10)
 plt.show()
