@@ -1,3 +1,4 @@
+from collections import Counter
 from threading import Condition
 import torch
 import matplotlib.pyplot as plt
@@ -6,7 +7,7 @@ from models import Tree, Tree_List, Tree_Net
 from sklearn.manifold import TSNE
 import copy
 import numpy as np
-from utils import Condition_Setter
+from utils import Condition_Setter, single_circular_correlation
 
 
 def visualize(
@@ -194,60 +195,71 @@ def judge_in_same_group(category_id_list, group_list):
     return SAME_GROUP, group_num_temp_0
 
 
+device = torch.device('cpu')
+
 PATH_TO_DIR = "/home/yryosuke0519/"
 
 condition = Condition_Setter(PATH_TO_DIR)
 
+print('loading data...')
 train_tree_list = Tree_List(condition.path_to_train_data)
-dev_tree_list = Tree_List(
-    condition.path_to_dev_data,
+test_tree_list = Tree_List(
+    condition.path_to_test_data,
     train_tree_list.content_vocab,
-    train_tree_list.category_vocab)
-possible_category_dict_for_train_dev = {}
-train_tree_list.set_possible_category_id(possible_category_dict_for_train_dev)
-dev_tree_list.set_possible_category_id(possible_category_dict_for_train_dev)
-train_tree_list.set_info_for_training(possible_category_dict_for_train_dev)
-dev_tree_list.set_info_for_training(possible_category_dict_for_train_dev)
-
+    train_tree_list.category_vocab,
+    device=device)
+test_tree_list.clean_tree_list()
+train_tree_list.set_info_for_training()
+test_tree_list.set_info_for_training()
 tree_net = Tree_Net(train_tree_list, condition.embedding_dim)
 tree_net = torch.load(condition.path_to_model, map_location=torch.device('cpu'))
 tree_net.eval()
 
-tree_net.set_info_for_visualization(dev_tree_list)
+print('caluclating vectors...')
+embedding = tree_net.embedding
 
-# reset random seed for t-SNE
+test_tree_list.tree_list = test_tree_list.tree_list[:500]
+with torch.no_grad():
+    for tree in test_tree_list.tree_list:
+        for node in tree.node_list:
+            if node.is_leaf:
+                node.vector = torch.squeeze(embedding(torch.tensor(node.content_id)))
+                node.vector = node.vector / torch.norm(node.vector)
+
+    for tree in test_tree_list.tree_list:
+        for composition_info in tree.composition_info:
+            num_child = composition_info[0]
+            parent_node = tree.node_list[composition_info[1]]
+            if num_child == 1:
+                child_node = tree.node_list[composition_info[2]]
+                parent_node.vector = child_node.vector
+            else:
+                left_node = tree.node_list[composition_info[2]]
+                right_node = tree.node_list[composition_info[3]]
+                parent_node.vector = single_circular_correlation(
+                    left_node.vector, right_node.vector)
+
+counter = Counter()
+vector_list = []
+leaf_vector_idx = []
+phrase_vector_idx = []
+idx = 0
+for tree in test_tree_list.tree_list:
+    for node in tree.node_list:
+        if counter[tuple(node.content_id)] == 0:
+            counter[tuple(node.content_id)] += 1
+            vector_list.append(node.vector.detach().numpy())
+            if node.is_leaf:
+                leaf_vector_idx.append(idx)
+            else:
+                phrase_vector_idx.append(idx)
+            idx += 1
 set_random_seed(0)
 
 print("t-SNE working.....")
-tsne = TSNE()
+tsne = TSNE(learning_rate=10, n_iter=1000)
 embedded = tsne.fit_transform(vector_list)
-
-fig0 = plt.figure(figsize=(10, 10))
-ax0 = fig0.add_subplot()
-visualize(
-    ax=ax0,
-    embedded=embedded,
-    visualize_tree_list=visualize_tree_list,
-    content_info_dict=copy.deepcopy(content_info_dict),
-    group_list=group_list,
-    color_list=color_list,
-    fig_name=fig_name,
-    WITH_ARROW=WITH_ARROW)
-if not WITH_ARROW:
-    fig0.savefig(
-        path_to_map,
-        dpi=300,
-        orientation='portrait',
-        transparent=False,
-        pad_inches=0.0)
-
-fig1 = plt.figure(figsize=(10, 10))
-interactive_visualize(
-    fig=fig1,
-    embedded=embedded,
-    visualize_tree_list=visualize_tree_list,
-    content_info_dict=copy.deepcopy(content_info_dict),
-    group_list=group_list,
-    color_list=color_list,
-    fig_name=fig_name)
+plt.scatter(embedded[leaf_vector_idx][:, 0], embedded[leaf_vector_idx][:, 1], s=10, c='r')
+plt.scatter(embedded[phrase_vector_idx][:, 0], embedded[phrase_vector_idx][:, 1], s=10, c='b')
+# plt.scatter(embedded[:, 0], embedded[:, 1], s=10)
 plt.show()
