@@ -217,8 +217,6 @@ tree_net.eval()
 
 print('caluclating vectors...')
 embedding = tree_net.embedding
-
-test_tree_list.tree_list = test_tree_list.tree_list[:500]
 with torch.no_grad():
     for tree in test_tree_list.tree_list:
         for node in tree.node_list:
@@ -245,6 +243,7 @@ leaf_vector_idx = []
 phrase_vector_idx = []
 n_vector_idx = []
 np_vector_idx = []
+s_vector_idx = []
 idx = 0
 for tree in test_tree_list.tree_list:
     for node in tree.node_list:
@@ -255,6 +254,8 @@ for tree in test_tree_list.tree_list:
                 n_vector_idx.append(idx)
             elif node.category == 'NP':
                 np_vector_idx.append(idx)
+            elif 'S' in node.category and '/' not in node.category and '\\' not in node.category:
+                s_vector_idx.append(idx)
             else:
                 if node.is_leaf:
                     leaf_vector_idx.append(idx)
@@ -264,14 +265,19 @@ for tree in test_tree_list.tree_list:
 set_random_seed(0)
 
 print("t-SNE working.....")
-tsne = TSNE(learning_rate=10, n_iter=1000)
+tsne = TSNE()
 embedded = tsne.fit_transform(vector_list)
-plt.scatter(embedded[n_vector_idx][:, 0], embedded[n_vector_idx][:, 1], s=10, c='r', label='N')
-plt.scatter(embedded[np_vector_idx][:, 0], embedded[np_vector_idx][:, 1], s=10, c='g', label='NP')
-plt.scatter(embedded[leaf_vector_idx][:, 0], embedded[leaf_vector_idx]
-            [:, 1], s=10, c='b', label='word')
-plt.scatter(embedded[phrase_vector_idx][:, 0], embedded[phrase_vector_idx]
-            [:, 1], s=10, c='k', label='phrase')
-plt.legend()
-# plt.scatter(embedded[:, 0], embedded[:, 1], s=10)
+fig = plt.figure(figsize=(10, 10))
+ax = fig.add_subplot()
+ax.scatter(embedded[n_vector_idx][:, 0], embedded[n_vector_idx][:, 1], s=5, c='r', label='N')
+ax.scatter(embedded[np_vector_idx][:, 0], embedded[np_vector_idx][:, 1], s=5, c='g', label='NP')
+ax.scatter(embedded[s_vector_idx][:, 0], embedded[s_vector_idx][:, 1], s=5, c='b', label='S')
+ax.scatter(embedded[leaf_vector_idx][:, 0], embedded[leaf_vector_idx]
+           [:, 1], s=5, c='y', label='Word')
+ax.scatter(embedded[phrase_vector_idx][:, 0], embedded[phrase_vector_idx]
+           [:, 1], s=5, c='k', label='Phrase')
+ax.legend(fontsize='large')
+plt.xticks(fontsize='large')
+plt.yticks(fontsize='large')
+fig.savefig('100d_test.png')
 plt.show()
