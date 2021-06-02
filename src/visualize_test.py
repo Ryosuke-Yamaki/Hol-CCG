@@ -1,3 +1,4 @@
+from sklearn.decomposition import PCA
 from collections import Counter
 from threading import Condition
 import torch
@@ -237,47 +238,117 @@ with torch.no_grad():
                 parent_node.vector = single_circular_correlation(
                     left_node.vector, right_node.vector)
 
+with_idx = train_tree_list.content_vocab['with']
+for tree in test_tree_list.tree_list:
+    for node in tree.node_list:
+        if with_idx in node.content_id and len(node.content_id) <= 3:
+            content = []
+            for content_id in node.content_id:
+                content.append(train_tree_list.content_vocab.itos[content_id])
+            print(' '.join(content))
+            print(node.category)
+
 counter = Counter()
 vector_list = []
-leaf_vector_idx = []
-phrase_vector_idx = []
-n_vector_idx = []
-np_vector_idx = []
-s_vector_idx = []
+# leaf_vector_idx = []
+# phrase_vector_idx = []
+# n_vector_idx = []
+# np_vector_idx = []
+# s_vector_idx = []
+# leaf_mean = []
+# phrase_mean = []
+# n_mean = []
+# np_mean = []
+# s_mean = []
+
+vis_dict = {}
+vis_dict['N'] = []
+vis_dict['NP'] = []
+vis_dict['Word'] = []
+vis_dict['Phrase'] = []
 idx = 0
+# test_tree_list.tree_list = test_tree_list.tree_list[:30]
 for tree in test_tree_list.tree_list:
     for node in tree.node_list:
         if counter[tuple(node.content_id)] == 0:
             counter[tuple(node.content_id)] += 1
             vector_list.append(node.vector.detach().numpy())
             if node.category == 'N':
-                n_vector_idx.append(idx)
+                vis_dict['N'].append(idx)
+                # n_vector_idx.append(idx)
+                # n_mean.append(torch.mean(node.vector).item())
             elif node.category == 'NP':
-                np_vector_idx.append(idx)
+                vis_dict['NP'].append(idx)
+                # np_vector_idx.append(idx)
+                # np_mean.append(torch.mean(node.vector).item())
             elif 'S' in node.category and '/' not in node.category and '\\' not in node.category:
-                s_vector_idx.append(idx)
+                if node.category in vis_dict:
+                    vis_dict[node.category].append(idx)
+                else:
+                    vis_dict[node.category] = [idx]
+                # s_mean.append(torch.mean(node.vector).item())
             else:
                 if node.is_leaf:
-                    leaf_vector_idx.append(idx)
+                    vis_dict['Word'].append(idx)
+                    # leaf_vector_idx.append(idx)
+                    # leaf_mean.append(torch.mean(node.vector).item())
                 else:
-                    phrase_vector_idx.append(idx)
+                    vis_dict['Phrase'].append(idx)
+                    # phrase_vector_idx.append(idx)
+                    # phrase_mean.append(torch.mean(node.vector).item())
             idx += 1
+
+# print(sum(n_mean) / len(n_mean))
+# print(sum(np_mean) / len(np_mean))
+# print(sum(s_mean) / len(s_mean))
+# print(sum(leaf_mean) / len(leaf_mean))
+# print(sum(phrase_mean) / len(phrase_mean))
+
+# print(np.std(n_mean))
+# print(np.std(np_mean))
+# print(np.std(s_mean))
+# print(np.std(leaf_mean))
+# print(np.std(phrase_mean))
+
 set_random_seed(0)
 
 print("t-SNE working.....")
-tsne = TSNE()
-embedded = tsne.fit_transform(vector_list)
+tsne = TSNE(n_components=2)
+pca = PCA(n_components=2)
+# embedded = tsne.fit_transform(vector_list)
+embedded = pca.fit_transform(vector_list)
 fig = plt.figure(figsize=(10, 10))
+# ax = fig.add_subplot(projection='3d')
 ax = fig.add_subplot()
-ax.scatter(embedded[n_vector_idx][:, 0], embedded[n_vector_idx][:, 1], s=5, c='r', label='N')
-ax.scatter(embedded[np_vector_idx][:, 0], embedded[np_vector_idx][:, 1], s=5, c='g', label='NP')
-ax.scatter(embedded[s_vector_idx][:, 0], embedded[s_vector_idx][:, 1], s=5, c='b', label='S')
-ax.scatter(embedded[leaf_vector_idx][:, 0], embedded[leaf_vector_idx]
-           [:, 1], s=5, c='y', label='Word')
-ax.scatter(embedded[phrase_vector_idx][:, 0], embedded[phrase_vector_idx]
-           [:, 1], s=5, c='k', label='Phrase')
+
+for k, v in vis_dict.items():
+    if k != 'Phrase':
+        ax.scatter(embedded[v][:, 0], embedded[v][:, 1], s=5, label=k)
+# ax.scatter(embedded[n_vector_idx][:, 0], embedded[n_vector_idx][:, 1],
+#            embedded[n_vector_idx][:, 2], s=5, c='r', label='N')
+# ax.scatter(embedded[np_vector_idx][:, 0], embedded[np_vector_idx][:, 1],
+#            embedded[np_vector_idx][:, 2], s=5, c='g', label='NP')
+# ax.scatter(embedded[s_vector_idx][:, 0], embedded[s_vector_idx][:, 1],
+#            embedded[s_vector_idx][:, 2], s=5, c='b', label='S')
+# ax.scatter(embedded[leaf_vector_idx][:, 0], embedded[leaf_vector_idx][:, 1],
+#            embedded[leaf_vector_idx][:, 2], s=5, c='y', label='Word')
+# ax.scatter(embedded[phrase_vector_idx][:, 0], embedded[phrase_vector_idx][:, 1],
+#            embedded[phrase_vector_idx][:, 2], s=5, c='k', label='Phrase')
+
+# ax = fig.add_subplot()
+# ax.scatter(embedded[n_vector_idx][:, 0], embedded[n_vector_idx][:, 1],
+#            s=5, label='N')
+# ax.scatter(embedded[np_vector_idx][:, 0], embedded[np_vector_idx][:, 1],
+#            s=5, label='NP')
+# ax.scatter(embedded[s_vector_idx][:, 0], embedded[s_vector_idx][:, 1],
+#            s=5, label='S')
+# ax.scatter(embedded[leaf_vector_idx][:, 0], embedded[leaf_vector_idx][:, 1],
+#            s=5, label='Word')
+# ax.scatter(embedded[phrase_vector_idx][:, 0], embedded[phrase_vector_idx][:, 1],
+#            s=5, label='Phrase')
 ax.legend(fontsize='large')
 plt.xticks(fontsize='large')
 plt.yticks(fontsize='large')
-fig.savefig('100d_test.png')
+plt.show()
+fig.savefig('detailed_S_test.png')
 plt.show()

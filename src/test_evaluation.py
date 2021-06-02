@@ -1,7 +1,6 @@
 import torch
-import torch.nn as nn
 from models import Tree_List, Tree_Net
-from utils import single_circular_correlation, load_weight_matrix, set_random_seed, Condition_Setter, History
+from utils import single_circular_correlation, load_weight_matrix, set_random_seed, Condition_Setter
 
 PATH_TO_DIR = "/home/yryosuke0519/"
 condition = Condition_Setter(PATH_TO_DIR)
@@ -43,13 +42,6 @@ tree_net = torch.load(condition.path_to_model,
                       map_location=torch.device('cpu'))
 tree_net.eval()
 
-criteria = nn.CrossEntropyLoss()
-test_history = History(tree_net, test_tree_list, criteria, THRESHOLD)
-
-batch_list = test_tree_list.make_batch(BATCH_SIZE)
-test_history.validation(batch_list)
-test_history.print_current_stat('test')
-
 # caluclate leaf accuracy and phrase accuracy
 embedding = tree_net.embedding
 fc = tree_net.linear
@@ -77,10 +69,11 @@ num_leaf = 0
 num_correct_phrase = 0
 num_phrase = 0
 num_node = 0
+k = 1
 for tree in test_tree_list.tree_list:
     for node in tree.node_list:
         output = fc(node.vector)
-        predict = torch.topk(output, k=5)[1]
+        predict = torch.topk(output, k=k)[1]
         if node.is_leaf:
             if node.category_id in predict:
                 num_correct_leaf += 1
