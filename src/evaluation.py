@@ -1,9 +1,9 @@
-import time
+import os
 import torch
 from models import Tree_List, Tree_Net
 from utils import set_random_seed, Condition_Setter
 
-PATH_TO_DIR = "/home/yryosuke0519/"
+PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
 condition = Condition_Setter(PATH_TO_DIR)
 
 device = torch.device('cpu')
@@ -25,9 +25,4 @@ tree_net = torch.load(condition.path_to_model,
                       map_location=torch.device('cpu'))
 tree_net.eval()
 
-start = time.time()
-tree_net.evaluate(train_tree_list)
-print(time.time() - start)
-start = time.time()
 tree_net.evaluate(test_tree_list)
-print(time.time())
