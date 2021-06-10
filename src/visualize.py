@@ -1,6 +1,9 @@
+from sklearn.decomposition import PCA
+from collections import Counter
+import os
 import torch
 import matplotlib.pyplot as plt
-from utils import set_random_seed
+from utils import set_random_seed, Condition_Setter
 from models import Tree_List, Tree_Net
 from sklearn.manifold import TSNE
 import copy
@@ -192,169 +195,82 @@ def judge_in_same_group(category_id_list, group_list):
     return SAME_GROUP, group_num_temp_0
 
 
-if int(input("random(0) or GloVe(1): ")) == 1:
-    FROM_RANDOM = False
-else:
-    FROM_RANDOM = True
-if int(input("reg(0) or not_reg(1): ")) == 1:
-    REGULARIZED = False
-else:
-    REGULARIZED = True
-if int(input("normal_loss(0) or original_loss(1): ")) == 1:
-    USE_ORIGINAL_LOSS = True
-else:
-    USE_ORIGINAL_LOSS = False
-embedding_dim = input("embedding_dim(default=100d): ")
-if embedding_dim != "":
-    embedding_dim = int(embedding_dim)
-else:
-    embedding_dim = 100
-target_tree_id = input("target tree id(default=all): ")
-if target_tree_id != "":
-    target_tree_id = [int(x) for x in target_tree_id.split(",")]
-else:
-    target_tree_id = None
-if int(input("without arrow(0) or with arrow(1): ")) == 1:
-    WITH_ARROW = True
-else:
-    WITH_ARROW = False
+PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
+condition = Condition_Setter(PATH_TO_DIR)
+method = int(input('t-SNE(0) or PCA(1): '))
+visualize_dim = int(input('2d(2) or 3d(3): '))
 
-PATH_TO_DIR = "/home/yryosuke0519/"
-PATH_TO_DATA = PATH_TO_DIR + "Hol-CCG/data/train.txt"
-PATH_TO_WEIGHT_MATRIX = PATH_TO_DIR + "Hol-CCG/data/pretrained_weight_matrix.csv"
+device = torch.device('cpu')
 
-path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"
-path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
-path_to_map = PATH_TO_DIR + "Hol-CCG/result/fig/"
-path_list = [
-    path_to_initial_weight_matrix,
-    path_to_model,
-    path_to_map]
-
-for i in range(len(path_list)):
-    if FROM_RANDOM:
-        path_list[i] += "random"
-    else:
-        path_list[i] += "GloVe"
-    if REGULARIZED:
-        path_list[i] += "_reg"
-    else:
-        path_list[i] += "_not_reg"
-    if USE_ORIGINAL_LOSS:
-        path_list[i] += "_original_loss"
-    path_list[i] += "_" + str(embedding_dim) + "d"
-path_to_initial_weight_matrix = path_list[0] + "_initial_weight_matrix.csv"
-path_to_model = path_list[1] + "_model.pth"
-path_to_map = path_list[2] + "_map.png"
-
-tree_list = Tree_List(PATH_TO_DATA, REGULARIZED)
-if target_tree_id is None:
-    visualize_tree_list = tree_list.tree_list
-else:
-    visualize_tree_list = []
-    for tree_id in target_tree_id:
-        visualize_tree_list.append(tree_list.tree_list[tree_id])
-
-tree_net = Tree_Net(tree_list, embedding_dim)
-tree_net = torch.load(path_to_model)
-tree_net.eval()
-trained_weight_matrix = tree_net.embedding.weight
-
-if FROM_RANDOM:
-    fig_name = "random"
-else:
-    fig_name = "GloVe"
-if REGULARIZED:
-    fig_name += " reg"
-else:
-    fig_name += " not reg"
-if USE_ORIGINAL_LOSS:
-    fig_name += " original loss"
-fig_name += " " + str(embedding_dim) + "d"
-
-group_list = []
-group_list.append([1])  # N
-group_list.append([4])  # NP
-group_list.append([6])  # S
-group_list.append([0, 13])  # left node, become NP
-group_list.append([11, 16])  # right node, become NP
-group_list.append([14])  # left node, become S
-group_list.append([5])  # right node, become S
-group_list.append([10, 20, 23, 15, 17])  # left node, become (NP\N) or (NP\NP)
-group_list.append([24, 25])  # left node, become(NP/N)
-group_list.append([2, 3, 7, 22])  # left node, become (S\NP)
-group_list.append([9])  # right node, become (S\NP)
-group_list.append([8, 19, 21, 26])  # left node, become ((S\NP)\(S\NP))
-group_list.append([18])  # right node, become ((S\NP)\(S\NP))
-group_list.append([12, 27])  # left node, become ((S\\NP) / (S\\NP)) or ((S\\NP) / NP)
-
-# group_list = []
-# group_list.append([1, 4])  # 1 名詞・名詞句
-# group_list.append([6])  # 2 文
-# group_list.append([0, 13])  # 3 冠詞・形容詞的な働きをする名詞
-# group_list.append([10, 15, 17, 20, 23])  # 4 名詞にかかる前置詞
-# group_list.append([8, 21])  # 5 動詞句にかかる前置詞
-# group_list.append([3, 7, 12, 22, 27])  # 6 他動詞
-# group_list.append([5])  # 7 自動詞
-# group_list.append([2])  # 8 助動詞・受動態のbe動詞
-# group_list.append([14])  # 9 疑問詞
-# group_list.append([11, 16, 24])  # 10 名詞句を修飾
-# group_list.append([9, 18, 25])  # 11 動詞句を修飾
-# group_list.append([19])  # 12 to不定詞
-# group_list.append([26])  # 13 接続詞
-
-color_list = [
-    'black',
-    'gray',
-    'lightcoral',
-    'red',
-    'saddlebrown',
-    'orange',
-    'yellow',
-    'yellowgreen',
-    'forestgreen',
-    'turquoise',
-    'deepskyblue',
-    'blue',
-    'darkviolet',
-    'magenta']
-
-# reset random seed for t-SNE
 set_random_seed(0)
+print('loading tree list...')
+train_tree_list = Tree_List(condition.path_to_train_data, device=device)
+test_tree_list = Tree_List(
+    condition.path_to_test_data,
+    train_tree_list.content_vocab,
+    train_tree_list.category_vocab,
+    device=device)
+test_tree_list.clean_tree_list()
 
-# make the map of trained state
-vector_list, content_info_dict = tree_list.prepare_info_for_visualization(
-    trained_weight_matrix)
-print("t-SNE working.....")
-tsne = TSNE()
-embedded = tsne.fit_transform(vector_list)
+tree_net = Tree_Net(train_tree_list, condition.embedding_dim).to(device)
+tree_net = torch.load(condition.path_to_model,
+                      map_location=device)
+tree_net.eval()
 
-fig0 = plt.figure(figsize=(10, 10))
-ax0 = fig0.add_subplot()
-visualize(
-    ax=ax0,
-    embedded=embedded,
-    visualize_tree_list=visualize_tree_list,
-    content_info_dict=copy.deepcopy(content_info_dict),
-    group_list=group_list,
-    color_list=color_list,
-    fig_name=fig_name,
-    WITH_ARROW=WITH_ARROW)
-if not WITH_ARROW:
-    fig0.savefig(
-        path_to_map,
-        dpi=300,
-        orientation='portrait',
-        transparent=False,
-        pad_inches=0.0)
+embedding = tree_net.embedding
+test_tree_list.set_vector(embedding)
 
-fig1 = plt.figure(figsize=(10, 10))
-interactive_visualize(
-    fig=fig1,
-    embedded=embedded,
-    visualize_tree_list=visualize_tree_list,
-    content_info_dict=copy.deepcopy(content_info_dict),
-    group_list=group_list,
-    color_list=color_list,
-    fig_name=fig_name)
+vector_list = []
+vis_dict = {}
+vis_dict['N'] = []
+vis_dict['NP'] = []
+vis_dict['S'] = []
+vis_dict['Word'] = []
+vis_dict['Phrase'] = []
+counter = Counter()
+idx = 0
+
+for tree in test_tree_list.tree_list:
+    for node in tree.node_list:
+        if counter[tuple(node.content_id)] == 0:
+            counter[tuple(node.content_id)] += 1
+            vector_list.append(node.vector.detach().numpy()[0])
+            if node.category == 'N':
+                vis_dict['N'].append(idx)
+            elif node.category == 'NP':
+                vis_dict['NP'].append(idx)
+            elif 'S' in node.category and '/' not in node.category and '\\' not in node.category:
+                vis_dict['S'].append(idx)
+            else:
+                if node.is_leaf:
+                    vis_dict['Word'].append(idx)
+                else:
+                    vis_dict['Phrase'].append(idx)
+            idx += 1
+
+if method == 0:
+    method = TSNE(n_components=visualize_dim)
+    path_to_map = condition.path_to_map + "_t-SNE.png"
+    print("t-SNE working.....")
+else:
+    method = PCA(n_components=visualize_dim)
+    path_to_map = condition.path_to_map + "_PCA.png"
+    print("PCA working.....")
+
+embedded = method.fit_transform(vector_list)
+
+fig = plt.figure(figsize=(10, 10))
+if visualize_dim == 2:
+    ax = fig.add_subplot()
+    for k, v in vis_dict.items():
+        ax.scatter(embedded[v][:, 0], embedded[v][:, 1], s=1, label=k)
+    ax.legend(fontsize='large')
+    plt.xticks(fontsize='large')
+    plt.yticks(fontsize='large')
+    fig.savefig(path_to_map)
+elif visualize_dim == 3:
+    ax = fig.add_subplot(projection='3d')
+    for k, v in vis_dict.items():
+        ax.scatter(embedded[v][:, 0], embedded[v][:, 1], embedded[v][:, 2], s=1, label=k)
+    ax.legend(fontsize='large')
 plt.show()

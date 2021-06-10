@@ -204,6 +204,7 @@ class Condition_Setter:
         path_to_train_data_history = PATH_TO_DIR + "Hol-CCG/result/data/"
         path_to_test_data_history = PATH_TO_DIR + "Hol-CCG/result/data/"
         path_to_history_fig = PATH_TO_DIR + "Hol-CCG/result/fig/"
+        path_to_map = PATH_TO_DIR + "Hol-CCG/result/fig/"
         fig_name = ""
         path_list = [
             path_to_initial_weight_matrix,
@@ -211,6 +212,7 @@ class Condition_Setter:
             path_to_train_data_history,
             path_to_test_data_history,
             path_to_history_fig,
+            path_to_map,
             fig_name]
         for i in range(len(path_list)):
             if self.RANDOM:
@@ -228,7 +230,8 @@ class Condition_Setter:
         self.path_to_train_data_history = path_list[2] + "_train_history.csv"
         self.path_to_test_data_history = path_list[3] + "_test_history.csv"
         self.path_to_history_fig = path_list[4] + "_history.png"
-        self.fig_name = path_list[5].replace('_', ' ')
+        self.path_to_map = path_list[5]
+        self.fig_name = path_list[6].replace('_', ' ')
 
     def export_param_list(self, path, roop_count):
         if roop_count == 0:
