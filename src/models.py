@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torchtext.vocab import Vocab
 from operator import itemgetter
-from utils import circular_correlation, generate_random_weight_matrix, make_n_hot_label, single_circular_correlation
+from utils import circular_correlation, generate_random_weight_matrix, single_circular_correlation
 from collections import Counter
 
 
@@ -310,6 +310,26 @@ class Tree_List:
             batch_composition_info,
             batch_label_list))
 
+    def set_vector(self, embedding):
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    node.vector = embedding(torch.tensor(node.content_id))
+                    node.vector = node.vector / torch.norm(node.vector)
+
+        for tree in self.tree_list:
+            for composition_info in tree.composition_info:
+                num_child = composition_info[0]
+                parent_node = tree.node_list[composition_info[1]]
+                if num_child == 1:
+                    child_node = tree.node_list[composition_info[2]]
+                    parent_node.vector = child_node.vector
+                else:
+                    left_node = tree.node_list[composition_info[2]]
+                    right_node = tree.node_list[composition_info[3]]
+                    parent_node.vector = single_circular_correlation(
+                        left_node.vector, right_node.vector)
+
     def clean_tree_list(self):
         cleaned_tree_list = []
         check_bit = 0
@@ -393,20 +413,31 @@ class Tree_Net(nn.Module):
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
 
-    @torch.no_grad()
-    def set_info_for_visualization(self, tree_list, BATCH_SIZE=25):
-        vector_list = []
-        batch_list = tree_list.make_batch(BATCH_SIZE)
-        for batch in batch_list:
-            # the content_id of leaf nodes
-            num_node = batch[0]
-            leaf_content_id = batch[1]
-            content_mask = batch[2]
-            # the composition info of each tree
-            composition_info = batch[3]
-            vector = self.embed_leaf_nodes(
-                num_node, leaf_content_id, content_mask)
-            vector = self.compose(vector, composition_info)
-            n_hot_label, mask = make_n_hot_label(batch[4], self.num_category)
-            vector = vector[torch.nonzero(
-                torch.all(mask, dim=2), as_tuple=True)]
+    def evaluate(self, tree_list):
+        embedding = self.embedding
+        linear = self.linear
+        tree_list.set_vector(embedding)
+
+        # calculate top-1 and top-5 accuracy
+        for k in [1, 5]:
+            num_correct_word = 0
+            num_word = 0
+            num_correct_phrase = 0
+            num_phrase = 0
+            for tree in tree_list.tree_list:
+                for node in tree.node_list:
+                    output = linear(node.vector)
+                    predict = torch.topk(output, k=k)[1]
+                    if node.is_leaf:
+                        if node.category_id in predict:
+                            num_correct_word += 1
+                        num_word += 1
+                    else:
+                        if node.category_id in predict:
+                            num_correct_phrase += 1
+                        num_phrase += 1
+            print('-' * 50)
+            print('overall top-{}: {}'.format(k, (num_correct_word +
+                                                  num_correct_phrase) / (num_word + num_phrase)))
+            print('word top-{}: {}'.format(k, num_correct_word / num_word))
+            print('phrase top-{}: {}'.format(k, num_correct_phrase / num_phrase))

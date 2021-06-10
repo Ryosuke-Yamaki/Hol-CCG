@@ -21,13 +21,6 @@ def single_circular_correlation(a, b):
     return c / (torch.norm(c) + 1e-6)
 
 
-def cc_with_roll(a, b):
-    c = torch.zeros_like(a, requires_grad=False)
-    for i in range(len(b)):
-        c[i] = torch.sum(a * torch.roll(b, -i))
-    return c
-
-
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
     with open(PATH_TO_WEIGHT_MATRIX, 'r') as f:
         reader = csv.reader(f)
@@ -75,39 +68,6 @@ def original_loss(output, label, criteria, tree):
     return loss + norm_loss
 
 
-def make_n_hot_label(batch_label, num_category, device=torch.device('cpu')):
-    max_num_label = max([len(i) for i in batch_label])
-    batch_n_hot_label_list = []
-    for label_list in batch_label:
-        n_hot_label_list = []
-        for label in label_list:
-            n_hot_label = torch.zeros(
-                num_category, dtype=torch.float, device=device)
-            n_hot_label[label] = 1.0
-            n_hot_label_list.append(n_hot_label)
-        batch_n_hot_label_list.append(torch.stack(n_hot_label_list))
-
-    true_mask = [torch.ones((len(i), num_category), dtype=torch.bool, device=device)
-                 for i in batch_n_hot_label_list]
-    false_mask = [
-        torch.zeros(
-            (max_num_label - len(i),
-             num_category),
-            dtype=torch.bool,
-            device=device) for i in batch_n_hot_label_list]
-    mask = torch.stack([torch.cat((i, j))
-                        for (i, j) in zip(true_mask, false_mask)])
-    dummy_label = [
-        torch.zeros(
-            max_num_label - len(i),
-            i.shape[1],
-            dtype=torch.float,
-            device=device) for i in batch_n_hot_label_list]
-    batch_n_hot_label_list = torch.stack([torch.cat((i, j))
-                                          for (i, j) in zip(batch_n_hot_label_list, dummy_label)])
-    return batch_n_hot_label_list, mask
-
-
 def make_label_mask(batch, device=torch.device('cpu')):
     batch_label = batch[4]
     label = torch.tensor(np.squeeze(np.vstack(batch_label)), dtype=torch.long, device=device)
@@ -124,11 +84,10 @@ def make_label_mask(batch, device=torch.device('cpu')):
 
 
 class History:
-    def __init__(self, tree_net, tree_list, criteria, THRESHOLD):
+    def __init__(self, tree_net, tree_list, criteria):
         self.tree_net = tree_net
         self.tree_list = tree_list
         self.criteria = criteria
-        self.THRESHOLD = THRESHOLD
         self.loss_history = np.array([])
         self.acc_history = np.array([])
 
@@ -226,12 +185,6 @@ class Condition_Setter:
             self.RANDOM = True
             self.param_list.append('random')
         self.REGULARIZED = True
-        # if int(input("reg(0) or not_reg(1): ")) == 1:
-        #     self.REGULARIZED = False
-        #     self.param_list.append('not_reg')
-        # else:
-        #     self.REGULARIZED = True
-        #     self.param_list.append('reg')
         embedding_dim = input("embedding_dim(default=100d): ")
         if embedding_dim != "":
             self.embedding_dim = int(embedding_dim)
