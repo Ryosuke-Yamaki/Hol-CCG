@@ -250,16 +250,6 @@ for tree in test_tree_list.tree_list:
 
 counter = Counter()
 vector_list = []
-# leaf_vector_idx = []
-# phrase_vector_idx = []
-# n_vector_idx = []
-# np_vector_idx = []
-# s_vector_idx = []
-# leaf_mean = []
-# phrase_mean = []
-# n_mean = []
-# np_mean = []
-# s_mean = []
 
 vis_dict = {}
 vis_dict['N'] = []

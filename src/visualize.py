@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from utils import set_random_seed, Condition_Setter
 from models import Tree_List, Tree_Net
 from sklearn.manifold import TSNE
-import copy
 import numpy as np
 
 
