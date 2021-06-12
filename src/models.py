@@ -105,17 +105,16 @@ class Tree_List:
     def __init__(
             self,
             PATH_TO_DATA,
-            content_vocab=None,
+            content_vocab,
             category_vocab=None,
             device=torch.device('cpu')):
+        self.content_vocab = content_vocab
+        self.category_vocab = category_vocab
         self.device = device
         self.set_tree_list(PATH_TO_DATA)
-        if content_vocab is None and category_vocab is None:
-            self.make_vocab()
-            self.set_content_category_id(
-                self.content_vocab, self.category_vocab)
-        else:
-            self.set_content_category_id(content_vocab, category_vocab)
+        if category_vocab is None:
+            self.make_category_vocab()
+        self.set_content_category_id(self.content_vocab, self.category_vocab)
 
     def set_tree_list(self, PATH_TO_DATA):
         self.tree_list = []
@@ -134,15 +133,11 @@ class Tree_List:
                 node_list = []
                 tree_id += 1
 
-    def make_vocab(self):
-        content_counter = Counter()
+    def make_category_vocab(self):
         category_counter = Counter()
         for tree in self.tree_list:
             for node in tree.node_list:
-                if node.is_leaf:
-                    content_counter[node.content] += 1
                 category_counter[node.category] += 1
-        self.content_vocab = Vocab(content_counter, specials=['<unk>'])
         self.category_vocab = Vocab(category_counter, specials=['<unk>'])
 
     def set_content_category_id(self, content_vocab, category_vocab):
@@ -344,10 +339,10 @@ class Tree_List:
 
 
 class Tree_Net(nn.Module):
-    def __init__(self, tree_list, embedding_dim, initial_weight_matrix=None):
+    def __init__(self, NUM_VOCAB, NUM_CATEGORY, embedding_dim, initial_weight_matrix=None):
         super(Tree_Net, self).__init__()
-        self.num_embedding = len(tree_list.content_vocab)
-        self.num_category = len(tree_list.category_vocab)
+        self.num_embedding = NUM_VOCAB
+        self.num_category = NUM_CATEGORY
         self.embedding_dim = embedding_dim
         if initial_weight_matrix is None:
             initial_weight_matrix = generate_random_weight_matrix(

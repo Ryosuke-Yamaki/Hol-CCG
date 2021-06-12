@@ -1,3 +1,4 @@
+import pickle
 import csv
 import random
 import numpy as np
@@ -81,6 +82,17 @@ def make_label_mask(batch, device=torch.device('cpu')):
     mask = torch.stack([torch.cat((i, j))
                         for (i, j) in zip(true_mask, false_mask)])
     return label, mask
+
+
+def dump(object, path):
+    with open(path, mode='wb') as f:
+        pickle.dump(object, f)
+
+
+def load(path):
+    with open(path, mode='rb') as f:
+        data = pickle.load(f)
+        return data
 
 
 class History:
