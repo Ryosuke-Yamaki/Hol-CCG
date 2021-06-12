@@ -3,6 +3,7 @@ import os
 import torch
 from models import Tree_Net
 from utils import set_random_seed, Condition_Setter
+from utils import load
 
 PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
 condition = Condition_Setter(PATH_TO_DIR)
