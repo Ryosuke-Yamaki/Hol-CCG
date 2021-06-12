@@ -1,36 +1,81 @@
+import pickle
+from collections import Counter
+import torch
 import numpy as np
 import csv
 import gensim.downloader as api
-from models import Tree_List
-
-PATH_TO_DIR = "/home/yryosuke0519/"
-
-embedding_dim = input("embedding_dim(default=100d): ")
-if embedding_dim != "":
-    embedding_dim = int(embedding_dim)
-else:
-    embedding_dim = 100
-PATH_TO_DATA = PATH_TO_DIR + "Hol-CCG/data/train.txt"
-PATH_TO_PRETRAINED_WEIGHT_MATRIX = PATH_TO_DIR + "Hol-CCG/data/glove_{}d.csv".format(embedding_dim)
+from models import Node, Tree
+from utils import Condition_Setter
+import os
 
 
-tree_list = Tree_List(PATH_TO_DATA, True)
+def set_tree_list(PATH_TO_DATA):
+    tree_list = []
+    tree_id = 0
+    node_list = []
+    with open(PATH_TO_DATA, 'r') as f:
+        node_info_list = [node_info.strip() for node_info in f.readlines()]
+    node_info_list = [node_info.replace(
+        '\n', '') for node_info in node_info_list]
+    for node_info in node_info_list:
+        if node_info != '':
+            node = Node(node_info.split())
+            node_list.append(node)
+        elif node_list != []:
+            tree_list.append(Tree(tree_id, node_list))
+            node_list = []
+            tree_id += 1
+    return tree_list
+
+
+PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
+condition = Condition_Setter(PATH_TO_DIR)
+
+PATH_TO_PRETRAINED_WEIGHT_MATRIX = PATH_TO_DIR + \
+    "Hol-CCG/data/glove_{}d.csv".format(condition.embedding_dim)
+path_to_word_counter = PATH_TO_DIR + "Hol-CCG/data/word_counter.pickle"
+
+device = torch.device('cpu')
+path_to_train_data = condition.path_to_train_data
+path_to_dev_data = condition.path_to_dev_data
+path_to_test_data = condition.path_to_test_data
+print('loading tree list...')
+train_tree_list = set_tree_list(path_to_train_data)
+dev_tree_list = set_tree_list(path_to_dev_data)
+test_tree_list = set_tree_list(path_to_test_data)
+
+tree_list = train_tree_list + dev_tree_list + test_tree_list
 print("loading vectors.....")
-glove_vectors = api.load('glove-wiki-gigaword-{}'.format(embedding_dim))
+glove = api.load('glove-wiki-gigaword-{}'.format(condition.embedding_dim))
+
+word_counter = Counter()
 
 weight_matrix = []
-for word in tree_list.content_to_id:
-    if word in glove_vectors.vocab:
-        weight_matrix.append(glove_vectors[word])
-    else:
-        print('{} not in GloVe!'.format(word))
-        weight_matrix.append(
-            np.random.normal(
-                loc=0.0,
-                scale=1 /
-                np.sqrt(embedding_dim),
-                size=embedding_dim))
+num_total_word = 0
+num_not_in_glove = 0
+for tree in tree_list:
+    for node in tree.node_list:
+        if node.is_leaf:
+            if word_counter[node.content] == 0:
+                if node.content in glove.vocab:
+                    weight_matrix.append(glove[node.content])
+                else:
+                    num_not_in_glove += 1
+                    weight_matrix.append(
+                        np.random.normal(
+                            loc=0.0,
+                            scale=1 /
+                            np.sqrt(condition.embedding_dim),
+                            size=condition.embedding_dim))
+                num_total_word += 1
+            word_counter[node.content] += 1
+
+print("not in GloVe: {}/{} = {}".format(num_not_in_glove,
+                                        num_total_word, num_not_in_glove / num_total_word))
 
 with open(PATH_TO_PRETRAINED_WEIGHT_MATRIX, 'w') as f:
     writer = csv.writer(f, lineterminator='\n')
     writer.writerows(weight_matrix)
+
+with open(path_to_word_counter, mode='wb') as f:
+    pickle.dump(word_counter, f)
