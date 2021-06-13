@@ -1,5 +1,7 @@
+from torchtext.vocab import Vocab
 import pickle
 from collections import Counter
+from tokenize import Special
 import torch
 import numpy as np
 import csv
@@ -45,30 +47,39 @@ dev_tree_list = set_tree_list(path_to_dev_data)
 test_tree_list = set_tree_list(path_to_test_data)
 
 tree_list = train_tree_list + dev_tree_list + test_tree_list
+
+word_counter = Counter()
+for tree in tree_list:
+    for node in tree.node_list:
+        if node.is_leaf:
+            word_counter[node.content] += 1
+
+vocab = Vocab(word_counter, specials=[])
+num_word = len(vocab.itos)
+weight_matrix = np.zeros((num_word, condition.embedding_dim))
+
 print("loading vectors.....")
 glove = api.load('glove-wiki-gigaword-{}'.format(condition.embedding_dim))
 
-word_counter = Counter()
-
-weight_matrix = []
+content_id_list = []
 num_total_word = 0
 num_not_in_glove = 0
 for tree in tree_list:
     for node in tree.node_list:
         if node.is_leaf:
-            if word_counter[node.content] == 0:
+            if vocab[node.content] not in content_id_list:
                 if node.content in glove.vocab:
-                    weight_matrix.append(glove[node.content])
+                    weight_matrix[vocab[node.content]] = glove[node.content]
                 else:
                     num_not_in_glove += 1
-                    weight_matrix.append(
+                    weight_matrix[vocab[node.content]] =\
                         np.random.normal(
-                            loc=0.0,
-                            scale=1 /
-                            np.sqrt(condition.embedding_dim),
-                            size=condition.embedding_dim))
+                        loc=0.0,
+                        scale=1 /
+                        np.sqrt(condition.embedding_dim),
+                        size=condition.embedding_dim)
+                content_id_list.append(vocab[node.content])
                 num_total_word += 1
-            word_counter[node.content] += 1
 
 print("not in GloVe: {}/{} = {}".format(num_not_in_glove,
                                         num_total_word, num_not_in_glove / num_total_word))
