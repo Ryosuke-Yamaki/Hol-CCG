@@ -1,6 +1,5 @@
 import csv
 from collections import Counter
-import numpy as np
 from utils import load
 import os
 import torch
@@ -54,12 +53,9 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.embedding_dim = embedding_dim
         self.linear1 = nn.Linear(self.embedding_dim, self.embedding_dim)
-        self.linear2 = nn.Linear(self.embedding_dim, self.embedding_dim)
-        self.tanh = nn.Tanh()
 
     def forward(self, batch):
         batch = self.tanh(self.linear1(batch))
-        batch = self.tanh(self.linear2(batch))
         return batch
 
 
@@ -70,21 +66,12 @@ set_random_seed(0)
 
 print('loading tree list...')
 train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
-dev_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/dev_tree_list.pickle")
-test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
 counter = Counter()
 for tree in train_tree_list.tree_list:
     for node in tree.node_list:
         if node.is_leaf:
             counter[node.content] += 1
-
-unk_counter = Counter()
-for tree in dev_tree_list.tree_list + test_tree_list.tree_list:
-    for node in tree.node_list:
-        if node.is_leaf and counter[node.content] == 0:
-            unk_counter[node.content] += 1
-
 
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -96,8 +83,8 @@ initial_weight_matrix = torch.tensor(load_weight_matrix(
 
 EPOCHS = 100
 BATCH_SIZE = 25
-NUM_VOCAB = len(test_tree_list.content_vocab)
-NUM_CATEGORY = len(test_tree_list.category_vocab)
+NUM_VOCAB = len(train_tree_list.content_vocab)
+NUM_CATEGORY = len(train_tree_list.category_vocab)
 tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY,
                     condition.embedding_dim).to(device)
 tree_net = torch.load(condition.path_to_model,
@@ -143,6 +130,7 @@ for epoch in range(1, EPOCHS):
 torch.save(model, PATH_TO_DIR +
            "Hol-CCG/result/model/{}d_projection.pth".format(condition.embedding_dim))
 
+num_vocab_in_train = len(counter)
 trained_embeddings_of_train = trained_weight_matrix[:num_vocab_in_train]
 initial_embeddings_of_dev_test = initial_weight_matrix[num_vocab_in_train:]
 # predict projected vector from initial state of vector of unknown words
