@@ -104,10 +104,12 @@ trained_embeddings_of_train = trained_weight_matrix[:num_vocab_in_train]
 initial_embeddings_of_dev_test = initial_weight_matrix[num_vocab_in_train:]
 # predict projected vector from initial state of vector of unknown words
 trained_embeddings_of_dev_test = model(initial_embeddings_of_dev_test)
+trained_embeddings_of_dev_test = trained_embeddings_of_dev_test / \
+    (trained_embeddings_of_dev_test.norm(dim=1, keepdim=True)+1e-6)
 trained_weight_matrix = torch.cat(
     [trained_embeddings_of_train, trained_embeddings_of_dev_test])
 trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
 
-with open(PATH_TO_DIR + "Hol-CCG/result/data/weight_matrix_with_projection_learning.csv", 'w') as f:
+with open(PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim), 'w') as f:
     writer = csv.writer(f, lineterminator='\n')
     writer.writerows(trained_weight_matrix)
