@@ -17,14 +17,13 @@ initial_weight_matrix = load_weight_matrix(
 trained_weight_matrix = load_weight_matrix(
     PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim))
 
-for initial_weight_matrix
-pca = PCA()
+pca = PCA(n_components=2)
 print("PCA working...")
 fig = plt.figure(figsize=(20, 10))
 ax1 = fig.add_subplot(1, 2, 1)
 ax2 = fig.add_subplot(1, 2, 2)
 embedded = pca.fit_transform(initial_weight_matrix)
-ax1.scatter(embedded[0], embedded[1])
+ax1.scatter(embedded[:, 0], embedded[:, 1], s=1)
 embedded = pca.fit_transform(trained_weight_matrix)
-ax2.scatter(embedded[0], embedded[1])
+ax2.scatter(embedded[:, 0], embedded[:, 1], s=1)
 plt.show()
