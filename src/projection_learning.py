@@ -27,35 +27,9 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.embedding_dim = embedding_dim
         self.linear1 = nn.Linear(self.embedding_dim, self.embedding_dim)
-        self.linear2 = nn.Linear(self.embedding_dim, self.embedding_dim)
-        self.tanh = nn.Tanh()
 
     def forward(self, batch):
-        batch = self.tanh(self.linear1(batch))
-        batch = self.tanh(self.linear2(batch))
-        return batch
-
-
-class DataSet:
-    def __init__(self, input, output):
-        self.input = input
-        self.output = output
-
-    def __len__(self):
-        return self.input.shape[0]
-
-    def __getitem__(self, idx):
-        return self.input[idx], self.output[idx]
-
-
-class Net(nn.Module):
-    def __init__(self, embedding_dim):
-        super(Net, self).__init__()
-        self.embedding_dim = embedding_dim
-        self.linear1 = nn.Linear(self.embedding_dim, self.embedding_dim)
-
-    def forward(self, batch):
-        batch = self.tanh(self.linear1(batch))
+        batch = self.linear1(batch)
         return batch
 
 
@@ -81,7 +55,7 @@ else:
 initial_weight_matrix = torch.tensor(load_weight_matrix(
     condition.path_to_pretrained_weight_matrix), device=device)
 
-EPOCHS = 100
+EPOCHS = 10
 BATCH_SIZE = 25
 NUM_VOCAB = len(train_tree_list.content_vocab)
 NUM_CATEGORY = len(train_tree_list.category_vocab)
@@ -92,15 +66,17 @@ tree_net = torch.load(condition.path_to_model,
 tree_net.eval()
 trained_weight_matrix = tree_net.embedding.weight
 
+# normalize the norm of embedding vector
 initial_weight_matrix = initial_weight_matrix / \
     initial_weight_matrix.norm(dim=1, keepdim=True)
 trained_weight_matrix = trained_weight_matrix / \
     initial_weight_matrix.norm(dim=1, keepdim=True)
 
+num_vocab_in_train = len(counter)
 
 model = Net(condition.embedding_dim)
-
-dataset = DataSet(initial_weight_matrix, trained_weight_matrix)
+dataset = DataSet(
+    initial_weight_matrix[:num_vocab_in_train], trained_weight_matrix[:num_vocab_in_train])
 dataloader = torch.utils.data.DataLoader(
     dataset,
     batch_size=BATCH_SIZE,
@@ -130,7 +106,6 @@ for epoch in range(1, EPOCHS):
 torch.save(model, PATH_TO_DIR +
            "Hol-CCG/result/model/{}d_projection.pth".format(condition.embedding_dim))
 
-num_vocab_in_train = len(counter)
 trained_embeddings_of_train = trained_weight_matrix[:num_vocab_in_train]
 initial_embeddings_of_dev_test = initial_weight_matrix[num_vocab_in_train:]
 # predict projected vector from initial state of vector of unknown words
