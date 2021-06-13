@@ -1,7 +1,6 @@
 from torchtext.vocab import Vocab
 import pickle
 from collections import Counter
-from tokenize import Special
 import torch
 import numpy as np
 import csv
