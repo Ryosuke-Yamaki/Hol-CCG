@@ -1,17 +1,48 @@
-from tqdm import tqdm
-from utils import load_weight_matrix, set_random_seed, Condition_Setter
-from models import Tree_Net
-import torch.optim as optim
-import torch.nn as nn
-import torch
-import os
-from utils import load
-import numpy as np
-from collections import Counter
 import csv
+from collections import Counter
+import numpy as np
+from utils import load
+import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from models import Tree_Net
+from utils import load_weight_matrix, set_random_seed, Condition_Setter
+from tqdm import tqdm
+<< << << < HEAD
 << << << < HEAD
 == == == =
 >>>>>> > 4c561bc... projection learning.py
+
+
+class DataSet:
+    def __init__(self, input, output):
+        self.input = input
+        self.output = output
+
+    def __len__(self):
+        return self.input.shape[0]
+
+    def __getitem__(self, idx):
+        return self.input[idx], self.output[idx]
+
+
+class Net(nn.Module):
+    def __init__(self, embedding_dim):
+        super(Net, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.linear1 = nn.Linear(self.embedding_dim, self.embedding_dim)
+        self.linear2 = nn.Linear(self.embedding_dim, self.embedding_dim)
+        self.tanh = nn.Tanh()
+
+    def forward(self, batch):
+        batch = self.tanh(self.linear1(batch))
+        batch = self.tanh(self.linear2(batch))
+        return batch
+
+
+== == == =
+>>>>>> > 4c561bca62d07fd163e291767f577055ac6e7586
 
 
 class DataSet:
@@ -117,6 +148,7 @@ for epoch in range(1, EPOCHS):
             pbar.set_postfix({"loss": epoch_loss / num_batch})
             pbar.update(1)
 
+<< << << < HEAD
 torch.save(model, PATH_TO_DIR +
            "Hol-CCG/result/model/{}d_projection.pth".format(condition.embedding_dim))
 
@@ -133,3 +165,18 @@ trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
 with open(PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim), 'w') as f:
     writer = csv.writer(f, lineterminator='\n')
     writer.writerows(trained_weight_matrix)
+== == == =
+dataloader = torch.utils.data.DataLoader(
+    dataset,
+    batch_size=1,
+    shuffle=False,
+    drop_last=False)
+
+cos = nn.CosineSimilarity()
+
+for data in dataloader:
+    input = data[0]
+    target = data[1]
+    output = model(input)
+    print(cos(output, target))
+>>>>>> > 4c561bca62d07fd163e291767f577055ac6e7586
