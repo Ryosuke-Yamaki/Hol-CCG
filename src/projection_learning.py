@@ -40,12 +40,21 @@ set_random_seed(0)
 
 print('loading tree list...')
 train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
+dev_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/dev_tree_list.pickle")
+test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
-counter = Counter()
+content_id_in_train = []
 for tree in train_tree_list.tree_list:
     for node in tree.node_list:
         if node.is_leaf:
-            counter[node.content] += 1
+            content_id_in_train.append(node.content_id[0])
+content_id_in_train = list(set(content_id_in_train))
+unk_content_id = []
+for tree in dev_tree_list.tree_list+test_tree_list.tree_list:
+    for node in tree.node_list:
+        if node.is_leaf and node.content_id[0] not in content_id_in_train:
+            unk_content_id.append(node.content_id[0])
+unk_content_id = list(set(unk_content_id))
 
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -66,17 +75,25 @@ tree_net = torch.load(condition.path_to_model,
 tree_net.eval()
 trained_weight_matrix = tree_net.embedding.weight
 
-# # normalize the norm of embedding vector
-# initial_weight_matrix = initial_weight_matrix / \
-#     initial_weight_matrix.norm(dim=1, keepdim=True)
-# trained_weight_matrix = trained_weight_matrix / \
-#     initial_weight_matrix.norm(dim=1, keepdim=True)
+initial_weight_of_train = []
+trained_weight_of_train = []
 
-num_vocab_in_train = len(counter)
+for content_id in content_id_in_train:
+    initial_weight_of_train.append(initial_weight_matrix[content_id])
+    trained_weight_of_train.append(trained_weight_matrix[content_id])
+
+initial_weight_of_unk = []
+for content_id in unk_content_id:
+    initial_weight_of_unk.append(initial_weight_matrix[content_id])
+
+
+initial_weight_of_train = torch.stack(initial_weight_of_train, device=device)
+trained_weight_of_train = torch.stack(trained_weight_of_train, device=device)
+initial_weight_of_unk = torch.stack(initial_weight_of_unk, device=device)
 
 model = Net(condition.embedding_dim).to(device)
 dataset = DataSet(
-    initial_weight_matrix[:num_vocab_in_train], trained_weight_matrix[:num_vocab_in_train])
+    initial_weight_of_train, trained_weight_of_train)
 dataloader = torch.utils.data.DataLoader(
     dataset,
     batch_size=BATCH_SIZE,
@@ -106,12 +123,9 @@ for epoch in range(1, EPOCHS + 1):
 torch.save(model, PATH_TO_DIR +
            "Hol-CCG/result/model/{}d_projection.pth".format(condition.embedding_dim))
 
-trained_embeddings_of_train = trained_weight_matrix[:num_vocab_in_train]
-initial_embeddings_of_dev_test = initial_weight_matrix[num_vocab_in_train:]
 # predict projected vector from initial state of vector of unknown words
-trained_embeddings_of_dev_test = model(initial_embeddings_of_dev_test)
-trained_weight_matrix = torch.cat(
-    [trained_embeddings_of_train, trained_embeddings_of_dev_test])
+for content_id, weight in zip(unk_content_id, initial_weight_of_unk):
+    trained_weight_matrix[content_id] = model(weight)
 trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
 
 with open(PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim), 'w') as f:
