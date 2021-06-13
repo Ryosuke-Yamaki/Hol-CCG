@@ -9,7 +9,7 @@ condition = Condition_Setter(PATH_TO_DIR)
 
 path_to_word_counter = PATH_TO_DIR + "Hol-CCG/data/word_counter.pickle"
 word_counter = load(path_to_word_counter)
-content_vocab = Vocab(word_counter, specials=['<unk>'])
+content_vocab = Vocab(word_counter, specials=[])
 
 path_to_train_data = condition.path_to_train_data
 path_to_dev_data = condition.path_to_dev_data

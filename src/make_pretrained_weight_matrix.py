@@ -51,14 +51,8 @@ glove = api.load('glove-wiki-gigaword-{}'.format(condition.embedding_dim))
 word_counter = Counter()
 
 weight_matrix = []
-weight_matrix.append(
-    np.random.normal(
-        loc=0.0,
-        scale=1 /
-        np.sqrt(condition.embedding_dim),
-        size=condition.embedding_dim))
-num_total_word = 1
-num_not_in_glove = 1
+num_total_word = 0
+num_not_in_glove = 0
 for tree in tree_list:
     for node in tree.node_list:
         if node.is_leaf:

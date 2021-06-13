@@ -1,3 +1,5 @@
+from collections import Counter
+import numpy as np
 from utils import load
 import os
 import torch
@@ -37,14 +39,30 @@ class Net(nn.Module):
 PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
 condition = Condition_Setter(PATH_TO_DIR)
 
+set_random_seed(0)
+
+print('loading tree list...')
+train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
+dev_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/dev_tree_list.pickle")
+test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
+
+counter = Counter()
+for tree in train_tree_list.tree_list:
+    for node in tree.node_list:
+        if node.is_leaf:
+            counter[node.content] += 1
+
+unk_counter = Counter()
+for tree in dev_tree_list.tree_list + test_tree_list.tree_list:
+    for node in tree.node_list:
+        if node.is_leaf and counter[node.content] == 0:
+            unk_counter[node.content] += 1
+
+
 if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
-
-set_random_seed(0)
-print('loading tree list...')
-test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
 initial_weight_matrix = torch.tensor(load_weight_matrix(
     condition.path_to_pretrained_weight_matrix), device=device)
@@ -57,11 +75,11 @@ tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY, condition.embedding_dim).to(device)
 tree_net = torch.load(condition.path_to_model,
                       map_location=device)
 tree_net.eval()
-
 trained_weight_matrix = tree_net.embedding.weight
 
 initial_weight_matrix = initial_weight_matrix / initial_weight_matrix.norm(dim=1, keepdim=True)
 trained_weight_matrix = trained_weight_matrix / initial_weight_matrix.norm(dim=1, keepdim=True)
+
 
 model = Net(condition.embedding_dim)
 
@@ -91,3 +109,17 @@ for epoch in range(1, EPOCHS):
             optimizer.step()
             pbar.set_postfix({"loss": epoch_loss / num_batch})
             pbar.update(1)
+
+dataloader = torch.utils.data.DataLoader(
+    dataset,
+    batch_size=1,
+    shuffle=False,
+    drop_last=False)
+
+cos = nn.CosineSimilarity()
+
+for data in dataloader:
+    input = data[0]
+    target = data[1]
+    output = model(input)
+    print(cos(output, target))
