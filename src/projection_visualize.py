@@ -1,7 +1,6 @@
 from utils import load_weight_matrix
 from sklearn.decomposition import PCA
 import os
-import numpy as np
 import matplotlib.pyplot as plt
 from utils import set_random_seed, Condition_Setter
 
