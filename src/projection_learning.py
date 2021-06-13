@@ -74,7 +74,7 @@ trained_weight_matrix = trained_weight_matrix / \
 
 num_vocab_in_train = len(counter)
 
-model = Net(condition.embedding_dim)
+model = Net(condition.embedding_dim).to(device)
 dataset = DataSet(
     initial_weight_matrix[:num_vocab_in_train], trained_weight_matrix[:num_vocab_in_train])
 dataloader = torch.utils.data.DataLoader(
