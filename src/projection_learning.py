@@ -9,10 +9,6 @@ import torch.optim as optim
 from models import Tree_Net
 from utils import load_weight_matrix, set_random_seed, Condition_Setter
 from tqdm import tqdm
-<< << << < HEAD
-<< << << < HEAD
-== == == =
->>>>>> > 4c561bc... projection learning.py
 
 
 class DataSet:
@@ -39,10 +35,6 @@ class Net(nn.Module):
         batch = self.tanh(self.linear1(batch))
         batch = self.tanh(self.linear2(batch))
         return batch
-
-
-== == == =
->>>>>> > 4c561bca62d07fd163e291767f577055ac6e7586
 
 
 class DataSet:
@@ -148,7 +140,6 @@ for epoch in range(1, EPOCHS):
             pbar.set_postfix({"loss": epoch_loss / num_batch})
             pbar.update(1)
 
-<< << << < HEAD
 torch.save(model, PATH_TO_DIR +
            "Hol-CCG/result/model/{}d_projection.pth".format(condition.embedding_dim))
 
@@ -165,7 +156,7 @@ trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
 with open(PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim), 'w') as f:
     writer = csv.writer(f, lineterminator='\n')
     writer.writerows(trained_weight_matrix)
-== == == =
+
 dataloader = torch.utils.data.DataLoader(
     dataset,
     batch_size=1,
@@ -179,4 +170,3 @@ for data in dataloader:
     target = data[1]
     output = model(input)
     print(cos(output, target))
->>>>>> > 4c561bca62d07fd163e291767f577055ac6e7586
