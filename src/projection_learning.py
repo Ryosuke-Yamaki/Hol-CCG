@@ -144,17 +144,3 @@ trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
 with open(PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim), 'w') as f:
     writer = csv.writer(f, lineterminator='\n')
     writer.writerows(trained_weight_matrix)
-
-dataloader = torch.utils.data.DataLoader(
-    dataset,
-    batch_size=1,
-    shuffle=False,
-    drop_last=False)
-
-cos = nn.CosineSimilarity()
-
-for data in dataloader:
-    input = data[0]
-    target = data[1]
-    output = model(input)
-    print(cos(output, target))
