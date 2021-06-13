@@ -5,7 +5,7 @@ import os
 import torch
 import matplotlib.pyplot as plt
 from utils import set_random_seed, Condition_Setter
-from models import Tree_Net
+from models import Tree_List, Tree_Net
 from sklearn.manifold import TSNE
 import numpy as np
 
@@ -37,8 +37,7 @@ def visualize(
             else:
                 # judge wheter different categories in the same group or not
                 category_id_list = content_info_dict[node.content]['category_id_list']
-                SAME_GROUP, group_num = judge_in_same_group(
-                    category_id_list, group_list)
+                SAME_GROUP, group_num = judge_in_same_group(category_id_list, group_list)
 
                 # when node.content never plotted
                 if (len(content_info_dict[node.content]['plotted_category_id_list']) == 0):
@@ -51,10 +50,8 @@ def visualize(
                         scatter_x_list[-1].append(embedded[idx, 0])
                         scatter_y_list[-1].append(embedded[idx, 1])
             if node.category_id not in content_info_dict[node.content]['plotted_category_id_list']:
-                content_info_dict[node.content]['plotted_category_id_list'].append(
-                    node.category_id)
-                content_info_dict[node.content]['plotted_category_list'].append(
-                    node.category)
+                content_info_dict[node.content]['plotted_category_id_list'].append(node.category_id)
+                content_info_dict[node.content]['plotted_category_list'].append(node.category)
 
     for group_num in range(len(group_list)):
         ax.scatter(
@@ -96,8 +93,7 @@ def visualize(
                     text = node.content
                     for category in content_info_dict[node.content]['plotted_category_list']:
                         text += ('\n' + category)
-                    ax.annotate(text, xy=np.array(
-                        start_point) + np.array([0.5, 0.5]))
+                    ax.annotate(text, xy=np.array(start_point) + np.array([0.5, 0.5]))
                     annotated_content_list.append(node.content)
 
 
@@ -123,8 +119,7 @@ def interactive_visualize(
             # when node.content is assigned to only one category
             if len(content_info_dict[node.content]['category_id_list']) == 1:
                 category_id = content_info_dict[node.content]['category_id_list'][0]
-                color_list_for_plot.append(
-                    color_list[judge_group(category_id, group_list)])
+                color_list_for_plot.append(color_list[judge_group(category_id, group_list)])
                 scatter_x_list.append(embedded[idx, 0])
                 scatter_y_list.append(embedded[idx, 1])
                 plotted_content_list.append(node.content)
@@ -132,8 +127,7 @@ def interactive_visualize(
             else:
                 # judge wheter different categories in the same group or not
                 category_id_list = content_info_dict[node.content]['category_id_list']
-                SAME_GROUP, group_num = judge_in_same_group(
-                    category_id_list, group_list)
+                SAME_GROUP, group_num = judge_in_same_group(category_id_list, group_list)
 
                 # when node.content never plotted
                 if (len(content_info_dict[node.content]['plotted_category_id_list']) == 0):
@@ -147,13 +141,10 @@ def interactive_visualize(
                     else:
                         color_list_for_plot.append('white')
             if node.category_id not in content_info_dict[node.content]['plotted_category_id_list']:
-                content_info_dict[node.content]['plotted_category_id_list'].append(
-                    node.category_id)
-                content_info_dict[node.content]['plotted_category_list'].append(
-                    node.category)
+                content_info_dict[node.content]['plotted_category_id_list'].append(node.category_id)
+                content_info_dict[node.content]['plotted_category_list'].append(node.category)
 
-    sc = plt.scatter(scatter_x_list, scatter_y_list,
-                     c=color_list_for_plot, edgecolors='black')
+    sc = plt.scatter(scatter_x_list, scatter_y_list, c=color_list_for_plot, edgecolors='black')
     annot = ax.annotate("", xy=(0, 0), xytext=(20, 20), textcoords="offset points",
                         bbox=dict(boxstyle="round", fc="w"),
                         arrowprops=dict(arrowstyle="->"))
@@ -217,8 +208,7 @@ test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
 NUM_VOCAB = len(test_tree_list.content_vocab)
 NUM_CATEGORY = len(test_tree_list.category_vocab)
-tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY,
-                    condition.embedding_dim).to(device)
+tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY, condition.embedding_dim).to(device)
 tree_net = torch.load(condition.path_to_model,
                       map_location=device)
 tree_net.eval()
@@ -277,7 +267,6 @@ if visualize_dim == 2:
 elif visualize_dim == 3:
     ax = fig.add_subplot(projection='3d')
     for k, v in vis_dict.items():
-        ax.scatter(embedded[v][:, 0], embedded[v][:, 1],
-                   embedded[v][:, 2], s=1, label=k)
+        ax.scatter(embedded[v][:, 0], embedded[v][:, 1], embedded[v][:, 2], s=1, label=k)
     ax.legend(fontsize='large')
 plt.show()
