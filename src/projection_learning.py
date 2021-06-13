@@ -55,7 +55,7 @@ else:
 initial_weight_matrix = torch.tensor(load_weight_matrix(
     condition.path_to_pretrained_weight_matrix), device=device)
 
-EPOCHS = 10
+EPOCHS = 5
 BATCH_SIZE = 25
 NUM_VOCAB = len(train_tree_list.content_vocab)
 NUM_CATEGORY = len(train_tree_list.category_vocab)
@@ -81,7 +81,7 @@ dataloader = torch.utils.data.DataLoader(
     dataset,
     batch_size=BATCH_SIZE,
     shuffle=True,
-    drop_last=False)
+    drop_last=True)
 criteria = nn.MSELoss()
 optimizer = optim.Adam(model.parameters())
 
