@@ -1,13 +1,17 @@
-import csv
-from collections import Counter
-from utils import load
-import os
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from models import Tree_Net
-from utils import load_weight_matrix, set_random_seed, Condition_Setter
 from tqdm import tqdm
+from utils import load_weight_matrix, set_random_seed, Condition_Setter
+from models import Tree_Net
+import torch.optim as optim
+import torch.nn as nn
+import torch
+import os
+from utils import load
+import numpy as np
+from collections import Counter
+import csv
+<< << << < HEAD
+== == == =
+>>>>>> > 4c561bc... projection learning.py
 
 
 class DataSet:
@@ -39,14 +43,30 @@ class Net(nn.Module):
 PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
 condition = Condition_Setter(PATH_TO_DIR)
 
+set_random_seed(0)
+
+print('loading tree list...')
+train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
+dev_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/dev_tree_list.pickle")
+test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
+
+counter = Counter()
+for tree in train_tree_list.tree_list:
+    for node in tree.node_list:
+        if node.is_leaf:
+            counter[node.content] += 1
+
+unk_counter = Counter()
+for tree in dev_tree_list.tree_list + test_tree_list.tree_list:
+    for node in tree.node_list:
+        if node.is_leaf and counter[node.content] == 0:
+            unk_counter[node.content] += 1
+
+
 if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
-
-set_random_seed(0)
-print('loading tree list...')
-test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
 initial_weight_matrix = torch.tensor(load_weight_matrix(
     condition.path_to_pretrained_weight_matrix), device=device)
@@ -60,13 +80,13 @@ tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY,
 tree_net = torch.load(condition.path_to_model,
                       map_location=device)
 tree_net.eval()
-
 trained_weight_matrix = tree_net.embedding.weight
 
 initial_weight_matrix = initial_weight_matrix / \
     initial_weight_matrix.norm(dim=1, keepdim=True)
 trained_weight_matrix = trained_weight_matrix / \
     initial_weight_matrix.norm(dim=1, keepdim=True)
+
 
 model = Net(condition.embedding_dim)
 
