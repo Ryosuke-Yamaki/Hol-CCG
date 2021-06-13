@@ -1,6 +1,7 @@
 from utils import load_weight_matrix
 from sklearn.decomposition import PCA
 import os
+import numpy as np
 import matplotlib.pyplot as plt
 from utils import set_random_seed, Condition_Setter
 
@@ -16,6 +17,7 @@ initial_weight_matrix = load_weight_matrix(
 trained_weight_matrix = load_weight_matrix(
     PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim))
 
+for initial_weight_matrix
 pca = PCA()
 print("PCA working...")
 fig = plt.figure(figsize=(20, 10))

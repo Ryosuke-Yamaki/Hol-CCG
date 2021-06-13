@@ -66,11 +66,11 @@ tree_net = torch.load(condition.path_to_model,
 tree_net.eval()
 trained_weight_matrix = tree_net.embedding.weight
 
-# normalize the norm of embedding vector
-initial_weight_matrix = initial_weight_matrix / \
-    initial_weight_matrix.norm(dim=1, keepdim=True)
-trained_weight_matrix = trained_weight_matrix / \
-    initial_weight_matrix.norm(dim=1, keepdim=True)
+# # normalize the norm of embedding vector
+# initial_weight_matrix = initial_weight_matrix / \
+#     initial_weight_matrix.norm(dim=1, keepdim=True)
+# trained_weight_matrix = trained_weight_matrix / \
+#     initial_weight_matrix.norm(dim=1, keepdim=True)
 
 num_vocab_in_train = len(counter)
 
@@ -110,8 +110,6 @@ trained_embeddings_of_train = trained_weight_matrix[:num_vocab_in_train]
 initial_embeddings_of_dev_test = initial_weight_matrix[num_vocab_in_train:]
 # predict projected vector from initial state of vector of unknown words
 trained_embeddings_of_dev_test = model(initial_embeddings_of_dev_test)
-trained_embeddings_of_dev_test = trained_embeddings_of_dev_test / \
-    (trained_embeddings_of_dev_test.norm(dim=1, keepdim=True)+1e-6)
 trained_weight_matrix = torch.cat(
     [trained_embeddings_of_train, trained_embeddings_of_dev_test])
 trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
