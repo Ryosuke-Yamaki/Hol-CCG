@@ -1,5 +1,5 @@
 import csv
-from collections import Counter
+import numpy as np
 from utils import load
 import os
 import torch
@@ -50,7 +50,7 @@ for tree in train_tree_list.tree_list:
             content_id_in_train.append(node.content_id[0])
 content_id_in_train = list(set(content_id_in_train))
 unk_content_id = []
-for tree in dev_tree_list.tree_list+test_tree_list.tree_list:
+for tree in dev_tree_list.tree_list + test_tree_list.tree_list:
     for node in tree.node_list:
         if node.is_leaf and node.content_id[0] not in content_id_in_train:
             unk_content_id.append(node.content_id[0])
@@ -73,23 +73,23 @@ tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY,
 tree_net = torch.load(condition.path_to_model,
                       map_location=device)
 tree_net.eval()
-trained_weight_matrix = tree_net.embedding.weight
+trained_weight_matrix = tree_net.embedding.weight.detach()
 
 initial_weight_of_train = []
 trained_weight_of_train = []
 
-for content_id in content_id_in_train:
-    initial_weight_of_train.append(initial_weight_matrix[content_id])
-    trained_weight_of_train.append(trained_weight_matrix[content_id])
+with torch.no_grad():
+    for content_id in content_id_in_train:
+        initial_weight_of_train.append(initial_weight_matrix[content_id])
+        trained_weight_of_train.append(trained_weight_matrix[content_id])
 
-initial_weight_of_unk = []
-for content_id in unk_content_id:
-    initial_weight_of_unk.append(initial_weight_matrix[content_id])
+    initial_weight_of_unk = []
+    for content_id in unk_content_id:
+        initial_weight_of_unk.append(initial_weight_matrix[content_id])
 
-
-initial_weight_of_train = torch.stack(initial_weight_of_train, device=device)
-trained_weight_of_train = torch.stack(trained_weight_of_train, device=device)
-initial_weight_of_unk = torch.stack(initial_weight_of_unk, device=device)
+    initial_weight_of_train = torch.stack(initial_weight_of_train)
+    trained_weight_of_train = torch.stack(trained_weight_of_train)
+    initial_weight_of_unk = torch.stack(initial_weight_of_unk)
 
 model = Net(condition.embedding_dim).to(device)
 dataset = DataSet(
@@ -131,3 +131,13 @@ trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
 with open(PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim), 'w') as f:
     writer = csv.writer(f, lineterminator='\n')
     writer.writerows(trained_weight_matrix)
+
+cos = nn.CosineSimilarity()
+cos_list = []
+
+for data in dataloader:
+    input = data[0]
+    target = data[1]
+    output = model(input)
+    cos_list.append(torch.mean(cos(output, target)).item())
+print(np.mean(cos_list))
