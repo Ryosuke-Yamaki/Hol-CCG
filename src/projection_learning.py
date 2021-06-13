@@ -1,3 +1,5 @@
+import csv
+from collections import Counter
 from utils import load
 import os
 import torch
@@ -53,15 +55,18 @@ EPOCHS = 100
 BATCH_SIZE = 25
 NUM_VOCAB = len(test_tree_list.content_vocab)
 NUM_CATEGORY = len(test_tree_list.category_vocab)
-tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY, condition.embedding_dim).to(device)
+tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY,
+                    condition.embedding_dim).to(device)
 tree_net = torch.load(condition.path_to_model,
                       map_location=device)
 tree_net.eval()
 
 trained_weight_matrix = tree_net.embedding.weight
 
-initial_weight_matrix = initial_weight_matrix / initial_weight_matrix.norm(dim=1, keepdim=True)
-trained_weight_matrix = trained_weight_matrix / initial_weight_matrix.norm(dim=1, keepdim=True)
+initial_weight_matrix = initial_weight_matrix / \
+    initial_weight_matrix.norm(dim=1, keepdim=True)
+trained_weight_matrix = trained_weight_matrix / \
+    initial_weight_matrix.norm(dim=1, keepdim=True)
 
 model = Net(condition.embedding_dim)
 
@@ -91,3 +96,18 @@ for epoch in range(1, EPOCHS):
             optimizer.step()
             pbar.set_postfix({"loss": epoch_loss / num_batch})
             pbar.update(1)
+
+torch.save(model, PATH_TO_DIR +
+           "Hol-CCG/result/model/{}d_projection.pth".format(condition.embedding_dim))
+
+trained_embeddings_of_train = trained_weight_matrix[:num_vocab_in_train]
+initial_embeddings_of_dev_test = initial_weight_matrix[num_vocab_in_train:]
+# predict projected vector from initial state of vector of unknown words
+trained_embeddings_of_dev_test = model(initial_embeddings_of_dev_test)
+trained_weight_matrix = torch.cat(
+    [trained_embeddings_of_train, trained_embeddings_of_dev_test])
+trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
+
+with open(PATH_TO_DIR + "Hol-CCG/result/data/weight_matrix_with_projection_learning.csv", 'w') as f:
+    writer = csv.writer(f, lineterminator='\n')
+    writer.writerows(trained_weight_matrix)
