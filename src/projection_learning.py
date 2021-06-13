@@ -85,7 +85,7 @@ dataloader = torch.utils.data.DataLoader(
 criteria = nn.MSELoss()
 optimizer = optim.Adam(model.parameters())
 
-for epoch in range(1, EPOCHS):
+for epoch in range(1, EPOCHS+1):
     with tqdm(total=len(dataloader), unit="batch") as pbar:
         pbar.set_description(f"Epoch[{epoch}/{EPOCHS}]")
         epoch_loss = 0.0
@@ -96,7 +96,7 @@ for epoch in range(1, EPOCHS):
             input = data[0]
             target = data[1]
             output = model(input)
-            loss = criteria(input, target)
+            loss = criteria(output, target)
             loss.backward(retain_graph=True)
             epoch_loss += loss.item()
             optimizer.step()
