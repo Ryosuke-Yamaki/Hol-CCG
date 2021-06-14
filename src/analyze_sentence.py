@@ -11,8 +11,24 @@ PATH_TO_PRETRAINED_WEIGHT_MATRIX = PATH_TO_DIR + \
 path_to_word_counter = PATH_TO_DIR + "Hol-CCG/data/word_counter.pickle"
 
 print('loading tree list...')
-train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
+# train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
 test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
+
+tree = test_tree_list.tree_list[1142]
+for node in tree.node_list:
+    cont = []
+    for id in node.content_id:
+        cont.append(test_tree_list.content_vocab.itos[id])
+    print(node.self_id, " ".join(cont))
+
+for tree in test_tree_list.tree_list:
+    node = tree.node_list[-1]
+    if len(node.content_id) < 10:
+        sentence = []
+        for id in node.content_id:
+            sentence.append(test_tree_list.content_vocab.itos[id])
+        print(tree.self_id)
+        print(" ".join(sentence))
 
 content_id = []
 for tree in train_tree_list.tree_list:

@@ -24,12 +24,10 @@ content_vocab = Vocab(word_counter, specials=[])
 unk_word_list = [
     "edmonton",
     "thirty-five",
-    "distaste",
     "outstripping"]
 known_word_list = [
     ["calgary", "ottawa", "winnipeg"],
     ["twenty-five", "thirty-four", "twenty-one"],
-    ["disdain", "unhappiness", "ambivalence"],
     ["outstripped", "outstrips", "outstrip"]]
 known_id_list = []
 unk_id_list = []
@@ -44,9 +42,9 @@ for unk_word, idx in zip(unk_word_list, range(len(unk_word_list))):
 
 def scatter(unk_id, known_id_list, ax, embedded, vocab, text):
     xy = embedded[unk_id]
-    ax.scatter(xy[0], xy[1], color='b', s=10)
+    ax.scatter(xy[0], xy[1], color='b')
     text = annotate([unk_id], [xy], ax, vocab, text)
-    ax.scatter(embedded[known_id_list][:, 0], embedded[known_id_list][:, 1], s=10)
+    ax.scatter(embedded[known_id_list][:, 0], embedded[known_id_list][:, 1])
     text = annotate(known_id_list, embedded[known_id_list], ax, vocab, text)
     return text
 

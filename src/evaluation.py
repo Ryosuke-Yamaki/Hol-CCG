@@ -70,7 +70,7 @@ def evaluate_on_unk(tree_list, tree_net, unk_content_id):
         for tree in tree_list.tree_list:
             for node in tree.node_list:
                 total_num_node += 1
-                if include_unk(node.content_id, unk_content_id):
+                if not include_unk(node.content_id, unk_content_id):
                     output = linear(node.vector)
                     predict = torch.topk(output, k=k)[1]
                     if node.is_leaf:
