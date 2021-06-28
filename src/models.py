@@ -325,16 +325,22 @@ class Tree_List:
                     parent_node.vector = single_circular_correlation(
                         left_node.vector, right_node.vector)
 
-    def clean_tree_list(self):
-        cleaned_tree_list = []
-        check_bit = 0
+    def clean_tree_list(self, exist_content_id, exist_category_id):
+        cleaned_tree_list = self.tree_list
         for tree in self.tree_list:
-            for node in tree.node_list:
-                if 0 in node.content_id or node.category_id == 0:
-                    check_bit = 1
-            if check_bit == 0:
-                cleaned_tree_list.append(tree)
             check_bit = 0
+            for node in tree.node_list:
+                if node.is_leaf:
+                    if node.content_id[0] not in exist_content_id or node.category_id not in exist_category_id:
+                        # when content or category of node not in train_tree
+                        check_bit = 1
+                else:
+                    if node.category_id not in exist_category_id:
+                        # when category of node not in train_tree
+                        check_bit = 1
+                if check_bit == 1:
+                    cleaned_tree_list.remove(tree)
+                    break
         self.tree_list = cleaned_tree_list
 
 
