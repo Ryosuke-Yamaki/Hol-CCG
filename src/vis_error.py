@@ -34,12 +34,17 @@ embedding = tree_net.embedding
 test_tree_list.set_vector(embedding)
 
 vector_list = []
+# the counter for content of nodes
 counter = Counter()
 linear = tree_net.linear
 
+# list saves the result of prediction(True or False)
 predict_list = []
+# list saves the category of each nodes
 cat_list = []
+# list saves the index of nodes which the prediction was wrong
 err_idx = []
+
 idx = 0
 for tree in test_tree_list.tree_list:
     for node in tree.node_list:
@@ -78,67 +83,75 @@ else:
 
 embedded = method.fit_transform(vector_list)
 
-N = [0 for i in range(20)]
-NP = [0 for i in range(20)]
-S = [0 for i in range(20)]
-Word = [0 for i in range(20)]
-Phrase = [0 for i in range(20)]
-
-stat = [[0, 0] for i in range(20)]
-for idx in range(len(embedded[:, 2])):
-    z = embedded[:, 2][idx]
-    correct = predict_list[idx]
-    cat = cat_list[idx]
-    for i in range(20):
-        if np.abs(z - (-0.75 + i * 0.1)) < 0.05:
-            stat[i][0] += 1
-            if cat == 'N':
-                N[i] += 1
-            elif cat == 'NP':
-                NP[i] += 1
-            elif cat == 'S':
-                S[i] += 1
-            elif cat == 'Word':
-                Word[i] += 1
-            elif cat == 'Phrase':
-                Phrase[i] += 1
-            if not correct:
-                stat[i][1] += 1
-
-
-num_sample = []
-num_wrong = []
-err = []
-for info in stat:
-    num_sample.append(info[0])
-    num_wrong.append(info[1])
-    err.append(info[1] / info[0])
-
-x = np.linspace(-0.75, 1.25, len(num_sample))
-plt.plot(x, num_sample, label='Total', linestyle='--')
-plt.plot(x, num_wrong, label='Error', linestyle='--')
-plt.plot(x, N, label='N')
-plt.plot(x, NP, label='NP')
-plt.plot(x, S, label='S')
-plt.plot(x, Word, label='Word')
-plt.plot(x, Phrase, label='Phrase')
-plt.legend()
-plt.show()
-
-plt.plot(x, err, label='err ratio')
-plt.legend()
-plt.show()
-
-fig = plt.figure(figsize=(10, 10))
+fig2 = plt.figure(figsize=(10, 10))
 if visualize_dim == 2:
-    ax = fig.add_subplot()
-    # for k, v in vis_dict.items():
-    #     ax.scatter(embedded[v][:, 0], embedded[v][:, 1], s=1, label=k)
-    # ax.legend(fontsize='large')
-    # plt.xticks(fontsize='large')
-    # plt.yticks(fontsize='large')
-    # fig.savefig(path_to_map)
+    ax = fig2.add_subplot()
+    ax.scatter(embedded[err_idx][:, 0], embedded[err_idx][:, 1], s=1)
+
 elif visualize_dim == 3:
-    ax = fig.add_subplot(projection='3d')
+    # the lists saves the number of sample belongs to each category
+    N = [0 for i in range(20)]
+    NP = [0 for i in range(20)]
+    S = [0 for i in range(20)]
+    Word = [0 for i in range(20)]
+    Phrase = [0 for i in range(20)]
+    # the list saves the number of samples and number of wrong samples
+    stat = [[0, 0] for i in range(20)]
+    for idx in range(len(embedded[:, 2])):
+        # the value of 3rd principle value
+        z = embedded[:, 2][idx]
+        # the binary value whether the prediction was correct or not
+        correct = predict_list[idx]
+        # the category correspond to current z
+        cat = cat_list[idx]
+        # find the nearest point to z from 20 points(-0.75 ~ 1.25)
+        for i in range(20):
+            if np.abs(z - (-0.75 + i * 0.1)) < 0.05:
+                stat[i][0] += 1
+                if cat == 'N':
+                    N[i] += 1
+                elif cat == 'NP':
+                    NP[i] += 1
+                elif cat == 'S':
+                    S[i] += 1
+                elif cat == 'Word':
+                    Word[i] += 1
+                elif cat == 'Phrase':
+                    Phrase[i] += 1
+                # when the prediction was wrong(False)
+                if not correct:
+                    stat[i][1] += 1
+
+    num_sample = []
+    err = []
+    for info in stat:
+        num_sample.append(info[0])
+        # add error rate
+        err.append(info[1] / info[0])
+
+    fig1 = plt.figure()
+    ax1 = fig1.add_subplot(1, 1, 1)
+    ax2 = ax1.twinx()
+
+    x = np.linspace(-0.75, 1.25, len(num_sample))
+    ax1.plot(x, num_sample, label='Total', linestyle='--')
+    ax1.plot(x, N, label='N')
+    ax1.plot(x, NP, label='NP')
+    ax1.plot(x, S, label='S')
+    ax1.plot(x, Word, label='Word')
+    ax1.plot(x, Phrase, label='Phrase')
+    ax1.set_xlabel('3rd principal component')
+    ax1.set_ylabel('number of samples')
+    ax1.set_ylim(0.0, 9000)
+
+    ax2.plot(x, err, label='Error Rate', linestyle=':', c='k')
+    ax2.set_ylabel('Error Rate')
+    ax2.set_ylim(0.0, 1.0)
+    plt.xticks(fontsize='large')
+    plt.yticks(fontsize='large')
+    handler1, label1 = ax1.get_legend_handles_labels()
+    handler2, label2 = ax2.get_legend_handles_labels()
+    ax1.legend(handler1 + handler2, label1 + label2, loc=2, borderaxespad=0.)
+    ax = fig2.add_subplot(projection='3d')
     ax.scatter(embedded[err_idx][:, 0], embedded[err_idx][:, 1], embedded[err_idx][:, 2], s=1)
 plt.show()
