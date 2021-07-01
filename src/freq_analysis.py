@@ -1,3 +1,4 @@
+from utils import load
 from collections import Counter
 import os
 import torch
@@ -27,15 +28,11 @@ device = torch.device('cpu')
 
 set_random_seed(0)
 print('loading tree list...')
-train_tree_list = Tree_List(condition.path_to_train_data, device=device)
-test_tree_list = Tree_List(
-    condition.path_to_test_data,
-    train_tree_list.content_vocab,
-    train_tree_list.category_vocab,
-    device=device)
-test_tree_list.clean_tree_list()
+test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
-tree_net = Tree_Net(train_tree_list, condition.embedding_dim).to(device)
+NUM_VOCAB = len(test_tree_list.content_vocab)
+NUM_CATEGORY = len(test_tree_list.category_vocab)
+tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY, condition.embedding_dim).to(device)
 tree_net = torch.load(condition.path_to_model,
                       map_location=device)
 tree_net.eval()
