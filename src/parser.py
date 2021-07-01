@@ -5,16 +5,6 @@ import torch.nn as nn
 from utils import circular_correlation, single_circular_correlation
 
 
-class Category:
-    def __init__(self, category_id):
-        self.category_id = category_id
-
-
-class Chart:
-    def __init__(self, sentence):
-        self.
-
-
 class CCG_Category:
     def __init__(self, category, category_to_id):
         self.self_category_id = category_to_id[category]
@@ -85,12 +75,12 @@ class CCG_Category_List:
 
 
 class Parser:
-    def __init__(self, tree_net, content_vocab, binary_rule, unary_table):
+    def __init__(self, tree_net, content_vocab, binary_rule, unary_rule):
         self.embedding = tree_net.embedding
         self.linear = tree_net.linear
         self.content_vocab = content_vocab
         self.binary_rule = binary_rule
-        self.unary_table = unary_table
+        self.unary_rule = unary_rule
         self.softmax = torch.nn.Softmax()
 
     def tokenize(self, sentence):
@@ -131,7 +121,7 @@ class Parser:
                             composed_vector = single_circular_correlation(
                                 vector[(i, k)][S1], vector[(k, j)][S2])
                             prob_dist = self.softmax(self.linear(composed_vector))
-                            for A in self.compose(S1, S2):
+                            for A in self.binary_rule.get((S1, S2)):
                                 P = prob_dist[A] * prob[(i, k)][S1] * prob[(k, j)][S2]
                                 if key not in prob:
                                     prob[key] = {A: P}
@@ -141,51 +131,20 @@ class Parser:
                                     prob[key][A] = P
                                     backpointer[key][A] = (k, S1, S2)
                                     vector[key][A] = composed_vector
-                # add category based on unary rule
-                for S in prob[key].keys():
-                    prob, backpointer, vector = self.unary_rule(S, prob, backpointer, vector, key)
+                again = True
+                while again:
+                    again = False
+                    for S in prob[key].keys():
+                        vector = vector[key][S]
+                        prob_dist = self.softmax(self.linear(vector))
+                        for A in self.unary_rule.get(S):
+                            P = prob_dist[A] * prob[key][S]
+                            if A not in prob[key] or P > prob[key][A]:
+                                prob[key][A] = P
+                                backpointer[key][A] = (None, S, None)
+                                vector[key][A] = vector
+                                again = True
         return prob, backpointer, vector
-
-    def unary_rule(self, S, prob, backpointer, vector, key):
-
-        #             if left_cell is not None and right_cell is not None:
-        #                 # extract category_id of left cell
-        #                 for left_category_id in left_cell.keys():
-        #                     # define ccg category in left cell
-        #                     left_category = self.category_info[left_category_id]
-        #                     # extract category_id of right cell
-        #                     for right_category_id in right_cell.keys():
-        #                         # define ccg category in right cell
-        #                         right_category = self.category_info[right_category_id]
-        #                         # output possible category id from left and right ccg category
-        #                         possible_category_id = self.compose_categories(
-        #                             left_category, right_category)
-        #                         if possible_category_id is not None:
-        #                             possible_category_info = {}
-        #                             left_vector = left_cell[left_category_id]['vector']
-        #                             left_prob = left_cell[left_category_id]['prob']
-        #                             right_vector = right_cell[right_category_id]['vector']
-        #                             right_prob = right_cell[right_category_id]['prob']
-        #                             vector = circular_correlation(left_vector, right_vector)
-        #                             prob = self.linear_classifier(vector)[possible_category_id]
-        #                             possible_category_info['vector'] = vector
-        #                             possible_category_info['prob'] = prob * left_prob * right_prob
-        #                             possible_category_info['back_pointer'] = (
-        #                                 (i, k, left_category_id), (k, j, right_category_id))
-        #                             # when the category is subscribed to cell first time
-        #                             if possible_category_id not in cell:
-        #                                 cell[possible_category_id] = possible_category_info
-        #                             # when the probability is higher than existing one
-        #                             elif possible_category_info['prob'] > \
-        #                                     cell[possible_category_id]['prob']:
-        #                                 cell[possible_category_id] = possible_category_info
-        #         # when composition candidate founded
-        #         if len(cell) > 0:
-        #             chart[(i, j)] = cell
-        #         # when no composition candidate founded
-        #         else:
-        #             chart[(i, j)] = None
-        # return chart
 
     def make_leaf_node_cell(self, vector):
         output = self.linear_classifier(vector)
@@ -351,7 +310,7 @@ class Parsed_Tree:
 
 def extract_rule(path_to_grammar, category_vocab):
     binary_rule = {}
-    unary_table = {}
+    unary_rule = {}
 
     f = open(path_to_grammar, 'r')
     data = f.readlines()
@@ -363,7 +322,35 @@ def extract_rule(path_to_grammar, category_vocab):
             parent_cat = category_vocab[tokens[2]]
             left_cat = category_vocab[tokens[4]]
             right_cat = category_vocab[tokens[5]]
-            binary_rule[(left_cat, right_cat)] = parent_cat
+            if (left_cat, right_cat) in binary_rule:
+                binary_rule[(left_cat, right_cat)].append(parent_cat)
+            else:
+                binary_rule[(left_cat, right_cat)] = [parent_cat]
         elif len(tokens) == 5:
             parent_cat = category_vocab[tokens[2]]
             child_cat = category_vocab[tokens[4]]
+            if child_cat in unary_rule:
+                unary_rule[child_cat].append(parent_cat)
+            else:
+                unary_rule[child_cat] = [parent_cat]
+
+    count = 0
+    for v in binary_rule.values():
+        count += len(v)
+    for v in unary_rule.values():
+        count += len(v)
+
+    list = []
+    for k, v in unary_rule.items():
+        for cat in v:
+            if cat in unary_rule:
+                print(category_vocab.itos[k], '--->', category_vocab.itos[cat])
+            if cat in unary_rule and cat not in list:
+                list.append(cat)
+    for cat in list:
+        print(category_vocab.itos[cat])
+
+    for cat in unary_rule[7]:
+        print(category_vocab.itos[cat])
+
+    return binary_rule, unary_rule
