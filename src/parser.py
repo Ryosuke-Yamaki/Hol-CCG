@@ -1,3 +1,4 @@
+import copy
 import re
 from numpy.core.einsumfunc import _parse_possible_contraction
 import torch
@@ -81,69 +82,80 @@ class Parser:
         self.content_vocab = content_vocab
         self.binary_rule = binary_rule
         self.unary_rule = unary_rule
-        self.softmax = torch.nn.Softmax()
+        self.softmax = torch.nn.Softmax(dim=-1)
 
+    @torch.no_grad()
     def tokenize(self, sentence):
         vector_list = []
         for word in sentence.split():
             word = word.lower()
             word = re.sub(r'\d+', '0', word)
             word = re.sub(r'\d,\d', '0', word)
-            word_id = self.content_vocab[word]
+            word_id = torch.tensor(self.content_vocab[word])
             vector = self.embedding(word_id)
             vector_list.append(vector / torch.norm(vector))
         return vector_list
 
+    @torch.no_grad()
     def parse(self, sentence, k=5):
         prob = {}
         backpointer = {}
         vector = {}
 
         vector_list = self.tokenize(sentence)
-        n = len(sentence)
+        n = len(vector_list)
 
         for i in range(n):
             output = self.softmax(self.linear(vector_list[i]))
             predict = torch.topk(output, k=k)
+            key = (i, i + 1)
+            prob[key] = {}
+            backpointer[key] = {}
+            vector[key] = {}
             for P, A in zip(predict[0], predict[1]):
-                key = (i, i + 1)
-                prob[key] = {A: P}
-                backpointer[key] = {A: None}
-                vector[key] = {A: vector_list[i]}
+                P = P.item()
+                A = A.item()
+                prob[key][A] = P
+                backpointer[key][A] = None
+                vector[key][A] = vector_list[i]
 
         for length in range(2, n + 1):
             for i in range(n - length + 1):
                 j = i + length
                 key = (i, j)
                 for k in range(i + 1, j):
-                    for S1 in prob[(i, k)].keys():
-                        for S2 in prob[(k, j)].keys():
-                            composed_vector = single_circular_correlation(
-                                vector[(i, k)][S1], vector[(k, j)][S2])
-                            prob_dist = self.softmax(self.linear(composed_vector))
-                            for A in self.binary_rule.get((S1, S2)):
-                                P = prob_dist[A] * prob[(i, k)][S1] * prob[(k, j)][S2]
-                                if key not in prob:
-                                    prob[key] = {A: P}
-                                    backpointer[key] = {A: (k, S1, S2)}
-                                    vector[key] = {A: composed_vector}
-                                elif A not in prob[key] or P > prob[key][A]:
-                                    prob[key][A] = P
-                                    backpointer[key][A] = (k, S1, S2)
-                                    vector[key][A] = composed_vector
-                again = True
-                while again:
-                    again = False
-                    for S in prob[key].keys():
-                        vector = vector[key][S]
-                        prob_dist = self.softmax(self.linear(vector))
-                        for A in self.unary_rule.get(S):
-                            P = prob_dist[A] * prob[key][S]
-                            if A not in prob[key] or P > prob[key][A]:
-                                prob[key][A] = P
-                                backpointer[key][A] = (None, S, None)
-                                vector[key][A] = vector
-                                again = True
+                    if (i, k) in prob and (k, j) in prob:
+                        for S1 in prob[(i, k)].keys():
+                            for S2 in prob[(k, j)].keys():
+                                composed_vector = single_circular_correlation(
+                                    vector[(i, k)][S1], vector[(k, j)][S2])
+                                prob_dist = self.softmax(self.linear(composed_vector))
+                                if self.binary_rule.get((S1, S2)) is not None:
+                                    for A in self.binary_rule.get((S1, S2)):
+                                        P = prob_dist[A] * prob[(i, k)][S1] * prob[(k, j)][S2]
+                                        if key not in prob:
+                                            prob[key] = {A: P}
+                                            backpointer[key] = {A: (k, S1, S2)}
+                                            vector[key] = {A: composed_vector}
+                                        elif A not in prob[key] or P > prob[key][A]:
+                                            prob[key][A] = P
+                                            backpointer[key][A] = (k, S1, S2)
+                                            vector[key][A] = composed_vector
+                if key in prob:
+                    again = True
+                    while again:
+                        again = False
+                        for S in list(prob[key].keys()):
+                            temp_vector = vector[key][S]
+                            prob_dist = self.softmax(self.linear(temp_vector))
+                            if self.unary_rule.get(S) is not None:
+                                for A in self.unary_rule.get(S):
+                                    P = prob_dist[A] * prob[key][S]
+                                    if A not in prob[key] or P > prob[key][A]:
+                                        prob[key][A] = P
+                                        backpointer[key][A] = (None, S, None)
+                                        vector[key][A] = temp_vector
+                                        again = True
         return prob, backpointer, vector
 
     def make_leaf_node_cell(self, vector):
@@ -333,24 +345,5 @@ def extract_rule(path_to_grammar, category_vocab):
                 unary_rule[child_cat].append(parent_cat)
             else:
                 unary_rule[child_cat] = [parent_cat]
-
-    count = 0
-    for v in binary_rule.values():
-        count += len(v)
-    for v in unary_rule.values():
-        count += len(v)
-
-    list = []
-    for k, v in unary_rule.items():
-        for cat in v:
-            if cat in unary_rule:
-                print(category_vocab.itos[k], '--->', category_vocab.itos[cat])
-            if cat in unary_rule and cat not in list:
-                list.append(cat)
-    for cat in list:
-        print(category_vocab.itos[cat])
-
-    for cat in unary_rule[7]:
-        print(category_vocab.itos[cat])
 
     return binary_rule, unary_rule
