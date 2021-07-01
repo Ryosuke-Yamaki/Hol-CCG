@@ -156,6 +156,23 @@ class Parser:
                                         backpointer[key][A] = (None, S, None)
                                         vector[key][A] = temp_vector
                                         again = True
+                    prob, backpointer, vector = self.cut_off(prob, backpointer, vector, key)
+        return prob, backpointer, vector
+
+    # remove the candidate of low probability for beam search
+    def cut_off(self, prob, backpointer, vector, key, width=5):
+        prediction = sorted(prob[key].items(), key=lambda x: x[1], reverse=True)
+        top_prob = {}
+        top_backpointer = {}
+        top_vector = {}
+        for idx in range(min(width, len(prediction))):
+            cat = prediction[idx][0]
+            top_prob[cat] = prob[key][cat]
+            top_backpointer[cat] = backpointer[key][cat]
+            top_vector[cat] = vector[key][cat]
+        prob[key] = top_prob
+        backpointer[key] = top_backpointer
+        vector[key] = top_vector
         return prob, backpointer, vector
 
     def make_leaf_node_cell(self, vector):
