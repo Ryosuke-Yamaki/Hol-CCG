@@ -1,3 +1,4 @@
+import re
 from numpy.core.einsumfunc import _parse_possible_contraction
 import torch
 import torch.nn as nn
@@ -84,17 +85,20 @@ class CCG_Category_List:
 
 
 class Parser:
-    def __init__(self, tree_net, content_vocab, binary_rule, unary_rule):
+    def __init__(self, tree_net, content_vocab, binary_rule, unary_table):
         self.embedding = tree_net.embedding
         self.linear = tree_net.linear
         self.content_vocab = content_vocab
         self.binary_rule = binary_rule
-        self.unary_rule = unary_rule
+        self.unary_table = unary_table
         self.softmax = torch.nn.Softmax()
 
     def tokenize(self, sentence):
         vector_list = []
         for word in sentence.split():
+            word = word.lower()
+            word = re.sub(r'\d+', '0', word)
+            word = re.sub(r'\d,\d', '0', word)
             word_id = self.content_vocab[word]
             vector = self.embedding(word_id)
             vector_list.append(vector / torch.norm(vector))
@@ -120,6 +124,7 @@ class Parser:
         for length in range(2, n + 1):
             for i in range(n - length + 1):
                 j = i + length
+                key = (i, j)
                 for k in range(i + 1, j):
                     for S1 in prob[(i, k)].keys():
                         for S2 in prob[(k, j)].keys():
@@ -128,7 +133,6 @@ class Parser:
                             prob_dist = self.softmax(self.linear(composed_vector))
                             for A in self.compose(S1, S2):
                                 P = prob_dist[A] * prob[(i, k)][S1] * prob[(k, j)][S2]
-                                key = (i, j)
                                 if key not in prob:
                                     prob[key] = {A: P}
                                     backpointer[key] = {A: (k, S1, S2)}
@@ -137,6 +141,12 @@ class Parser:
                                     prob[key][A] = P
                                     backpointer[key][A] = (k, S1, S2)
                                     vector[key][A] = composed_vector
+                # add category based on unary rule
+                for S in prob[key].keys():
+                    prob, backpointer, vector = self.unary_rule(S, prob, backpointer, vector, key)
+        return prob, backpointer, vector
+
+    def unary_rule(self, S, prob, backpointer, vector, key):
 
         #             if left_cell is not None and right_cell is not None:
         #                 # extract category_id of left cell
@@ -337,3 +347,23 @@ class Parsed_Tree:
             print('content: {}'.format(node.content))
             print('category :{}'.format(self.id_to_category[node.category_id]))
             print()
+
+
+def extract_rule(path_to_grammar, category_vocab):
+    binary_rule = {}
+    unary_table = {}
+
+    f = open(path_to_grammar, 'r')
+    data = f.readlines()
+    f.close()
+
+    for rule in data:
+        tokens = rule.split()
+        if len(tokens) == 6:
+            parent_cat = category_vocab[tokens[2]]
+            left_cat = category_vocab[tokens[4]]
+            right_cat = category_vocab[tokens[5]]
+            binary_rule[(left_cat, right_cat)] = parent_cat
+        elif len(tokens) == 5:
+            parent_cat = category_vocab[tokens[2]]
+            child_cat = category_vocab[tokens[4]]
