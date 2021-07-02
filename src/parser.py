@@ -1,10 +1,6 @@
-import copy
-from os import wait
 import re
-from numpy.core.einsumfunc import _parse_possible_contraction
 import torch
-import torch.nn as nn
-from utils import circular_correlation, single_circular_correlation
+from utils import single_circular_correlation
 
 
 class CCG_Category:
@@ -158,11 +154,11 @@ class Parser:
                                         vector[key][A] = temp_vector
                                         again = True
                     prob, backpointer, vector = self.cut_off(prob, backpointer, vector, key)
-        node_list = self.recunstruct_tree(prob, backpointer, n)
+        node_list = self.reconstruct_tree(prob, backpointer, n)
         return node_list
 
     # remove the candidate of low probability for beam search
-    def cut_off(self, prob, backpointer, vector, key, width=5):
+    def cut_off(self, prob, backpointer, vector, key, width=100):
         prediction = sorted(prob[key].items(), key=lambda x: x[1], reverse=True)
         top_prob = {}
         top_backpointer = {}
@@ -177,9 +173,10 @@ class Parser:
         vector[key] = top_vector
         return prob, backpointer, vector
 
-    def recunstruct_tree(self, prob, backpointer, len_sentence):
+    def reconstruct_tree(self, prob, backpointer, len_sentence):
         waiting_node_list = []
         node_list = []
+        # when parsing was completed
         if (0, len_sentence) in prob:
             top_cat = list(prob[(0, len_sentence)].items())[0][0]
             node_list.append((0, len_sentence, top_cat))
@@ -407,3 +404,31 @@ def extract_rule(path_to_grammar, category_vocab):
                 unary_rule[child_cat] = [parent_cat]
 
     return binary_rule, unary_rule
+
+
+def cal_f1_score(pred_node_list, correct_node_list):
+    pred_node_list = pred_node_list
+    if len(pred_node_list) != 0:
+        precision = 0.0
+        for node in pred_node_list:
+            if node in correct_node_list:
+                precision += 1.0
+        precision = precision / len(pred_node_list)
+
+        recall = 0.0
+        for node in correct_node_list:
+            if node in pred_node_list:
+                recall += 1.0
+        recall = recall / len(correct_node_list)
+        # avoid zero division
+        if precision == 0.0 and recall == 0.0:
+            f1 = 0.0
+        else:
+            f1 = (2 * precision * recall) / (precision + recall)
+    # when failed parsing
+    else:
+        f1 = 0.0
+        precision = 0.0
+        recall = 0.0
+
+    return f1, precision, recall

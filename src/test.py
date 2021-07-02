@@ -4,7 +4,7 @@ from models import Tree_Net
 from utils import Condition_Setter
 import os
 from utils import load, load_weight_matrix
-from parser import extract_rule, Parser
+from parser import extract_rule, Parser, cal_f1_score
 from torch.nn import Embedding
 
 
@@ -37,9 +37,8 @@ f.close()
 binary_rule, unary_rule = extract_rule(path_to_grammar, test_tree_list.category_vocab)
 parser = Parser(tree_net, test_tree_list.content_vocab, binary_rule, unary_rule)
 
-# total = 0
-# count = 0
-# correct = 0
+total_f1 = 0
+total_nodes = 0
 for sentence, tree in zip(test_sentence, test_tree_list.tree_list):
     sentence = sentence.rstrip()
     # total += 1
@@ -47,8 +46,12 @@ for sentence, tree in zip(test_sentence, test_tree_list.tree_list):
         # count += 1
         print(sentence)
         start = time.time()
-        node_list = parser.parse(sentence)
-        print(time.time() - start, "sec")
+        pred_node_list = parser.parse(sentence)
+        correct_node_list = tree.convert_node_list_for_eval()
+        f1, precision, recall = cal_f1_score(pred_node_list, correct_node_list)
+        print(f1, precision, recall)
+        # print(time.time() - start, "sec")
+
         # final = list(prob.items())[-1]
         # pred = sorted(final[1].items(), key=lambda x: x[1], reverse=True)[0]
         # node = tree.node_list[-1]
