@@ -1,4 +1,5 @@
 import copy
+from os import wait
 import re
 from numpy.core.einsumfunc import _parse_possible_contraction
 import torch
@@ -157,7 +158,8 @@ class Parser:
                                         vector[key][A] = temp_vector
                                         again = True
                     prob, backpointer, vector = self.cut_off(prob, backpointer, vector, key)
-        return prob, backpointer, vector
+        node_list = self.recunstruct_tree(prob, backpointer, n)
+        return node_list
 
     # remove the candidate of low probability for beam search
     def cut_off(self, prob, backpointer, vector, key, width=5):
@@ -174,6 +176,46 @@ class Parser:
         backpointer[key] = top_backpointer
         vector[key] = top_vector
         return prob, backpointer, vector
+
+    def recunstruct_tree(self, prob, backpointer, len_sentence):
+        waiting_node_list = []
+        node_list = []
+        top_cat = list(prob[(0, len_sentence)].items())[0][0]
+        node_list.append((0, len_sentence, top_cat))
+        if backpointer[(0, len_sentence)][top_cat] is not None:
+            child_cat_info = backpointer[(0, len_sentence)][top_cat]
+            divide_idx = child_cat_info[0]
+            left_child_cat = child_cat_info[1]
+            right_child_cat = child_cat_info[2]
+            if divide_idx is None:
+                child_info = (0, len_sentence, left_child_cat)
+                waiting_node_list.append(child_info)
+            else:
+                left_child_info = (0, divide_idx, left_child_cat)
+                right_child_info = (divide_idx, len_sentence, right_child_cat)
+                waiting_node_list.append(left_child_info)
+                waiting_node_list.append(right_child_info)
+
+        while len(waiting_node_list) != 0:
+            node_info = waiting_node_list.pop()
+            node_list.append(node_info)
+            start_idx = node_info[0]
+            end_idx = node_info[1]
+            cat = node_info[2]
+            if backpointer[(start_idx, end_idx)][cat] is not None:
+                child_cat_info = backpointer[(start_idx, end_idx)][cat]
+                divide_idx = child_cat_info[0]
+                left_child_cat = child_cat_info[1]
+                right_child_cat = child_cat_info[2]
+                if divide_idx is None:
+                    child_info = (start_idx, end_idx, left_child_cat)
+                    waiting_node_list.append(child_info)
+                else:
+                    left_child_info = (start_idx, divide_idx, left_child_cat)
+                    right_child_info = (divide_idx, end_idx, right_child_cat)
+                    waiting_node_list.append(left_child_info)
+                    waiting_node_list.append(right_child_info)
+        return node_list
 
     def make_leaf_node_cell(self, vector):
         output = self.linear_classifier(vector)

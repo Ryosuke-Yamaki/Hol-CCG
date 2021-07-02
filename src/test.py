@@ -37,29 +37,24 @@ f.close()
 binary_rule, unary_rule = extract_rule(path_to_grammar, test_tree_list.category_vocab)
 parser = Parser(tree_net, test_tree_list.content_vocab, binary_rule, unary_rule)
 
-total = 0
-count = 0
-for sentence in test_sentence:
-    total += 1
-    if len(sentence.split()) < 55:
-        count += 1
-print(count / total)
-
-correct = 0
+# total = 0
+# count = 0
+# correct = 0
 for sentence, tree in zip(test_sentence, test_tree_list.tree_list):
     sentence = sentence.rstrip()
-    total += 1
-    if len(sentence.split()) < 55:
-        count += 1
-        # start = time.time()
+    # total += 1
+    if len(sentence.split()) < 10:
+        # count += 1
         print(sentence)
-        prob, backpointer, vector = parser.parse(sentence)
-        final = list(prob.items())[-1]
-        pred = sorted(final[1].items(), key=lambda x: x[1], reverse=True)[0]
-        node = tree.node_list[-1]
-        if node.category_id == pred[0]:
-            correct += 1
+        start = time.time()
+        node_list = parser.parse(sentence)
+        print(time.time() - start, "sec")
+        # final = list(prob.items())[-1]
+        # pred = sorted(final[1].items(), key=lambda x: x[1], reverse=True)[0]
+        # node = tree.node_list[-1]
+        # if node.category_id == pred[0]:
+        #     correct += 1
         # print(node.category_id)
         # print(time.time() - start)
-print(count / total)
-print(correct / total)
+# print(count / total)
+# print(correct / total)
