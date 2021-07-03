@@ -1,20 +1,17 @@
-import time
 import torch
 from models import Tree_Net
 from utils import Condition_Setter
 import os
 from utils import load, load_weight_matrix
-from parser import extract_rule, Parser, cal_f1_score
+from parser import extract_rule, Parser
 from torch.nn import Embedding
 
-
-path_to_grammar = '/home/yryosuke0519/CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar'
-path_to_raw_sentence = '/home/yryosuke0519/CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw'
-
 PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
+path_to_grammar = PATH_TO_DIR + 'CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar'
+path_to_raw_sentence = PATH_TO_DIR + 'CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw'
+
 condition = Condition_Setter(PATH_TO_DIR)
 device = torch.device('cpu')
-print('loading tree list...')
 test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
 new_weight_matrix = load_weight_matrix(
@@ -37,30 +34,5 @@ f.close()
 binary_rule, unary_rule = extract_rule(path_to_grammar, test_tree_list.category_vocab)
 parser = Parser(tree_net, test_tree_list.content_vocab, binary_rule, unary_rule)
 
-
-sentence = test_sentence[0].rstrip()
-print(sentence)
-pred_node_list = parser.parse(sentence)
-
-for sentence, tree in zip(test_sentence, test_tree_list.tree_list):
-    sentence = sentence.rstrip()
-    # total += 1
-    if len(sentence.split()) < 100:
-        # count += 1
-        print(sentence)
-        start = time.time()
-        correct_node_list = tree.make_correct_node_list()
-        pred_node_list = parser.parse(sentence)
-        f1, precision, recall = cal_f1_score(pred_node_list, correct_node_list)
-        print(f1, precision, recall)
-        # print(time.time() - start, "sec")
-
-        # final = list(prob.items())[-1]
-        # pred = sorted(final[1].items(), key=lambda x: x[1], reverse=True)[0]
-        # node = tree.node_list[-1]
-        # if node.category_id == pred[0]:
-        #     correct += 1
-        # print(node.category_id)
-        # print(time.time() - start)
-# print(count / total)
-# print(correct / total)
+f1, precision, recall = parser.validation(test_sentence, test_tree_list)
+print('f1:{}, precision:{}, recall:{}'.format(f1, precision, recall))
