@@ -1,3 +1,4 @@
+import time
 import re
 import torch
 from utils import single_circular_correlation
@@ -115,9 +116,12 @@ class Parser:
                 prob[key][A] = P
                 backpointer[key][A] = None
                 vector[key][A] = vector_list[i]
-
+        binary_time = 0
+        unary_time = 0
+        cut_off_time = 0
         for length in range(2, n + 1):
             for i in range(n - length + 1):
+                start = time.time()
                 j = i + length
                 key = (i, j)
                 for k in range(i + 1, j):
@@ -138,7 +142,9 @@ class Parser:
                                             prob[key][A] = P
                                             backpointer[key][A] = (k, S1, S2)
                                             vector[key][A] = composed_vector
+                binary_time += time.time() - start
                 if key in prob:
+                    start = time.time()
                     again = True
                     while again:
                         again = False
@@ -153,7 +159,11 @@ class Parser:
                                         backpointer[key][A] = (None, S, None)
                                         vector[key][A] = temp_vector
                                         again = True
+                    unary_time += time.time() - start
+                    start = time.time()
                     prob, backpointer, vector = self.cut_off(prob, backpointer, vector, key)
+                    cut_off_time += time.time() - start
+        print(binary_time, unary_time, cut_off_time)
         node_list = self.reconstruct_tree(prob, backpointer, n)
         return node_list
 

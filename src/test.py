@@ -37,8 +37,11 @@ f.close()
 binary_rule, unary_rule = extract_rule(path_to_grammar, test_tree_list.category_vocab)
 parser = Parser(tree_net, test_tree_list.content_vocab, binary_rule, unary_rule)
 
-total_f1 = 0
-total_nodes = 0
+
+sentence = test_sentence[0].rstrip()
+print(sentence)
+pred_node_list = parser.parse(sentence)
+
 for sentence, tree in zip(test_sentence, test_tree_list.tree_list):
     sentence = sentence.rstrip()
     # total += 1
