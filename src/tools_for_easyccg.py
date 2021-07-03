@@ -1,18 +1,22 @@
 import torch
 import subprocess
 from utils import single_circular_correlation
+import re
 
 
 class Node:
-    def __init__(self, node_info, content_vocab, category_vocab, embedding, classifer):
+    def __init__(self, node_info, content_vocab, category_vocab, embedding, linear):
         if node_info[0] == 'L':
             self.is_leaf = True
             self.ready = True
-            self.content_id = content_vocab[node_info[4]]
+            content = node_info[4].lower()
+            content = re.sub(r'\d+', '0', content)
+            content = re.sub(r'\d,\d', '0', content)
+            self.content_id = content_vocab[content]
             self.category_id = category_vocab[node_info[1]]
             self.vector = embedding(torch.tensor(self.content_id))
             self.vector = self.vector / torch.norm(self.vector)
-            self.prob = classifer(self.vector)[self.category_id]
+            self.score = linear(self.vector)[self.category_id]
         else:
             self.is_leaf = False
             self.ready = False
@@ -47,11 +51,10 @@ class Node_Stack:
 
 
 class Tree:
-    def __init__(self, self_id, node_list):
-        self.self_id = self_id
+    def __init__(self, node_list):
         self.node_list = node_list
 
-    def cal_prob(self, classifier):
+    def cal_score(self, linear):
         while True:
             num_ready_node = 0
             for node in self.node_list:
@@ -62,7 +65,7 @@ class Tree:
                         child_node = self.node_list[node.child_node_id]
                         if child_node.ready:
                             node.vector = child_node.vector
-                            node.prob = classifier(node.vector)[node.category_id]
+                            node.score = linear(node.vector)[node.category_id] + child_node.score
                             node.ready = True
                     else:  # when node has two children
                         left_child_node = self.node_list[node.left_child_node_id]
@@ -70,25 +73,35 @@ class Tree:
                         if left_child_node.ready and right_child_node.ready:
                             node.vector = single_circular_correlation(
                                 left_child_node.vector, right_child_node.vector)
-                            node.prob = classifier(node.vector)[node.category_id]
+                            node.score = linear(
+                                node.vector)[
+                                node.category_id] + left_child_node.score + right_child_node.score
                             node.ready = True
             if num_ready_node == len(self.node_list):
                 break
+        return self.node_list[-1].score.item()
 
 
 class Converter:
-    def __init__(self, content_vocab, category_vocab):
+    def __init__(self, content_vocab, category_vocab, embedding, linear):
         self.content_vocab = content_vocab
         self.category_vocab = category_vocab
+        self.embedding = embedding
+        self.linear = linear
 
-    def convert_to_tree(self, sentence, tree_id):
+    def convert_to_tree(self, sentence):
         self.comfirmed_node = []
         stack_dict = {}
         idx = 0
         level = 0
         node_id = 0
         node_info, idx = self.extract_node(sentence, idx)
-        root_node = Node(node_info, self.content_vocab, self.category_vocab)
+        root_node = Node(
+            node_info,
+            self.content_vocab,
+            self.category_vocab,
+            self.embedding,
+            self.linear)
         stack_dict[level] = Node_Stack()
         stack_dict[level].push(root_node)
         if not root_node.is_leaf:
@@ -99,7 +112,12 @@ class Converter:
             if char == '(':
                 level += 1
                 node_info, idx = self.extract_node(sentence, idx)
-                node = Node(node_info, self.content_vocab, self.category_vocab)
+                node = Node(
+                    node_info,
+                    self.content_vocab,
+                    self.category_vocab,
+                    self.embedding,
+                    self.linear)
                 stack_dict[level].push(node)
                 if not node.is_leaf:
                     stack_dict[level + 1] = Node_Stack(capacity=node.num_child)
@@ -110,9 +128,11 @@ class Converter:
             if idx == len(sentence):
                 root_node = stack_dict[0].node_stack[-1]
                 root_node.self_id = node_id
+                if not root_node.is_leaf:
+                    root_node.ready = False
                 self.comfirmed_node.append(root_node)
                 break
-        return Tree(tree_id, self.comfirmed_node)
+        return Tree(self.comfirmed_node)
 
     # add node to stack corresponding to the current level, and update index
     def extract_node(self, sentence, idx):
@@ -138,6 +158,8 @@ class Converter:
                     node_id += 1
                     parent_node.child_node_id = child_node.self_id
                     parent_node.ready = True
+                    if not child_node.is_leaf:
+                        child_node.ready = False
                     self.comfirmed_node.append(child_node)
                 else:
                     right_child_node = node_stack.pop()
@@ -149,26 +171,14 @@ class Converter:
                     parent_node.left_child_node_id = left_child_node.self_id
                     parent_node.right_child_node_id = right_child_node.self_id
                     parent_node.ready = True
+                    if not left_child_node.is_leaf:
+                        left_child_node.ready = False
+                    if not right_child_node.is_leaf:
+                        right_child_node.ready = False
                     self.comfirmed_node.append(left_child_node)
                     self.comfirmed_node.append(right_child_node)
                 del stack_dict[level]
         return stack_dict, node_id
-
-
-class Tree_List:
-    def __init__(
-            self,
-            PATH_TO_DATA,
-            content_vocab,
-            category_vocab=None,
-            device=torch.device('cpu')):
-        self.content_vocab = content_vocab
-        self.category_vocab = category_vocab
-        self.device = device
-        self.set_tree_list(PATH_TO_DATA)
-        if category_vocab is None:
-            self.make_category_vocab()
-        self.set_content_category_id(self.content_vocab, self.category_vocab)
 
 
 def easyccg(PATH_TO_DIR, n=10):
