@@ -86,19 +86,38 @@ class Tree:
             if not node.is_leaf and node.ready:
                 node.ready = False
 
-    def convert_node_list_for_eval(self):
-        converted_node_list = []
-        sentence = self.node_list[-1].content_id
-        for node in self.node_list:
-            content = node.content_id
-            for idx in range(len(sentence) - len(content) + 1):
-                if content[0] == sentence[idx] and content == sentence[idx:idx + len(content)]:
-                    break
-            scope_start = idx
-            scope_end = idx + len(content)
-            converted_node_list.append(
-                (scope_start, scope_end, node.category_id))
-        return converted_node_list
+    def make_correct_node_list(self):
+        correct_node_list = []
+        top_node = self.node_list[-1]
+        top_node.start_idx = 0
+        top_node.end_idx = len(top_node.content_id)
+        correct_node_list.append((0, len(top_node.content_id), top_node.category_id))
+        for info in reversed(self.composition_info):
+            num_child = info[0]
+            if num_child == 1:
+                parent_node = self.node_list[info[1]]
+                child_node = self.node_list[info[2]]
+                child_node.start_idx = parent_node.start_idx
+                child_node.end_idx = parent_node.end_idx
+                correct_node_list.append(
+                    (child_node.start_idx, child_node.end_idx, child_node.category_id))
+            else:
+                parent_node = self.node_list[info[1]]
+                left_child_node = self.node_list[info[2]]
+                right_child_node = self.node_list[info[3]]
+                left_child_node.start_idx = parent_node.start_idx
+                left_child_node.end_idx = parent_node.start_idx + len(left_child_node.content_id)
+                right_child_node.start_idx = left_child_node.end_idx
+                right_child_node.end_idx = parent_node.end_idx
+                correct_node_list.append(
+                    (left_child_node.start_idx,
+                     left_child_node.end_idx,
+                     left_child_node.category_id))
+                correct_node_list.append(
+                    (right_child_node.start_idx,
+                     right_child_node.end_idx,
+                     right_child_node.category_id))
+        return correct_node_list
 
 
 class Tree_List:

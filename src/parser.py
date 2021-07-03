@@ -158,7 +158,7 @@ class Parser:
         return node_list
 
     # remove the candidate of low probability for beam search
-    def cut_off(self, prob, backpointer, vector, key, width=100):
+    def cut_off(self, prob, backpointer, vector, key, width=5):
         prediction = sorted(prob[key].items(), key=lambda x: x[1], reverse=True)
         top_prob = {}
         top_backpointer = {}

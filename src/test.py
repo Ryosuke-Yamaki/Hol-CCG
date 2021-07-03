@@ -42,12 +42,12 @@ total_nodes = 0
 for sentence, tree in zip(test_sentence, test_tree_list.tree_list):
     sentence = sentence.rstrip()
     # total += 1
-    if len(sentence.split()) < 10:
+    if len(sentence.split()) < 100:
         # count += 1
         print(sentence)
         start = time.time()
+        correct_node_list = tree.make_correct_node_list()
         pred_node_list = parser.parse(sentence)
-        correct_node_list = tree.convert_node_list_for_eval()
         f1, precision, recall = cal_f1_score(pred_node_list, correct_node_list)
         print(f1, precision, recall)
         # print(time.time() - start, "sec")
