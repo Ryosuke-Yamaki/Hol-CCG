@@ -81,6 +81,61 @@ class Tree:
                 break
         return self.node_list[-1].score.item()
 
+    def make__node_list_for_eval(self):
+        for node in self.node_list:
+            if node.is_leaf:
+                node.content_id = [node.content_id]
+        while True:
+            num_ready_node = 0
+            for node in self.node_list:
+                if node.ready:
+                    num_ready_node += 1
+                elif not node.is_leaf and not node.ready:
+                    if node.num_child == 1:
+                        child_node = self.node_list[node.child_node_id]
+                        if child_node.ready:
+                            node.content_id = child_node.content_id
+                            node.ready = True
+                    else:  # when node has two children
+                        left_child_node = self.node_list[node.left_child_node_id]
+                        right_child_node = self.node_list[node.right_child_node_id]
+                        if left_child_node.ready and right_child_node.ready:
+                            node.content_id = left_child_node.content_id + right_child_node.content_id
+                            node.ready = True
+            if num_ready_node == len(self.node_list):
+                break
+        eval_node_list = []
+        top_node = self.node_list[-1]
+        top_node.start_idx = 0
+        top_node.end_idx = len(top_node.content_id)
+        eval_node_list.append((0, len(top_node.content_id), top_node.category_id))
+        for info in reversed(self.composition_info):
+            num_child = info[0]
+            if num_child == 1:
+                parent_node = self.node_list[info[1]]
+                child_node = self.node_list[info[2]]
+                child_node.start_idx = parent_node.start_idx
+                child_node.end_idx = parent_node.end_idx
+                eval_node_list.append(
+                    (child_node.start_idx, child_node.end_idx, child_node.category_id))
+            else:
+                parent_node = self.node_list[info[1]]
+                left_child_node = self.node_list[info[2]]
+                right_child_node = self.node_list[info[3]]
+                left_child_node.start_idx = parent_node.start_idx
+                left_child_node.end_idx = parent_node.start_idx + len(left_child_node.content_id)
+                right_child_node.start_idx = left_child_node.end_idx
+                right_child_node.end_idx = parent_node.end_idx
+                eval_node_list.append(
+                    (left_child_node.start_idx,
+                     left_child_node.end_idx,
+                     left_child_node.category_id))
+                eval_node_list.append(
+                    (right_child_node.start_idx,
+                     right_child_node.end_idx,
+                     right_child_node.category_id))
+        return eval_node_list
+
 
 class Converter:
     def __init__(self, content_vocab, category_vocab, embedding, linear):
@@ -194,3 +249,26 @@ def easyccg(PATH_TO_DIR, n=10):
     proc = subprocess.run(command + option, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     result = proc.stdout.decode("utf8").splitlines()
     return result
+
+
+@torch.no_grad()
+def cal_f1_score(pred_node_list, correct_node_list):
+    if len(pred_node_list) != 0:
+        precision = 0.0
+        for node in pred_node_list:
+            if node in correct_node_list:
+                precision += 1.0
+        precision = precision / len(pred_node_list)
+
+        recall = 0.0
+        for node in correct_node_list:
+            if node in pred_node_list:
+                recall += 1.0
+        recall = recall / len(correct_node_list)
+        f1 = (2 * precision * recall) / (precision + recall + 1e-6)
+    # when failed parsing
+    else:
+        f1 = 0.0
+        precision = 0.0
+        recall = 0.0
+    return f1, precision, recall

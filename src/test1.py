@@ -41,28 +41,26 @@ converter = Converter(
     embedding,
     linear)
 
+id_list = [int(i.replace('ID=', '')) for i in result[0::2]]
+idx_list = list(range(1, len(result), 2))
+
 current_id = 1
-idx_list = []
+max_socre_idx_list = []
 max_score = 0
-with torch.no_grad():
-    for idx in range(len(result[:-3])):
-        if idx % 2 == 0:
-            id = int(result[idx].replace('ID=', ''))
-        else:
-            if id == current_id:
-                tree = converter.convert_to_tree(result[idx])
-                score = tree.cal_score(linear)
-                if score > max_score:
-                    max_score = score
-                    max_idx = idx
-            # when the target sentence is swhiched
-            else:
-                print(current_id)
-                idx_list.append(max_idx)
-                current_id = id
-                max_score = 0
-idx_list.append(max_idx)
+for id, idx in zip(id_list, idx_list):
+    if id == current_id:
+        tree = converter.convert_to_tree(result[idx])
+        score = tree.cal_score(linear)
+        if score > max_score:
+            max_score = score
+            max_score_idx = idx
+    # when the target sentence is swhiched
+    else:
+        max_socre_idx_list.append(max_score_idx)
+        print(current_id)
+        current_id = id
+        tree = converter.convert_to_tree(result[idx])
+        max_score = tree.cal_score(linear)
+        max_score_idx = idx
+max_socre_idx_list.append(max_score_idx)
 print(time.time() - start)
-for idx in idx_list:
-    print(result[idx - 1])
-    print(result[idx])
