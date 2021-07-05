@@ -81,10 +81,11 @@ class Tree:
                 break
         return self.node_list[-1].score.item()
 
-    def make__node_list_for_eval(self):
+    def make_node_list_for_eval(self):
         for node in self.node_list:
             if node.is_leaf:
                 node.content_id = [node.content_id]
+        self.composition_info = []
         while True:
             num_ready_node = 0
             for node in self.node_list:
@@ -96,12 +97,16 @@ class Tree:
                         if child_node.ready:
                             node.content_id = child_node.content_id
                             node.ready = True
+                            self.composition_info.append(
+                                [node.num_child, node.self_id, child_node.self_id, 0])
                     else:  # when node has two children
                         left_child_node = self.node_list[node.left_child_node_id]
                         right_child_node = self.node_list[node.right_child_node_id]
                         if left_child_node.ready and right_child_node.ready:
                             node.content_id = left_child_node.content_id + right_child_node.content_id
                             node.ready = True
+                            self.composition_info.append(
+                                [node.num_child, node.self_id, left_child_node.self_id, right_child_node.self_id])
             if num_ready_node == len(self.node_list):
                 break
         eval_node_list = []
@@ -116,8 +121,9 @@ class Tree:
                 child_node = self.node_list[info[2]]
                 child_node.start_idx = parent_node.start_idx
                 child_node.end_idx = parent_node.end_idx
-                eval_node_list.append(
-                    (child_node.start_idx, child_node.end_idx, child_node.category_id))
+                if not child_node.is_leaf:
+                    eval_node_list.append(
+                        (child_node.start_idx, child_node.end_idx, child_node.category_id))
             else:
                 parent_node = self.node_list[info[1]]
                 left_child_node = self.node_list[info[2]]
@@ -126,14 +132,16 @@ class Tree:
                 left_child_node.end_idx = parent_node.start_idx + len(left_child_node.content_id)
                 right_child_node.start_idx = left_child_node.end_idx
                 right_child_node.end_idx = parent_node.end_idx
-                eval_node_list.append(
-                    (left_child_node.start_idx,
-                     left_child_node.end_idx,
-                     left_child_node.category_id))
-                eval_node_list.append(
-                    (right_child_node.start_idx,
-                     right_child_node.end_idx,
-                     right_child_node.category_id))
+                if not left_child_node.is_leaf:
+                    eval_node_list.append(
+                        (left_child_node.start_idx,
+                         left_child_node.end_idx,
+                         left_child_node.category_id))
+                if not right_child_node.is_leaf:
+                    eval_node_list.append(
+                        (right_child_node.start_idx,
+                         right_child_node.end_idx,
+                         right_child_node.category_id))
         return eval_node_list
 
 
@@ -237,10 +245,10 @@ class Converter:
 
 
 def easyccg(PATH_TO_DIR, n=10):
-    command = ['java', '-jar', PATH_TO_DIR + 'easyccg/easyccg.jar']
+    command = ['java', '-jar', PATH_TO_DIR + 'easyccg-0.2/easyccg.jar']
     option = [
         '-m',
-        PATH_TO_DIR + 'easyccg/model',
+        PATH_TO_DIR + 'easyccg-0.2/model',
         '-f',
         PATH_TO_DIR + 'CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw',
         '-n',
@@ -272,3 +280,37 @@ def cal_f1_score(pred_node_list, correct_node_list):
         precision = 0.0
         recall = 0.0
     return f1, precision, recall
+
+
+def convert_for_eval(sentence, category_vocab):
+    if sentence == '':
+        return "(2 fail)"
+    else:
+        partial = []
+        converted = []
+        pos = 0
+        while True:
+            char = sentence[pos]
+            if char == '<':
+                start_pos = pos
+                while True:
+                    pos += 1
+                    char = sentence[pos]
+                    if char == '>':
+                        end_pos = pos
+                        break
+                partial = sentence[start_pos:end_pos + 1].split()
+                if partial[0] == '<L':
+                    converted.append(str(category_vocab[partial[1]]))
+                    converted.append(' ')
+                    converted.append(partial[4])
+                else:
+                    converted.append(str(category_vocab[partial[1]]))
+                pos += 1
+            else:
+                converted.append(char)
+                pos += 1
+                if pos == len(sentence):
+                    break
+        converted = ''.join(converted).replace(' )', ')')
+        return converted

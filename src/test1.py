@@ -1,5 +1,8 @@
+from PYEVALB import scorer
 import time
-from tools_for_easyccg import Converter, easyccg
+
+from torch.nn.modules import conv
+from tools_for_easyccg import Converter, easyccg, cal_f1_score, convert_for_eval
 from utils import load, load_weight_matrix
 import os
 import torch
@@ -32,14 +35,48 @@ tree_net = torch.load(condition.path_to_model,
 tree_net.eval()
 linear = tree_net.linear
 
-start = time.time()
-result = easyccg(PATH_TO_DIR, n=10)
-
 converter = Converter(
     test_tree_list.content_vocab,
     test_tree_list.category_vocab,
     embedding,
     linear)
+
+gold_list = []
+for i in range(100):
+    if i < 10:
+        name = 'wsj_230' + str(i) + '.auto'
+    else:
+        name = 'wsj_23' + str(i) + '.auto'
+    path_to_gold = PATH_TO_DIR + 'CCGbank/ccgbank_1_1/data/AUTO/23/' + name
+    f = open(path_to_gold, 'r')
+    data = f.readlines()
+    f.close()
+    for j in range(len(data)):
+        if j % 2 == 1:
+            gold_list.append(data[j].rstrip())
+
+parsed = ['' for i in range(len(gold_list))]
+path_to_parsed = PATH_TO_DIR + 'parsed.txt'
+f = open(path_to_parsed, 'r')
+data = f.readlines()
+for i in range(len(data)):
+    if 'ID=' in data[i]:
+        ID = int(data[i].split()[0].replace('ID=', ''))
+    elif data[i] != '\n' and parsed[ID - 1] == '':
+        parsed[ID - 1] = data[i].rstrip()
+
+category_vocab = test_tree_list.category_vocab
+# result = easyccg(PATH_TO_DIR, n=10)
+gold_converted = []
+easyccg_converted = []
+for gold_sentence, s in zip(gold_list, parsed):
+    gold_converted.append(convert_for_eval(gold_sentence, category_vocab) + '\n')
+    easyccg_converted.append(convert_for_eval(s, category_vocab) + '\n')
+
+with open(PATH_TO_DIR + 'gold.txt', 'w', newline='\n') as f:
+    f.writelines(gold_converted)
+with open(PATH_TO_DIR + 'c&c_converted.txt', 'w', newline='\n') as f:
+    f.writelines(easyccg_converted)
 
 id_list = [int(i.replace('ID=', '')) for i in result[0::2]]
 idx_list = list(range(1, len(result), 2))
@@ -63,4 +100,14 @@ for id, idx in zip(id_list, idx_list):
         max_score = tree.cal_score(linear)
         max_score_idx = idx
 max_socre_idx_list.append(max_score_idx)
-print(time.time() - start)
+
+gold_converted = []
+easyccg_converted = []
+for gold_sentence, idx in zip(gold_list, max_socre_idx_list):
+    gold_converted.append(convert_for_eval(gold_sentence, category_vocab) + '\n')
+    easyccg_converted.append(convert_for_eval(result[idx], category_vocab) + '\n')
+
+with open(PATH_TO_DIR + 'gold.txt', 'w', newline='\n') as f:
+    f.writelines(gold_converted)
+with open(PATH_TO_DIR + 'easyccg_converted.txt', 'w', newline='\n') as f:
+    f.writelines(easyccg_converted)
