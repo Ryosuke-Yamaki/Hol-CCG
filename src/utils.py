@@ -110,15 +110,16 @@ class History:
         self.max_acc_idx = np.argmax(self.acc_history)
 
     @torch.no_grad()
-    def validation(self, batch_list, device=torch.device('cpu')):
+    def validation(self, batch_list, unk_idx,device=torch.device('cpu')):
         total_loss = 0.0
         total_acc = 0.0
         for batch in batch_list:
             label, mask = make_label_mask(batch, device=device)
+            unk_cat_mask = label != unk_idx
             output = self.tree_net(batch)
             output = output[torch.nonzero(mask, as_tuple=True)]
-            loss = self.criteria(output, label)
-            acc = self.cal_top_k_acc(output, label)
+            loss = self.criteria(output[unk_cat_mask], label[unk_cat_mask])
+            acc = self.cal_top_k_acc(output[unk_cat_mask], label[unk_cat_mask])
             total_loss += loss.item()
             total_acc += acc.item()
         self.loss_history = np.append(self.loss_history, total_loss / len(batch_list))
@@ -190,11 +191,18 @@ class History:
 class Condition_Setter:
     def __init__(self, PATH_TO_DIR):
         self.param_list = []
-        if int(input("random(0) or GloVe(1): ")) == 1:
+        embedding_type = int(input("random(0) or GloVe(1) or FastText(2): "))
+        if embedding_type == 1:
             self.RANDOM = False
+            self.embedding_type = 'GloVe'
             self.param_list.append('GloVe')
+        elif embedding_type == 2:
+            self.RANDOM = False
+            self.embedding_type = 'FastText'
+            self.param_list.append('FastText')
         else:
             self.RANDOM = True
+            self.embedding_type = 'random'
             self.param_list.append('random')
         self.REGULARIZED = True
         embedding_dim = input("embedding_dim(default=100d): ")
@@ -210,7 +218,7 @@ class Condition_Setter:
         self.path_to_dev_data = PATH_TO_DIR + "CCGbank/converted/dev.txt"
         self.path_to_test_data = PATH_TO_DIR + "CCGbank/converted/test.txt"
         self.path_to_pretrained_weight_matrix = PATH_TO_DIR + \
-            "Hol-CCG/data/glove_{}d.csv".format(self.embedding_dim)
+            "Hol-CCG/data/{}_{}d.csv".format(self.embedding_type, self.embedding_dim)
         path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"
         path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
         path_to_train_data_history = PATH_TO_DIR + "Hol-CCG/result/data/"
@@ -227,10 +235,7 @@ class Condition_Setter:
             path_to_map,
             fig_name]
         for i in range(len(path_list)):
-            if self.RANDOM:
-                path_list[i] += "random"
-            else:
-                path_list[i] += "GloVe"
+            path_list[i] += self.embedding_type
             if self.REGULARIZED:
                 path_list[i] += "_reg"
             else:

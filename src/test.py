@@ -1,38 +1,77 @@
-import torch
-from models import Tree_Net
-from utils import Condition_Setter
+from collections import Counter
+from utils import load
 import os
-from utils import load, load_weight_matrix
-from parser import extract_rule, Parser
-from torch.nn import Embedding
 
 PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
-path_to_grammar = PATH_TO_DIR + 'CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar'
-path_to_raw_sentence = PATH_TO_DIR + 'CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw'
 
-condition = Condition_Setter(PATH_TO_DIR)
-device = torch.device('cpu')
+train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
+dev_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/dev_tree_list.pickle")
 test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
-new_weight_matrix = load_weight_matrix(
-    PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim))
-new_weight_matrix = torch.tensor(new_weight_matrix)
 
-NUM_VOCAB = len(test_tree_list.content_vocab)
-NUM_CATEGORY = len(test_tree_list.category_vocab)
-tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY, condition.embedding_dim).to(device)
-tree_net = torch.load(condition.path_to_model,
-                      map_location=device)
-tree_net.eval()
-new_embedding = Embedding(NUM_VOCAB, condition.embedding_dim, _weight=new_weight_matrix)
-tree_net.embedding = new_embedding
+# leaf_counter = Counter()
+# phrase_counter = Counter()
 
-f = open(path_to_raw_sentence, 'r')
-test_sentence = f.readlines()
-f.close()
+# for tree in train_tree_list.tree_list:
+#     for node in tree.node_list:
+#         if node.is_leaf:
+#             leaf_counter[node.category] += 1
+# # フレーズに固有のカテゴリ
+# for tree in train_tree_list.tree_list:
+#     for node in tree.node_list:
+#         if leaf_counter[node.category] == 0:
+#             phrase_counter[node.category] += 1
 
-binary_rule, unary_rule = extract_rule(path_to_grammar, test_tree_list.category_vocab)
-parser = Parser(tree_net, test_tree_list.content_vocab, binary_rule, unary_rule)
+# cut_off_counter = Counter()
 
-f1, precision, recall = parser.validation(test_sentence, test_tree_list)
-print('f1:{}, precision:{}, recall:{}'.format(f1, precision, recall))
+# for k, v in leaf_counter.items():
+#     if v >= 8:
+#         cut_off_counter[k] += 1
+
+# for k, v in phrase_counter.items():
+#     if v >= 8:
+#         cut_off_counter[k] += 1
+
+counter = Counter()
+for tree in train_tree_list.tree_list:
+    for node in tree.node_list:
+        counter[node.category] += 1
+
+cut_off_counter = Counter()
+
+for k, v in counter.items():
+    if v >= 10:
+        cut_off_counter[k] += 1
+
+leaf_total = 0
+leaf_not_exist = 0
+phrase_total = 0
+phrase_not_exist = 0
+for tree in dev_tree_list.tree_list:
+    for node in tree.node_list:
+        if node.is_leaf:
+            leaf_total += 1
+            if cut_off_counter[node.category] == 0:
+                leaf_not_exist += 1
+        else:
+            phrase_total += 1
+            if cut_off_counter[node.category] == 0:
+                phrase_not_exist += 1
+
+print('leaf', leaf_not_exist / leaf_total)
+print('phrase', phrase_not_exist / phrase_total)
+print('total', (leaf_not_exist + phrase_not_exist) / (leaf_total + phrase_total))
+
+total_tree = 0
+missing_tree = 0
+for tree in train_tree_list.tree_list:
+    total_tree += 1
+    for node in tree.node_list:
+        if cut_off_counter[node.category] == 0:
+            missing_tree += 1
+            break
+print(missing_tree / total_tree)
+
+a = 1
+# print(len(leaf_counter))
+# print(len(phrase_counter))

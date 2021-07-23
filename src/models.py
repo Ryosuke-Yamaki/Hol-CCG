@@ -433,7 +433,7 @@ class Tree_Net(nn.Module):
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
 
-    def evaluate(self, tree_list):
+    def evaluate(self, tree_list,unk_idx):
         embedding = self.embedding
         linear = self.linear
         tree_list.set_vector(embedding)
@@ -446,16 +446,17 @@ class Tree_Net(nn.Module):
             num_phrase = 0
             for tree in tree_list.tree_list:
                 for node in tree.node_list:
-                    output = linear(node.vector)
-                    predict = torch.topk(output, k=k)[1]
-                    if node.is_leaf:
-                        if node.category_id in predict:
-                            num_correct_word += 1
-                        num_word += 1
-                    else:
-                        if node.category_id in predict:
-                            num_correct_phrase += 1
-                        num_phrase += 1
+                    if node.category_id != unk_idx:
+                        output = linear(node.vector)
+                        predict = torch.topk(output, k=k)[1]
+                        if node.is_leaf:
+                            if node.category_id in predict:
+                                num_correct_word += 1
+                            num_word += 1
+                        else:
+                            if node.category_id in predict:
+                                num_correct_phrase += 1
+                            num_phrase += 1
             print('-' * 50)
             print('overall top-{}: {}'.format(k, (num_correct_word +
                                                   num_correct_phrase) / (num_word + num_phrase)))
