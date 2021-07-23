@@ -1,12 +1,77 @@
+import matplotlib.pyplot as plt
 from collections import Counter
 from utils import load
 import os
+from torchtext.vocab import Vocab
+from utils import load, load_weight_matrix
+import os
+import torch
+from models import Tree_Net
+from utils import set_random_seed, Condition_Setter
+from torch.nn import Embedding
+
+
+def cut_off(output, beta):
+    sorted_prob = torch.sort(output, descending=True)[0]
+    sorted_idx = torch.argsort(output, descending=True)
+    max_prob = torch.max(output)
+    for idx in range(1, len(sorted_prob)):
+        if sorted_prob[idx] < max_prob * beta:
+            break
+    return sorted_idx[:idx]
+
 
 PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
+condition = Condition_Setter(PATH_TO_DIR)
 
-train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
-dev_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/dev_tree_list.pickle")
+device = torch.device('cpu')
+
+print('loading tree list...')
+# train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
+# dev_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/dev_tree_list.pickle")
 test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
+
+NUM_VOCAB = len(test_tree_list.content_vocab)
+NUM_CATEGORY = len(test_tree_list.category_vocab) - 1
+
+tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY,
+                    condition.embedding_dim).to(device)
+tree_net = torch.load(condition.path_to_model,
+                      map_location=device)
+tree_net.eval()
+
+embedding = tree_net.embedding
+linear = tree_net.linear
+softmax = torch.nn.Softmax(dim=-1)
+
+total_leaf = 0
+correct_leaf = 0
+total_phrase = 0
+correct_phrase = 0
+leaf_length = 0
+phrase_length = 0
+content_vocab = test_tree_list.content_vocab
+test_tree_list.set_vector(embedding)
+
+for tree in test_tree_list.tree_list:
+    for node in tree.node_list:
+        output = softmax(linear(node.vector[0]))
+        top_k = cut_off(output, 0.0025)
+        if node.is_leaf:
+            total_leaf += 1
+            leaf_length += len(top_k)
+            if node.category_id in top_k:
+                correct_leaf += 1
+        else:
+            total_phrase += 1
+            phrase_length += len(top_k)
+            if node.category_id in top_k:
+                correct_phrase += 1
+
+print(correct_leaf / total_leaf)
+print(leaf_length / total_leaf)
+print(correct_phrase / total_phrase)
+print(phrase_length / total_phrase)
 
 
 # leaf_counter = Counter()
@@ -32,16 +97,25 @@ test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 #     if v >= 8:
 #         cut_off_counter[k] += 1
 
-counter = Counter()
+word_counter = Counter()
+category_counter = Counter()
+for tree in test_tree_list.tree_list:
+    for node in tree.node_list:
+        if node.is_leaf:
+            word_counter[node.content] += 1
+        category_counter[node.category] += 1
+
+word_vocab = Vocab(word_counter, specials=[])
+category_vocab = Vocab(category_counter, min_freq=10, specials=['<unk>'])
+
+dict = {}
 for tree in train_tree_list.tree_list:
     for node in tree.node_list:
-        counter[node.category] += 1
+        if node.is_leaf:
+            if node.content not in dict:
+                dict[node.content] = Counter()
+            dict[node.content][category_vocab[node.category]] += 1
 
-cut_off_counter = Counter()
-
-for k, v in counter.items():
-    if v >= 10:
-        cut_off_counter[k] += 1
 
 leaf_total = 0
 leaf_not_exist = 0
