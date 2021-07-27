@@ -55,6 +55,7 @@ tree_net.eval()
 embedding_weight = tree_net.embedding.weight
 linear_weight = tree_net.linear.weight
 linear_bias = tree_net.linear.bias
+print(linear_weight.shape)
 content_vocab = []
 for k, v in train_tree_list.content_vocab.stoi.items():
     content_vocab.append([k, v])

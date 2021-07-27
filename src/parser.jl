@@ -61,7 +61,7 @@ function cky_parse(sentence::String,content_vocab::Dict{String,Int},embedding_we
         end
     end
 
-    for l=2:n+1
+    for l=2:n
         for i=i+l
             j = i+l
             for k = i+1:j
