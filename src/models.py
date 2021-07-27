@@ -91,7 +91,8 @@ class Tree:
         top_node = self.node_list[-1]
         top_node.start_idx = 0
         top_node.end_idx = len(top_node.content_id)
-        correct_node_list.append((0, len(top_node.content_id), top_node.category_id))
+        if not top_node.is_leaf:
+            correct_node_list.append((0, len(top_node.content_id), top_node.category_id))
         for info in reversed(self.composition_info):
             num_child = info[0]
             if num_child == 1:
@@ -99,8 +100,9 @@ class Tree:
                 child_node = self.node_list[info[2]]
                 child_node.start_idx = parent_node.start_idx
                 child_node.end_idx = parent_node.end_idx
-                correct_node_list.append(
-                    (child_node.start_idx, child_node.end_idx, child_node.category_id))
+                if not child_node.is_leaf:
+                    correct_node_list.append(
+                        (child_node.start_idx, child_node.end_idx, child_node.category_id))
             else:
                 parent_node = self.node_list[info[1]]
                 left_child_node = self.node_list[info[2]]
@@ -109,14 +111,16 @@ class Tree:
                 left_child_node.end_idx = parent_node.start_idx + len(left_child_node.content_id)
                 right_child_node.start_idx = left_child_node.end_idx
                 right_child_node.end_idx = parent_node.end_idx
-                correct_node_list.append(
-                    (left_child_node.start_idx,
-                     left_child_node.end_idx,
-                     left_child_node.category_id))
-                correct_node_list.append(
-                    (right_child_node.start_idx,
-                     right_child_node.end_idx,
-                     right_child_node.category_id))
+                if not left_child_node.is_leaf:
+                    correct_node_list.append(
+                        (left_child_node.start_idx,
+                         left_child_node.end_idx,
+                         left_child_node.category_id))
+                if not right_child_node.is_leaf:
+                    correct_node_list.append(
+                        (right_child_node.start_idx,
+                         right_child_node.end_idx,
+                         right_child_node.category_id))
         return correct_node_list
 
 
