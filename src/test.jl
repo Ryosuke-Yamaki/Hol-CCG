@@ -3,8 +3,9 @@ using FFTW
 using LinearAlgebra
 import Base:parse
 using DelimitedFiles
+using Profile
 
-function circular_correlation(a::Vector{Float64}, b::Vector{Float64})
+@fastmath function circular_correlation(a::Vector{Float64}, b::Vector{Float64})
     a = conj(fft(a))
     b = fft(b)
     return normalize(real(ifft(a .* b)), 2)
@@ -24,37 +25,21 @@ function tokenize(sentence::String, content_vocab::Dict{String,Int}, embedding_w
     return vector_list
 end
 
-function softmax(input::Matrix{Float64})
+@fastmath function softmax(input::Matrix{Float64})
     return exp.(input) / sum(exp.(input))
 end
 
 function top_beta(input::Matrix{Float64}, beta::Float64)
-    output = zeros(Int, size(input))
+    output = zeros(Bool, size(input))
     output[input .>= maximum(input) * beta] .= 1
-    return output
+    return vec(output)
 end
 
-function nonzero_index(input)
+function nonzero_index(input::Vector{Bool})
     return sortperm(vec(input), rev=true)[1:length(input[input .== 1])]
 end
-        
-function cky_parsing(sentence::String, content_vocab::Dict{String,Int}, embedding_weight::Matrix{Float64}, linear_weight::Matrix{Float64}, linear_bias::Matrix{Float64}, beta::Float64, binary_rule::Array{Bool}, unary_rule::Matrix{Bool})
-    vector_list = tokenize(sentence, content_vocab, embedding_weight)
-    n = size(vector_list, 1)
-    category_table = zeros(Int, n + 1, n + 1, size(linear_weight, 1))
-    prob = zeros(Float64, n + 1, n + 1, size(linear_weight, 1))
-    backpointer = zeros(Int, n + 1, n + 1, size(linear_weight, 1), 3)
-    vector_table = zeros(Float64, n + 1, n + 1, size(linear_weight, 1), size(embedding_weight, 2))
-    for i = 1:n
-        prob_dist = softmax(linear_weight * vector_list[i,:] + linear_bias)
-        A_list = nonzero_index(top_beta(prob_dist, beta))
-        for A in A_list
-            category_table[i,i + 1,A] = 1
-            prob[i,i + 1,A] = prob_dist[A]
-            vector_table[i,i + 1,A,:] = vector_list[i,:]
-        end
-    end
 
+function fill_chart(n::Int, category_table::Array{Bool}, prob::Array{Float64}, backpointer::Array{Int}, vector_table::Array{Float64})
     for l = 2:n
         for i = 1:n - l + 1
             j = i + l
@@ -68,14 +53,11 @@ function cky_parsing(sentence::String, content_vocab::Dict{String,Int}, embeddin
                             continue
                         else
                             composed_vector = circular_correlation(vector_table[i,k,S1,:], vector_table[k,j,S2,:])
-                            prob_dist = softmax(linear_weight * composed_vector + linear_bias)
-                            println(size(prob_dist), size(possible_cat))
-                            candidate = nonzero_index(top_beta(prob_dist, beta) .== possible_cat)
-                            for A in candidate
+                            @fastmath prob_dist = softmax(linear_weight * composed_vector + linear_bias)
+                            for A in nonzero_index(possible_cat)
                                 category_table[i,j,A] = 1
-                                P = prob_dist[A] * prob[i,k,S1] * prob[k,j,S2]
-                                if P > prob[i,j,A]
-                                    prob[i,j,A] = P
+                                if prob_dist[A] > prob[i,j,A]
+                                    prob[i,j,A] = prob_dist[A]
                                     backpointer[i,j,A,:] = [k,S1,S2]
                                     vector_table[i,j,A,:] = composed_vector
                                 end
@@ -94,13 +76,10 @@ function cky_parsing(sentence::String, content_vocab::Dict{String,Int}, embeddin
                     if sum(possible_cat) == 0
                         continue
                     else
-                        prob_dist = softmax(linear_weight * vector_table[i,j,S,:] + linear_bias)
-                        candidate = nonzero_index(top_beta(prob_dist, beta) .== possible_cat)
-                        for A in candidate
-                            category_table[i,j,A] = 1
-                            P = prob_dist[A] * prob[(i, j, S)]
-                            if P > prob[i,j,A]
-                                prob[i,j,A] = P
+                        @fastmath prob_dist = softmax(linear_weight * vector_table[i,j,S,:] + linear_bias)
+                        for A in nonzero_index(possible_cat)
+                            if prob_dist[A] > prob[i,j,A]
+                                prob[i,j,A] = prob_dist[A]
                                 backpointer[i,j,A,:] = [0,S,0]
                                 vector_table[i,j,A,:] = vector_table[i,j,S,:]
                                 again = true
@@ -110,7 +89,27 @@ function cky_parsing(sentence::String, content_vocab::Dict{String,Int}, embeddin
                 end
             end
         end
-    end                     
+    end
+    return prob
+end
+        
+function cky_parsing(sentence::String, content_vocab::Dict{String,Int}, embedding_weight::Matrix{Float64}, linear_weight::Matrix{Float64}, linear_bias::Matrix{Float64}, beta::Float64, binary_rule::Array{Bool}, unary_rule::Matrix{Bool})
+    vector_list = tokenize(sentence, content_vocab, embedding_weight)
+    n = size(vector_list, 1)
+    category_table = zeros(Bool, n + 1, n + 1, size(linear_weight, 1))
+    prob = zeros(Float64, n + 1, n + 1, size(linear_weight, 1))
+    backpointer = zeros(Int, n + 1, n + 1, size(linear_weight, 1), 3)
+    vector_table = zeros(Float64, n + 1, n + 1, size(linear_weight, 1), size(embedding_weight, 2))
+    for i = 1:n
+        prob_dist = softmax(linear_weight * vector_list[i,:] + linear_bias)
+        A_list = nonzero_index(top_beta(prob_dist, beta))
+        for A in A_list
+            category_table[i,i + 1,A] = 1
+            prob[i,i + 1,A] = prob_dist[A]
+            vector_table[i,i + 1,A,:] = vector_list[i,:]
+        end
+    end
+    prob = fill_chart(n, category_table, prob, backpointer, vector_table)
 end
 
 function load_content_vocab(path)
@@ -150,6 +149,7 @@ function load_rule(path, binary)
 end
 
 
+
 PATH_TO_DIR = replace(pwd(), "Hol-CCG/src" => "")
 path_to_embedding_weight = PATH_TO_DIR * "Hol-CCG/data/parsing/embedding_weight_GloVe_100d.csv"
 path_to_linear_weight = PATH_TO_DIR * "Hol-CCG/data/parsing/linear_weight_GloVe_100d.csv"
@@ -165,16 +165,15 @@ binary_rule = load_rule(path_to_binary_rule, true)
 unary_rule = load_rule(path_to_unary_rule, false)
 content_vocab = load_content_vocab(path_to_content_vocab)
 
-println(size(linear_weight))
-println(size(linear_bias))
-println(size(embedding_weight))
 
 path_to_test_sentence = PATH_TO_DIR * "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
 
 f = open(path_to_test_sentence)
+
 for sentence in eachline(f)
     println(sentence)
-    @time cky_parsing(sentence, content_vocab, embedding_weight, linear_weight, linear_bias, 0.98, binary_rule, unary_rule)
+    @profile cky_parsing(sentence, content_vocab, embedding_weight, linear_weight, linear_bias, 0.001, binary_rule, unary_rule)
+    Profile.print()
 end
 
 

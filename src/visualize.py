@@ -254,6 +254,7 @@ else:
     print("PCA working.....")
 
 embedded = method.fit_transform(vector_list)
+print(method.explained_variance_ratio_)
 
 fig = plt.figure(figsize=(10, 10))
 if visualize_dim == 2:

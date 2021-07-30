@@ -18,7 +18,7 @@ def cut_off(output, beta):
     for idx in range(1, len(sorted_prob)):
         if sorted_prob[idx] < max_prob * beta:
             break
-    return sorted_idx[:idx]
+    return torch.sort(sorted_idx[:idx])[0]
 
 
 PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
@@ -56,13 +56,22 @@ test_tree_list.set_vector(embedding)
 for tree in test_tree_list.tree_list:
     for node in tree.node_list:
         output = softmax(linear(node.vector[0]))
-        top_k = cut_off(output, 0.0025)
+        top_k = cut_off(output, 0.005)
         if node.is_leaf:
+            # print(node.content)
+            # print(node.category_id)
+            # print(top_k)
+            # a = input()
             total_leaf += 1
             leaf_length += len(top_k)
             if node.category_id in top_k:
                 correct_leaf += 1
         else:
+            # for id in node.content_id:
+            #     print(test_tree_list.content_vocab.itos[id])
+            # print(node.category_id)
+            # print(top_k)
+            # a = input()
             total_phrase += 1
             phrase_length += len(top_k)
             if node.category_id in top_k:

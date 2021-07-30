@@ -42,7 +42,7 @@ device = torch.device('cpu')
 
 print('loading tree list...')
 train_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
-
+print(train_tree_list.category_vocab['S[dcl]'])
 NUM_VOCAB = len(train_tree_list.content_vocab)
 NUM_CATEGORY = len(train_tree_list.category_vocab)
 
@@ -55,7 +55,6 @@ tree_net.eval()
 embedding_weight = tree_net.embedding.weight
 linear_weight = tree_net.linear.weight
 linear_bias = tree_net.linear.bias
-print(linear_weight.shape)
 content_vocab = []
 for k, v in train_tree_list.content_vocab.stoi.items():
     content_vocab.append([k, v])

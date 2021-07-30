@@ -110,7 +110,7 @@ class History:
         self.max_acc_idx = np.argmax(self.acc_history)
 
     @torch.no_grad()
-    def validation(self, batch_list, unk_idx,device=torch.device('cpu')):
+    def validation(self, batch_list, unk_idx, device=torch.device('cpu')):
         total_loss = 0.0
         total_acc = 0.0
         for batch in batch_list:
