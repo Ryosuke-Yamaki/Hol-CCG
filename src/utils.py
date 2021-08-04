@@ -257,14 +257,17 @@ class Condition_Setter:
                     "Hol-CCG/result/data/model/{}_{}d_model_with_regression.pth".format(self.embedding_type, self.embedding_dim)
 
             # path_to_history
-            self.path_to_train_history = PATH_TO_DIR + "Hol-CCG/result/data/history/{}_{}d_train_history.csv"
-            self.path_to_dev_history = PATH_TO_DIR + "Hol-CCG/result/data/{}_{}d_dev_history.csv"
-            self.path_to_history_fig = PATH_TO_DIR + "Hol-CCG/result/fig/{}_{}d_history.png"
+            self.path_to_train_history = PATH_TO_DIR + \
+                "Hol-CCG/result/data/history/{}_{}d_train_history.csv".format(self.embedding_type, self.embedding_dim)
+            self.path_to_dev_history = PATH_TO_DIR + \
+                "Hol-CCG/result/data/history/{}_{}d_dev_history.csv".format(self.embedding_type, self.embedding_dim)
+            self.path_to_history_fig = PATH_TO_DIR + \
+                "Hol-CCG/result/fig/history/{}_{}d_history.png".format(self.embedding_type, self.embedding_dim)
 
             # path_to_figures
             self.path_to_map = PATH_TO_DIR + \
-                "Hol-CCG/result/fig/{}_{}d".format(self.embedding_type, self.embedding_dim)
-            self.fig_name = PATH_TO_DIR + "{} {}d".format(self.embedding_type, self.embedding_dim)
+                "Hol-CCG/result/fig/map/{}_{}d".format(self.embedding_type, self.embedding_dim)
+            self.fig_name = "{} {}d".format(self.embedding_type, self.embedding_dim)
 
     def export_param_list(self, path, roop_count):
         if roop_count == 0:
