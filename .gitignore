@@ -1,6 +1,5 @@
 .vscode/
 data/
-result/data/
-result/fig/
+result/data/weight_matrix
 src/__pycache__/
 src/*test*

@@ -1,4 +1,3 @@
-import numpy as np
 import time
 import re
 import torch
@@ -179,7 +178,7 @@ class Parser:
             sentence = sentence.rstrip()
             if len(sentence.split()) <= max_length:
                 print(sentence)
-                correct_node_list = tree.make_correct_node_list()
+                correct_node_list = tree.correct_parse()
                 pred_node_list = self.parse(sentence, len(test_tree_list.category_vocab))
                 score = self.cal_f1_score(pred_node_list, correct_node_list)
                 print('f1:{}, precicion:{}, recall:{}'.format(score[0], score[1], score[2]))
