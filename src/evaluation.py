@@ -5,6 +5,69 @@ from models import Tree_Net
 from utils import set_random_seed, Condition_Setter
 from torch.nn import Embedding
 
+
+def include_unk(content_id, unk_content_id):
+    bit = 0
+    for id in content_id:
+        if id in unk_content_id:
+            bit = 1
+            return True
+    if bit == 0:
+        return False
+
+
+def evaluate(tree_list, tree_net, unk_content_id=None):
+    embedding = tree_net.embedding
+    linear = tree_net.linear
+    tree_list.set_vector(embedding)
+    for k in [1, 5]:
+        if unk_content_id is not None:
+            num_unk_word = 0
+            num_unk_phrase = 0
+            num_correct_word = 0
+            num_correct_phrase = 0
+            for tree in tree_list.tree_list:
+                for node in tree.node_list:
+                    if include_unk(node.content_id, unk_content_id):
+                        output = linear(node.vector)
+                        predict = torch.topk(output, k=k)[1]
+                        if node.is_leaf:
+                            num_unk_word += 1
+                            if node.category_id in predict:
+                                num_correct_word += 1
+                        else:
+                            num_unk_phrase += 1
+                            if node.category_id in predict:
+                                num_correct_phrase += 1
+            print('-' * 50)
+            print('overall top-{}: {}'.format(k, (num_correct_word + \
+                  num_correct_phrase) / (num_unk_word + num_unk_phrase)))
+            print('word top-{}: {}'.format(k, num_correct_word / num_unk_word))
+            print('phrase top-{}: {}'.format(k, num_correct_phrase / num_unk_phrase))
+        else:
+            num_word = 0
+            num_phrase = 0
+            num_correct_word = 0
+            num_correct_phrase = 0
+            for tree in tree_list.tree_list:
+                for node in tree.node_list:
+                    output = linear(node.vector)
+                    predict = torch.topk(output, k=k)[1]
+                    if node.is_leaf:
+                        num_word += 1
+                        if node.category_id in predict:
+                            num_correct_word += 1
+                    else:
+                        num_phrase += 1
+                        if node.category_id in predict:
+                            num_correct_phrase += 1
+            print('-' * 50)
+            print('overall top-{}: {}'.format(k, (num_correct_word +
+                                                  num_correct_phrase) / (num_word + num_phrase)))
+            print('word top-{}: {}'.format(k, num_correct_word / num_word))
+            print('phrase top-{}: {}'.format(k, num_correct_phrase / num_phrase))
+
+
 PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
 condition = Condition_Setter(PATH_TO_DIR)
 
@@ -46,60 +109,18 @@ for tree in dev_tree_list.tree_list + test_tree_list.tree_list:
             unk_content_id.append(node.content_id[0])
 unk_content_id = list(set(unk_content_id))
 
-
-def include_unk(content_id, unk_content_id):
-    bit = 0
-    for id in content_id:
-        if id in unk_content_id:
-            bit = 1
-            return True
-    if bit == 0:
-        return False
-
-
-def evaluate_on_unk(tree_list, tree_net, unk_content_id):
-    embedding = tree_net.embedding
-    linear = tree_net.linear
-    tree_list.set_vector(embedding)
-    for k in [1, 5]:
-        total_num_node = 0
-        num_unk_word = 0
-        num_unk_phrase = 0
-        num_correct_word = 0
-        num_correct_phrase = 0
-        for tree in tree_list.tree_list:
-            for node in tree.node_list:
-                total_num_node += 1
-                if not include_unk(node.content_id, unk_content_id):
-                    output = linear(node.vector)
-                    predict = torch.topk(output, k=k)[1]
-                    if node.is_leaf:
-                        num_unk_word += 1
-                        if node.category_id in predict:
-                            num_correct_word += 1
-                    else:
-                        num_unk_phrase += 1
-                        if node.category_id in predict:
-                            num_correct_phrase += 1
-        print('-' * 50)
-        print('overall top-{}: {}'.format(k, (num_correct_word + \
-              num_correct_phrase) / (num_unk_word + num_unk_phrase)))
-        print('word top-{}: {}'.format(k, num_correct_word / num_unk_word))
-        print('phrase top-{}: {}'.format(k, num_correct_phrase / num_unk_phrase))
-
-
 print('evaluating...')
 print('***before projection learning***')
 print('***for only unk nodes***')
-evaluate_on_unk(test_tree_list, tree_net, unk_content_id)
+evaluate(test_tree_list, tree_net, unk_content_id)
 print('***for entire tree***')
-tree_net.evaluate(test_tree_list)
+evaluate(test_tree_list, tree_net)
 
 tree_net.embedding = new_embedding
 
 print('evaluating...')
 print('***after projection learning***')
 print('***for only unk nodes***')
-evaluate_on_unk(test_tree_list, tree_net, unk_content_id)
+evaluate(test_tree_list, tree_net, unk_content_id)
 print('***for entire tree***')
-tree_net.evaluate(test_tree_list)
+evaluate(test_tree_list, tree_net)

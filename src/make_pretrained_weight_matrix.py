@@ -36,6 +36,7 @@ condition = Condition_Setter(PATH_TO_DIR)
 PATH_TO_PRETRAINED_WEIGHT_MATRIX = PATH_TO_DIR + \
     "Hol-CCG/data/{}_{}d.csv".format(condition.embedding_type, condition.embedding_dim)
 path_to_word_counter = PATH_TO_DIR + "Hol-CCG/data/word_counter.pickle"
+path_to_train_word_counter = PATH_TO_DIR + "Hol-CCG/data/train_word_counter.pickle"
 path_to_category_counter = PATH_TO_DIR + "Hol-CCG/data/category_counter.pickle"
 path_to_train_data = condition.path_to_train_data
 path_to_dev_data = condition.path_to_dev_data
@@ -47,11 +48,13 @@ dev_tree_list = set_tree_list(path_to_dev_data)
 test_tree_list = set_tree_list(path_to_test_data)
 
 word_counter = Counter()
+train_word_counter = Counter()
 category_counter = Counter()
 for tree in train_tree_list:
     for node in tree.node_list:
         if node.is_leaf:
             word_counter[node.content] += 1
+            train_word_counter[node.content] += 1
         category_counter[node.category] += 1
 
 for tree in dev_tree_list + test_tree_list:
@@ -93,6 +96,9 @@ with open(PATH_TO_PRETRAINED_WEIGHT_MATRIX, 'w') as f:
 
 with open(path_to_word_counter, mode='wb') as f:
     pickle.dump(word_counter, f)
+
+with open(path_to_train_word_counter, mode='wb') as f:
+    pickle.dump(train_word_counter, f)
 
 with open(path_to_category_counter, mode='wb') as f:
     pickle.dump(category_counter, f)

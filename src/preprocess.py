@@ -1,3 +1,4 @@
+from collections import Counter
 from utils import dump, load
 import os
 from utils import Condition_Setter
@@ -27,6 +28,51 @@ test_tree_list = Tree_List(
     path_to_test_data,
     content_vocab,
     category_vocab)
+
+num_unk_sentence = 0
+num_unk_node = 0
+num_sentence = 0
+num_node = 0
+unk_idx = category_vocab.unk_index
+for tree in dev_tree_list.tree_list:
+    num_sentence += 1
+    bit = 0
+    for node in tree.node_list:
+        num_node += 1
+        if node.category_id == unk_idx:
+            num_unk_node += 1
+            bit = 1
+    if bit == 1:
+        num_unk_sentence += 1
+print('unk_sentence: {}({}/{})'.format(num_unk_sentence / num_sentence, num_unk_sentence, num_sentence))
+print('unk_node: {}({}/{})'.format(num_unk_node / num_node, num_unk_node, num_node))
+
+train_counter = Counter()
+for tree in train_tree_list.tree_list:
+    for node in tree.node_list:
+        if node.is_leaf:
+            train_counter[node.content] += 1
+
+unk_dev = 0
+for tree in dev_tree_list.tree_list:
+    bit = 0
+    for node in tree.node_list:
+        if node.is_leaf:
+            if train_counter[node.content] == 0:
+                bit = 1
+    if bit == 1:
+        unk_dev += 1
+
+unk_test = 0
+for tree in test_tree_list.tree_list:
+    bit = 0
+    for node in tree.node_list:
+        if node.is_leaf:
+            if train_counter[node.content] == 0:
+                bit = 1
+    if bit == 1:
+        unk_test += 1
+
 
 dump(train_tree_list, PATH_TO_DIR + "Hol-CCG/data/train_tree_list.pickle")
 dump(dev_tree_list, PATH_TO_DIR + "Hol-CCG/data/dev_tree_list.pickle")

@@ -1,3 +1,6 @@
+from utils import load_weight_matrix
+import copy
+from torchtext.vocab import Vocab
 from utils import load
 from sklearn.decomposition import PCA
 from collections import Counter
@@ -8,6 +11,7 @@ from utils import set_random_seed, Condition_Setter
 from models import Tree_List, Tree_Net
 from sklearn.manifold import TSNE
 import numpy as np
+from torch.nn import Embedding
 
 
 def visualize(
@@ -206,14 +210,47 @@ set_random_seed(0)
 print('loading tree list...')
 test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
+if condition.embedding_type == "random":
+    path_to_train_word_counter = PATH_TO_DIR + "Hol-CCG/data/train_word_counter.pickle"
+    train_word_counter = load(path_to_train_word_counter)
+    train_content_vocab = Vocab(train_word_counter, specials=['<unk>'])
+    test_tree_list.content_vocab = train_content_vocab
+    for tree in test_tree_list.tree_list:
+        for node in tree.node_list:
+            if node.is_leaf:
+                node.content_id = [train_content_vocab[node.content]]
+        for info in tree.composition_info:
+            num_child = info[0]
+            if num_child == 1:
+                parent_node = tree.node_list[info[1]]
+                child_node = tree.node_list[info[2]]
+                parent_node.content_id = child_node.content_id
+            else:
+                parent_node = tree.node_list[info[1]]
+                left_child_node = tree.node_list[info[2]]
+                right_child_node = tree.node_list[info[3]]
+                parent_node.content_id = left_child_node.content_id + right_child_node.content_id
+    tree_list = []
+    for tree in test_tree_list.tree_list:
+        bit = 0
+        for node in tree.node_list:
+            if node.is_leaf:
+                if 0 in node.content_id:
+                    bit = 1
+                    break
+        if bit == 0:
+            tree_list.append(tree)
+    test_tree_list.tree_list = tree_list
+
 NUM_VOCAB = len(test_tree_list.content_vocab)
 NUM_CATEGORY = len(test_tree_list.category_vocab)
-tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY, condition.embedding_dim).to(device)
-tree_net = torch.load(condition.path_to_model,
-                      map_location=device)
-tree_net.eval()
+weight_matrix = torch.tensor(
+    load_weight_matrix(
+        PATH_TO_DIR +
+        "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(
+            condition.embedding_dim)))
+embedding = Embedding(NUM_VOCAB, condition.embedding_dim, _weight=weight_matrix)
 
-embedding = tree_net.embedding
 test_tree_list.set_vector(embedding)
 
 vector_list = []
@@ -254,7 +291,7 @@ else:
     print("PCA working.....")
 
 embedded = method.fit_transform(vector_list)
-print(method.explained_variance_ratio_)
+print("experined variance ratio= ", method.explained_variance_ratio_)
 
 fig = plt.figure(figsize=(10, 10))
 if visualize_dim == 2:

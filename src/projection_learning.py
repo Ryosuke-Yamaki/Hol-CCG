@@ -26,10 +26,13 @@ class Net(nn.Module):
     def __init__(self, embedding_dim):
         super(Net, self).__init__()
         self.embedding_dim = embedding_dim
-        self.linear1 = nn.Linear(self.embedding_dim, self.embedding_dim)
+        self.linear1 = nn.Linear(self.embedding_dim, 2 * self.embedding_dim)
+        self.linear2 = nn.Linear(2 * self.embedding_dim, self.embedding_dim)
+        self.tanh = nn.Tanh()
 
     def forward(self, batch):
         batch = self.linear1(batch)
+        batch = self.linear2(self.tanh(batch))
         return batch
 
 
@@ -64,7 +67,7 @@ else:
 initial_weight_matrix = torch.tensor(load_weight_matrix(
     condition.path_to_pretrained_weight_matrix), device=device)
 
-EPOCHS = 5
+EPOCHS = 10
 BATCH_SIZE = 25
 NUM_VOCAB = len(train_tree_list.content_vocab)
 NUM_CATEGORY = len(train_tree_list.category_vocab)
@@ -94,8 +97,11 @@ with torch.no_grad():
 model = Net(condition.embedding_dim).to(device)
 dataset = DataSet(
     initial_weight_of_train, trained_weight_of_train)
-dataloader = torch.utils.data.DataLoader(
-    dataset,
+train_size = int(len(dataset) * 0.8)
+val_size = int(len(dataset) - train_size)
+train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+train_dataloader = torch.utils.data.DataLoader(
+    train_dataset,
     batch_size=BATCH_SIZE,
     shuffle=True,
     drop_last=True)
@@ -103,11 +109,11 @@ criteria = nn.MSELoss()
 optimizer = optim.Adam(model.parameters())
 
 for epoch in range(1, EPOCHS + 1):
-    with tqdm(total=len(dataloader), unit="batch") as pbar:
+    with tqdm(total=len(train_dataloader), unit="batch") as pbar:
         pbar.set_description(f"Epoch[{epoch}/{EPOCHS}]")
         epoch_loss = 0.0
         num_batch = 0
-        for data in dataloader:
+        for data in train_dataloader:
             num_batch += 1
             optimizer.zero_grad()
             input = data[0]
@@ -119,6 +125,14 @@ for epoch in range(1, EPOCHS + 1):
             optimizer.step()
             pbar.set_postfix({"loss": epoch_loss / num_batch})
             pbar.update(1)
+    cos_list = []
+    for input, output in val_dataset:
+        predict = model(input).detach().numpy()
+        output = output.detach().numpy()
+        cos_list.append(np.dot(output, predict) /
+                        (np.linalg.norm(output) * np.linalg.norm(predict)))
+    print("val_acc: ", np.mean(cos_list))
+
 
 torch.save(model, PATH_TO_DIR +
            "Hol-CCG/result/model/{}d_projection.pth".format(condition.embedding_dim))
@@ -131,13 +145,3 @@ trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
 with open(PATH_TO_DIR + "Hol-CCG/result/data/{}d_weight_matrix_with_projection_learning.csv".format(condition.embedding_dim), 'w') as f:
     writer = csv.writer(f, lineterminator='\n')
     writer.writerows(trained_weight_matrix)
-
-cos = nn.CosineSimilarity()
-cos_list = []
-
-for data in dataloader:
-    input = data[0]
-    target = data[1]
-    output = model(input)
-    cos_list.append(torch.mean(cos(output, target)).item())
-print(np.mean(cos_list))

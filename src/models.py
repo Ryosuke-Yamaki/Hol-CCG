@@ -437,7 +437,7 @@ class Tree_Net(nn.Module):
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
 
-    def evaluate(self, tree_list,unk_idx):
+    def evaluate(self, tree_list, unk_idx):
         embedding = self.embedding
         linear = self.linear
         tree_list.set_vector(embedding)
