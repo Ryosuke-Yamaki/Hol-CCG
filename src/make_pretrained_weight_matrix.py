@@ -1,5 +1,3 @@
-import fasttext.util
-import fasttext
 from torchtext.vocab import Vocab
 import pickle
 from collections import Counter
@@ -8,7 +6,6 @@ import csv
 import gensim.downloader as api
 from models import Node, Tree
 from utils import Condition_Setter
-import os
 
 
 def set_tree_list(PATH_TO_DATA):
@@ -30,22 +27,13 @@ def set_tree_list(PATH_TO_DATA):
     return tree_list
 
 
-PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
-condition = Condition_Setter(PATH_TO_DIR)
-
-PATH_TO_PRETRAINED_WEIGHT_MATRIX = PATH_TO_DIR + \
-    "Hol-CCG/data/{}_{}d.csv".format(condition.embedding_type, condition.embedding_dim)
-path_to_word_counter = PATH_TO_DIR + "Hol-CCG/data/word_counter.pickle"
-path_to_train_word_counter = PATH_TO_DIR + "Hol-CCG/data/train_word_counter.pickle"
-path_to_category_counter = PATH_TO_DIR + "Hol-CCG/data/category_counter.pickle"
-path_to_train_data = condition.path_to_train_data
-path_to_dev_data = condition.path_to_dev_data
-path_to_test_data = condition.path_to_test_data
+condition = Condition_Setter(set_embedding_type=False)
+condition.embedding_type = 'GloVe'
 
 print('loading tree list...')
-train_tree_list = set_tree_list(path_to_train_data)
-dev_tree_list = set_tree_list(path_to_dev_data)
-test_tree_list = set_tree_list(path_to_test_data)
+train_tree_list = set_tree_list(condition.path_to_train_data)
+dev_tree_list = set_tree_list(condition.path_to_dev_data)
+test_tree_list = set_tree_list(condition.path_to_test_data)
 
 word_counter = Counter()
 train_word_counter = Counter()
@@ -62,16 +50,29 @@ for tree in dev_tree_list + test_tree_list:
         if node.is_leaf:
             word_counter[node.content] += 1
 
+with open(condition.path_to_word_counter, mode='wb') as f:
+    pickle.dump(word_counter, f)
+
+with open(condition.path_to_train_word_counter, mode='wb') as f:
+    pickle.dump(train_word_counter, f)
+
+with open(condition.path_to_category_counter, mode='wb') as f:
+    pickle.dump(category_counter, f)
+
 vocab = Vocab(word_counter, specials=[])
 num_word = len(vocab.itos)
-weight_matrix = np.zeros((num_word, condition.embedding_dim))
 
-print("loading vectors.....")
-num_total_word = 0
-num_not_in_glove = 0
-idx = 0
+for embeddin_dim in [50, 100, 300]:
+    condition.embedding_dim = embeddin_dim
+    condition.set_path(condition.PATH_TO_DIR)
 
-if condition.embedding_type == 'GloVe':
+    weight_matrix = np.zeros((num_word, condition.embedding_dim))
+
+    print("{}d loading vectors.....".format(condition.embedding_dim))
+    num_total_word = 0
+    num_not_in_glove = 0
+    idx = 0
+
     model = api.load('glove-wiki-gigaword-{}'.format(condition.embedding_dim))
     for word in vocab.itos:
         if word in model.vocab:
@@ -82,23 +83,7 @@ if condition.embedding_type == 'GloVe':
         idx += 1
     print("not in GloVe: {}/{} = {}".format(num_not_in_glove,
                                             len(vocab.itos), num_not_in_glove / len(vocab.itos)))
-elif condition.embedding_type == 'FastText':
-    model = fasttext.load_model('cc.en.300.bin')
-    fasttext.util.reduce_model(model, condition.embedding_dim)
-    for word in vocab.itos:
-        weight_matrix[idx] = model.get_word_vector(word)
-        idx += 1
 
-
-with open(PATH_TO_PRETRAINED_WEIGHT_MATRIX, 'w') as f:
-    writer = csv.writer(f, lineterminator='\n')
-    writer.writerows(weight_matrix)
-
-with open(path_to_word_counter, mode='wb') as f:
-    pickle.dump(word_counter, f)
-
-with open(path_to_train_word_counter, mode='wb') as f:
-    pickle.dump(train_word_counter, f)
-
-with open(path_to_category_counter, mode='wb') as f:
-    pickle.dump(category_counter, f)
+    with open(condition.path_to_initial_weight_matrix, 'w') as f:
+        writer = csv.writer(f, lineterminator='\n')
+        writer.writerows(weight_matrix)

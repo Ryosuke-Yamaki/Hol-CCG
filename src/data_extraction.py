@@ -1,3 +1,6 @@
+from utils import Condition_Setter
+
+
 class Converter:
     def __init__(self, path_to_data):
         self.load_sentence(path_to_data)
@@ -153,11 +156,12 @@ class Node_Stack:
                 self.ready = True
 
 
-path_to_dir = '/home/yryosuke0519/CCGbank/'
-path_to_file_table = path_to_dir + 'ccgbank_1_1/doc/file.tbl'
-path_to_train = path_to_dir + 'converted/train.txt'
-path_to_dev = path_to_dir + 'converted/dev.txt'
-path_to_test = path_to_dir + 'converted/test.txt'
+condition = Condition_Setter(set_embedding_type=False)
+
+path_to_file_table = condition.PATH_TO_DIR + 'CCGbank/ccgbank_1_1/doc/file.tbl'
+path_to_train = condition.path_to_train_data
+path_to_dev = condition.path_to_dev_data
+path_to_test = condition.path_to_test_data
 open(path_to_train, 'w')
 open(path_to_dev, 'w')
 open(path_to_test, 'w')
@@ -176,7 +180,7 @@ for path in path_to_data:
         else:
             path_to_save = None
         if path_to_save is not None:
-            path = path_to_dir + 'ccgbank_1_1/' + path.replace('\n', '')
+            path = condition.PATH_TO_DIR + 'CCGbank/ccgbank_1_1/' + path.replace('\n', '')
             converter = Converter(path)
             for sentence in converter.sentence_list:
                 num_node = sentence.count('<')

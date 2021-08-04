@@ -1,11 +1,8 @@
 import re
-import numpy as np
 import torch
 import torch.nn as nn
-from torchtext.vocab import Vocab
 from operator import itemgetter
 from utils import circular_correlation, generate_random_weight_matrix, single_circular_correlation
-from collections import Counter
 
 
 class Node:
@@ -64,29 +61,7 @@ class Tree:
             if num_ready_node == len(self.node_list):
                 break
 
-    def climb(self):
-        for info in self.composition_info:
-            left_node = self.node_list[info[0]]
-            right_node = self.node_list[info[1]]
-            parent_node = self.node_list[info[2]]
-            parent_node.content = left_node.content + ' ' + right_node.content
-            parent_node.vector = single_circular_correlation(
-                left_node.vector, right_node.vector)
-
-    def set_leaf_node_vector(self, weight_matrix):
-        for node in self.node_list:
-            if node.is_leaf:
-                vector = weight_matrix[node.content_id[0]]
-                if self.regularized:
-                    vector = vector / torch.norm(vector)
-                node.vector = vector
-
-    def reset_node_status(self):
-        for node in self.node_list:
-            if not node.is_leaf and node.ready:
-                node.ready = False
-
-    def make_correct_node_list(self):
+    def correct_parse(self):
         correct_node_list = []
         top_node = self.node_list[-1]
         top_node.start_idx = 0
@@ -135,8 +110,6 @@ class Tree_List:
         self.category_vocab = category_vocab
         self.device = device
         self.set_tree_list(PATH_TO_DATA)
-        if category_vocab is None:
-            self.make_category_vocab()
         self.set_content_category_id(self.content_vocab, self.category_vocab)
 
     def set_tree_list(self, PATH_TO_DATA):
@@ -156,13 +129,6 @@ class Tree_List:
                 node_list = []
                 tree_id += 1
 
-    def make_category_vocab(self):
-        category_counter = Counter()
-        for tree in self.tree_list:
-            for node in tree.node_list:
-                category_counter[node.category] += 1
-        self.category_vocab = Vocab(category_counter, specials=['<unk>'])
-
     def set_content_category_id(self, content_vocab, category_vocab):
         for tree in self.tree_list:
             for node in tree.node_list:
@@ -170,48 +136,6 @@ class Tree_List:
                     node.content_id = [content_vocab[node.content]]
                 node.category_id = category_vocab[node.category]
             tree.set_node_composition_info()
-
-    def set_possible_category_id(self, possible_category_dict):
-        for tree in self.tree_list:
-            for node in tree.node_list:
-                key = tuple(node.content_id)
-                if key not in possible_category_dict:
-                    possible_category_dict[key] = [node.category_id]
-                elif node.category_id not in possible_category_dict[key]:
-                    possible_category_dict[key].append(node.category_id)
-
-    def prepare_info_for_visualization(self, weight_matrix):
-        vector_list = []
-        content_info_dict = {}
-        # content_info_dict : contains dicts of each content's info in the type of dict
-        # inner dict contains possible category id to correspond content and the
-        # embedded idx of content
-
-        idx = 0  # this index shows where each content included in the embedded vector list
-        for tree in self.tree_list:
-            tree.set_leaf_node_vector(weight_matrix)
-            tree.climb()
-            for node in tree.node_list:
-                # first time which the node.contetnt subscribed
-                if node.content not in content_info_dict:
-                    # initialize dictionary for each content
-                    content_info = {}
-                    content_info['category_id_list'] = [node.category_id]
-                    content_info['idx'] = idx
-                    content_info['plotted_category_list'] = []
-                    content_info['plotted_category_id_list'] = []
-                    content_info_dict[node.content] = content_info
-                    vector_list.append(node.vector.detach().numpy())
-                    idx += 1
-
-                # already node.content included, but the category is different
-                elif node.category_id not in content_info_dict[node.content]['category_id_list']:
-                    content_info_dict[node.content]['category_id_list'].append(
-                        node.category_id)
-
-        vector_list = np.array(vector_list)
-
-        return vector_list, content_info_dict
 
     def set_info_for_training(self):
         self.num_node = []
@@ -348,24 +272,6 @@ class Tree_List:
                     parent_node.vector = single_circular_correlation(
                         left_node.vector, right_node.vector)
 
-    def clean_tree_list(self, exist_content_id, exist_category_id):
-        cleaned_tree_list = self.tree_list
-        for tree in self.tree_list:
-            check_bit = 0
-            for node in tree.node_list:
-                if node.is_leaf:
-                    if node.content_id[0] not in exist_content_id or node.category_id not in exist_category_id:
-                        # when content or category of node not in train_tree
-                        check_bit = 1
-                else:
-                    if node.category_id not in exist_category_id:
-                        # when category of node not in train_tree
-                        check_bit = 1
-                if check_bit == 1:
-                    cleaned_tree_list.remove(tree)
-                    break
-        self.tree_list = cleaned_tree_list
-
 
 class Tree_Net(nn.Module):
     def __init__(self, NUM_VOCAB, NUM_CATEGORY, embedding_dim, initial_weight_matrix=None):
@@ -381,7 +287,8 @@ class Tree_Net(nn.Module):
             self.num_embedding,
             self.embedding_dim,
             _weight=initial_weight_matrix)
-        self.linear = nn.Linear(self.embedding_dim, self.num_category)
+        # final output layer, except <unk> category
+        self.linear = nn.Linear(self.embedding_dim, self.num_category - 1)
 
     # input batch as tuple of training info
     def forward(self, batch):
@@ -436,33 +343,3 @@ class Tree_Net(nn.Module):
                 composed_vector = circular_correlation(left_child_vector, right_child_vector)
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
-
-    def evaluate(self, tree_list, unk_idx):
-        embedding = self.embedding
-        linear = self.linear
-        tree_list.set_vector(embedding)
-
-        # calculate top-1 and top-5 accuracy
-        for k in [1, 5]:
-            num_correct_word = 0
-            num_word = 0
-            num_correct_phrase = 0
-            num_phrase = 0
-            for tree in tree_list.tree_list:
-                for node in tree.node_list:
-                    if node.category_id != unk_idx:
-                        output = linear(node.vector)
-                        predict = torch.topk(output, k=k)[1]
-                        if node.is_leaf:
-                            if node.category_id in predict:
-                                num_correct_word += 1
-                            num_word += 1
-                        else:
-                            if node.category_id in predict:
-                                num_correct_phrase += 1
-                            num_phrase += 1
-            print('-' * 50)
-            print('overall top-{}: {}'.format(k, (num_correct_word +
-                                                  num_correct_phrase) / (num_word + num_phrase)))
-            print('word top-{}: {}'.format(k, num_correct_word / num_word))
-            print('phrase top-{}: {}'.format(k, num_correct_phrase / num_phrase))

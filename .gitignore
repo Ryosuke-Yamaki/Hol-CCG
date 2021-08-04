@@ -1,0 +1,6 @@
+.vscode/
+data/
+result/data/
+result/fig/
+src/__pycache__/
+src/*test*

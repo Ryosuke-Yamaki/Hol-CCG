@@ -1,3 +1,4 @@
+import os
 import pickle
 import csv
 import random
@@ -31,26 +32,8 @@ def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
 
 def generate_random_weight_matrix(NUM_VOCAB, EMBEDDING_DIM):
     weight_matrix = [
-        np.random.normal(
-            loc=0.0,
-            scale=1 /
-            np.sqrt(EMBEDDING_DIM),
-            size=EMBEDDING_DIM) for i in range(NUM_VOCAB)]
+        np.random.rand(EMBEDDING_DIM) for i in range(NUM_VOCAB)]
     return np.array(weight_matrix).astype(np.float32)
-
-
-def cal_norm_mean_std(tree):
-    norm_list = []
-    mean_list = []
-    std_list = []
-    for node in tree.node_list:
-        norm_list.append(torch.norm(node.vector))
-        mean_list.append(torch.mean(node.vector))
-        std_list.append(torch.std(node.vector))
-    norm = sum(norm_list) / len(norm_list)
-    mean = sum(mean_list) / len(mean_list)
-    std = sum(std_list) / len(std_list)
-    return norm, mean, std
 
 
 def set_random_seed(seed):
@@ -58,15 +41,6 @@ def set_random_seed(seed):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-
-
-def original_loss(output, label, criteria, tree):
-    loss = criteria(output, label)
-    vector = tree.make_node_vector_tensor()
-    norm = torch.norm(vector, dim=1)
-    norm_base_line = torch.ones_like(norm)
-    norm_loss = torch.sum(torch.abs(norm - norm_base_line))
-    return loss + norm_loss
 
 
 def make_label_mask(batch, device=torch.device('cpu')):
@@ -93,6 +67,59 @@ def load(path):
     with open(path, mode='rb') as f:
         data = pickle.load(f)
         return data
+
+
+def include_unk(content_id, unk_content_id):
+    bit = 0
+    for id in content_id:
+        if id in unk_content_id:
+            bit = 1
+            return True
+    if bit == 0:
+        return False
+
+
+def evaluate(tree_list, tree_net, unk_content_id=None):
+    embedding = tree_net.embedding
+    linear = tree_net.linear
+    tree_list.set_vector(embedding)
+    for k in [1, 5]:
+        num_word = 0
+        num_phrase = 0
+        num_correct_word = 0
+        num_correct_phrase = 0
+        if unk_content_id is None:
+            for tree in tree_list.tree_list:
+                for node in tree.node_list:
+                    output = linear(node.vector)
+                    predict = torch.topk(output, k=k)[1]
+                    if node.is_leaf:
+                        num_word += 1
+                        if node.category_id in predict:
+                            num_correct_word += 1
+                    else:
+                        num_phrase += 1
+                        if node.category_id in predict:
+                            num_correct_phrase += 1
+        else:
+            for tree in tree_list.tree_list:
+                for node in tree.node_list:
+                    if include_unk(node.content_id, unk_content_id):
+                        output = linear(node.vector)
+                        predict = torch.topk(output, k=k)[1]
+                        if node.is_leaf:
+                            num_word += 1
+                            if node.category_id in predict:
+                                num_correct_word += 1
+                        else:
+                            num_phrase += 1
+                            if node.category_id in predict:
+                                num_correct_phrase += 1
+        print('-' * 50)
+        print('overall top-{}: {}'.format(k, (num_correct_word +
+                                              num_correct_phrase) / (num_word + num_phrase)))
+        print('word top-{}: {}'.format(k, num_correct_word / num_word))
+        print('phrase top-{}: {}'.format(k, num_correct_phrase / num_phrase))
 
 
 class History:
@@ -128,35 +155,6 @@ class History:
         self.update()
 
     @torch.no_grad()
-    def cal_acc(self, batch_output, batch_label, batch_label_mask):
-        # extract the element over threshold
-        prediction = batch_output > self.THRESHOLD
-        # matching the prediction and label, dummy node always become correct
-        matching = (prediction * batch_label_mask) == batch_label
-        # the number of nodes the prediction is correct
-        num_correct_node = torch.count_nonzero(
-            torch.all(matching, dim=2)).item()
-        # the number of actually existing nodes(not a dummy nodes for fulling batch)
-        num_existing_node = torch.count_nonzero(
-            torch.all(batch_label_mask, dim=2)).item()
-        # the number of dummy nodes
-        num_dummy_node = batch_label_mask.shape[0] * \
-            batch_label_mask.shape[1] - num_existing_node
-        # for the dummy nodes the prediction always become correct because they are zero
-        # so, subtruct them when calculate the acc
-        return float((num_correct_node - num_dummy_node) / num_existing_node)
-
-    @torch.no_grad()
-    def cal_f1(self, output, n_hot_label):
-        prediction = output > self.THRESHOLD
-        precision = torch.count_nonzero(
-            n_hot_label[torch.nonzero(prediction, as_tuple=True)]) / torch.count_nonzero(prediction)
-        recall = torch.count_nonzero(prediction[torch.nonzero(
-            n_hot_label, as_tuple=True)]) / torch.count_nonzero(n_hot_label)
-        f1 = (2 * precision * recall) / (precision + recall)
-        return precision, recall, f1
-
-    @torch.no_grad()
     def cal_top_k_acc(self, output, label, k=5):
         output = torch.topk(output, k=k)[1]
         label = torch.reshape(label, (output.shape[0], -1))
@@ -189,66 +187,84 @@ class History:
 
 
 class Condition_Setter:
-    def __init__(self, PATH_TO_DIR):
-        self.param_list = []
-        embedding_type = int(input("random(0) or GloVe(1) or FastText(2): "))
-        if embedding_type == 1:
-            self.RANDOM = False
-            self.embedding_type = 'GloVe'
-            self.param_list.append('GloVe')
-        elif embedding_type == 2:
-            self.RANDOM = False
-            self.embedding_type = 'FastText'
-            self.param_list.append('FastText')
-        else:
-            self.RANDOM = True
-            self.embedding_type = 'random'
-            self.param_list.append('random')
-        self.REGULARIZED = True
-        embedding_dim = input("embedding_dim(default=100d): ")
-        if embedding_dim != "":
-            self.embedding_dim = int(embedding_dim)
-        else:
-            self.embedding_dim = 100
-        self.param_list.append(str(self.embedding_dim))
-        self.set_path(PATH_TO_DIR)
+    def __init__(self, PATH_TO_DIR=None, set_embedding_type=True):
+        if PATH_TO_DIR is None:
+            PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
+            self.PATH_TO_DIR = PATH_TO_DIR
+        if set_embedding_type:
+            self.param_list = []
+            embedding_type = int(input("GloVe(0) or random(1): "))
+            if embedding_type == 0:
+                self.embedding_type = 'GloVe'
+                self.param_list.append('GloVe')
+            elif embedding_type == 1:
+                self.embedding_type = 'random'
+                self.param_list.append('random')
+            else:
+                print("Error: embedding_type")
+                exit()
+            embedding_dim = input("embedding_dim: ")
+            if self.embedding_type == 'GloVe':
+                if embedding_dim in ["50", "100", "300"]:
+                    self.embedding_dim = int(embedding_dim)
+                else:
+                    print("Error: embedding_dim")
+                    exit()
+            else:
+                if embedding_dim in ["10", "50", "100", "300"]:
+                    self.embedding_dim = int(embedding_dim)
+                else:
+                    print("Error: embedding_dim")
+                    exit()
+            self.param_list.append(str(self.embedding_dim))
+        self.set_path(PATH_TO_DIR, set_embedding_type)
 
-    def set_path(self, PATH_TO_DIR):
+    def set_path(self, PATH_TO_DIR, set_embedding_type=True):
+        # ******************** the path not depend on the embedding type********************
+        # path to the tree data
         self.path_to_train_data = PATH_TO_DIR + "CCGbank/converted/train.txt"
         self.path_to_dev_data = PATH_TO_DIR + "CCGbank/converted/dev.txt"
         self.path_to_test_data = PATH_TO_DIR + "CCGbank/converted/test.txt"
-        self.path_to_pretrained_weight_matrix = PATH_TO_DIR + \
-            "Hol-CCG/data/{}_{}d.csv".format(self.embedding_type, self.embedding_dim)
-        path_to_initial_weight_matrix = PATH_TO_DIR + "Hol-CCG/result/data/"
-        path_to_model = PATH_TO_DIR + "Hol-CCG/result/model/"
-        path_to_train_data_history = PATH_TO_DIR + "Hol-CCG/result/data/"
-        path_to_test_data_history = PATH_TO_DIR + "Hol-CCG/result/data/"
-        path_to_history_fig = PATH_TO_DIR + "Hol-CCG/result/fig/"
-        path_to_map = PATH_TO_DIR + "Hol-CCG/result/fig/"
-        fig_name = ""
-        path_list = [
-            path_to_initial_weight_matrix,
-            path_to_model,
-            path_to_train_data_history,
-            path_to_test_data_history,
-            path_to_history_fig,
-            path_to_map,
-            fig_name]
-        for i in range(len(path_list)):
-            path_list[i] += self.embedding_type
-            if self.REGULARIZED:
-                path_list[i] += "_reg"
-            else:
-                path_list[i] += "_not_reg"
-            path_list[i] += "_" + str(self.embedding_dim) + "d"
-        self.path_to_initial_weight_matrix = path_list[0] + \
-            "_initial_weight_matrix.csv"
-        self.path_to_model = path_list[1] + "_model.pth"
-        self.path_to_train_data_history = path_list[2] + "_train_history.csv"
-        self.path_to_test_data_history = path_list[3] + "_test_history.csv"
-        self.path_to_history_fig = path_list[4] + "_history.png"
-        self.path_to_map = path_list[5]
-        self.fig_name = path_list[6].replace('_', ' ')
+        self.path_to_train_tree_list = PATH_TO_DIR + "Hol-CCG/data/tree_list/train_tree_list.pickle"
+        self.path_to_dev_tree_list = PATH_TO_DIR + "Hol-CCG/data/tree_list/dev_tree_list.pickle"
+        self.path_to_test_tree_list = PATH_TO_DIR + "Hol-CCG/data/tree_list/test_tree_list.pickle"
+
+        # path to counters, vocab
+        self.path_to_word_counter = PATH_TO_DIR + "Hol-CCG/data/counter/word_counter.pickle"
+        self.path_to_train_word_counter = PATH_TO_DIR + "Hol-CCG/data/counter/train_word_counter.pickle"
+        self.path_to_category_counter = PATH_TO_DIR + "Hol-CCG/data/counter/category_counter.pickle"
+        self.path_to_content_vocab = PATH_TO_DIR + "Hol-CCG/data/parsing/content_vocab.txt"
+
+        # path_to_rule
+        self.path_to_grammar = PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar"
+        self.path_to_binary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt"
+        self.path_to_unary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt"
+
+        # ******************** the path depend on the embedding type********************
+        if set_embedding_type:
+            # path_to_weight_matrix
+            self.path_to_initial_weight_matrix = PATH_TO_DIR + \
+                "Hol-CCG/data/initial_weight/{}_{}d_initial_weight.csv".format(self.embedding_type, self.embedding_dim)
+            if self.embedding_type == "GloVe":
+                self.path_to_weight_with_regression = PATH_TO_DIR + \
+                    "Hol-CCG/result/data/weight_matrix/{}_{}d_weight_with_regression.csv".format(self.embedding_type, self.embedding_dim)
+
+            # path_to_model
+            self.path_to_model = PATH_TO_DIR + \
+                "Hol-CCG/result/data/model/{}_{}d_model.pth".format(self.embedding_type, self.embedding_dim)
+            if self.embedding_type == "GloVe":
+                self.path_to_model_with_regression = PATH_TO_DIR + \
+                    "Hol-CCG/result/data/model/{}_{}d_model_with_regression.pth".format(self.embedding_type, self.embedding_dim)
+
+            # path_to_history
+            self.path_to_train_history = PATH_TO_DIR + "Hol-CCG/result/data/history/{}_{}d_train_history.csv"
+            self.path_to_dev_history = PATH_TO_DIR + "Hol-CCG/result/data/{}_{}d_dev_history.csv"
+            self.path_to_history_fig = PATH_TO_DIR + "Hol-CCG/result/fig/{}_{}d_history.png"
+
+            # path_to_figures
+            self.path_to_map = PATH_TO_DIR + \
+                "Hol-CCG/result/fig/{}_{}d".format(self.embedding_type, self.embedding_dim)
+            self.fig_name = PATH_TO_DIR + "{} {}d".format(self.embedding_type, self.embedding_dim)
 
     def export_param_list(self, path, roop_count):
         if roop_count == 0:
