@@ -252,6 +252,14 @@ class Condition_Setter:
         self.path_to_binary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt"
         self.path_to_unary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt"
 
+        # path_for_visualization
+        self.path_to_vis_dict = PATH_TO_DIR + \
+            "Hol-CCG/result/data/visualize/vis_dict.pickle"
+        self.path_to_idx_dict = PATH_TO_DIR + \
+            "Hol-CCG/result/data/visualize/idx_dict.pickle"
+        self.path_to_color_list = PATH_TO_DIR + \
+            "Hol-CCG/result/data/visualize/color_list.pickle"
+
         # ******************** the path depend on the embedding type********************
         if set_embedding_type:
             # path_to_weight_matrix
@@ -283,7 +291,9 @@ class Condition_Setter:
                 "Hol-CCG/result/fig/history/{}_{}d_history.png".format(
                     self.embedding_type, self.embedding_dim)
 
-            # path_to_figures
+            # path_for_visualization
+            self.path_to_visualize_weight = PATH_TO_DIR + \
+                "Hol-CCG/result/data/visualize/{}_{}d".format(self.embedding_type, self.embedding_dim)
             self.path_to_map = PATH_TO_DIR + \
                 "Hol-CCG/result/fig/map/{}_{}d".format(
                     self.embedding_type, self.embedding_dim)

@@ -1,4 +1,4 @@
-from utils import load, set_random_seed, Condition_Setter
+from utils import load, dump, set_random_seed, Condition_Setter
 from sklearn.decomposition import PCA
 from collections import Counter
 import torch
@@ -69,7 +69,7 @@ def prepare_vector_list(tree_list):
     return vector_list, idx_dict, vis_dict, color_list
 
 
-def interactive_visualize_test(
+def interactive_visualize(
         visualize_dim,
         embedded,
         idx_dict,
@@ -119,55 +119,87 @@ def interactive_visualize_test(
 
 condition = Condition_Setter()
 method = int(input('t-SNE(0) or PCA(1): '))
+if method not in [0, 1]:
+    print('Error: method type')
+    exit()
 visualize_dim = int(input('2d(2) or 3d(3): '))
+if visualize_dim not in [2, 3]:
+    print('Error: visualize dim')
+    exit()
+calculate = int(input('new calculation(0) or load(1): '))
+if calculate not in [0, 1]:
+    print('Error: new calculation or load')
+    exit()
 
 device = torch.device('cpu')
 
 set_random_seed(0)
+
 print('loading tree list...')
 test_tree_list = load(condition.path_to_test_tree_list)
 
-if condition.embedding_type == "random":
-    tree_net = torch.load(condition.path_to_model, map_location=torch.device('cpu'))
+if calculate == 0:
+    if condition.embedding_type == "random":
+        tree_net = torch.load(condition.path_to_model, map_location=torch.device('cpu'))
+    else:
+        tree_net = torch.load(
+            condition.path_to_model_with_regression,
+            map_location=torch.device('cpu'))
+    tree_net.eval()
+    embedding = tree_net.embedding
+
+    test_tree_list.set_vector(embedding)
+
+    vector_list, idx_dict, vis_dict, color_list = prepare_vector_list(test_tree_list)
+
+    if method == 0:
+        method = TSNE(n_components=visualize_dim)
+        path_to_visualize_weight = condition.path_to_visualize_weight + \
+            "_{}d_t-SNE.pickle".format(visualize_dim)
+        path_to_map = condition.path_to_map + "_{}d_t-SNE.png".format(visualize_dim)
+        print("t-SNE working.....")
+    else:
+        method = PCA(n_components=visualize_dim)
+        path_to_visualize_weight = condition.path_to_visualize_weight + \
+            "_{}d_PCA.pickle".format(visualize_dim)
+        path_to_map = condition.path_to_map + "_{}d_PCA.png".format(visualize_dim)
+        print("PCA working.....")
+
+    embedded = method.fit_transform(vector_list)
+    dump(embedded, path_to_visualize_weight)
+    dump(vis_dict, condition.path_to_vis_dict)
+    dump(idx_dict, condition.path_to_idx_dict)
+    dump(color_list, condition.path_to_color_list)
+    if method == 1:
+        print("experined variance ratio = ", method.explained_variance_ratio_)
+
 else:
-    tree_net = torch.load(condition.path_to_model_with_regression, map_location=torch.device('cpu'))
-tree_net.eval()
-embedding = tree_net.embedding
-
-test_tree_list.set_vector(embedding)
-
-vector_list, idx_dict, vis_dict, color_list = prepare_vector_list(test_tree_list)
-
-if method == 0:
-    method = TSNE(n_components=visualize_dim)
-    path_to_map = condition.path_to_map + "_{}d_t-SNE.png".format(visualize_dim)
-    print("t-SNE working.....")
-else:
-    method = PCA(n_components=visualize_dim)
-    path_to_map = condition.path_to_map + "_{}d_PCA.png".format(visualize_dim)
-    print("PCA working.....")
-
-embedded = method.fit_transform(vector_list)
-if method == 1:
-    print("experined variance ratio = ", method.explained_variance_ratio_)
+    if method == 0:
+        path_to_visualize_weight = condition.path_to_visualize_weight + \
+            "_{}d_t-SNE.pickle".format(visualize_dim)
+        path_to_map = condition.path_to_map + "_{}d_t-SNE.png".format(visualize_dim)
+    else:
+        path_to_visualize_weight = condition.path_to_visualize_weight + \
+            "_{}d_PCA.pickle".format(visualize_dim)
+        path_to_map = condition.path_to_map + "_{}d_PCA.png".format(visualize_dim)
+    embedded = load(path_to_visualize_weight)
+    vis_dict = load(condition.path_to_vis_dict)
+    idx_dict = load(condition.path_to_idx_dict)
+    color_list = load(condition.path_to_color_list)
 
 fig0 = plt.figure(figsize=(10, 10))
 if visualize_dim == 2:
     ax = fig0.add_subplot()
     for k, v in vis_dict.items():
         ax.scatter(embedded[v][:, 0], embedded[v][:, 1], s=1, label=k)
-    ax.legend(fontsize='large')
-    plt.xticks(fontsize='large')
-    plt.yticks(fontsize='large')
-    fig0.savefig(path_to_map)
 elif visualize_dim == 3:
     ax = fig0.add_subplot(projection='3d')
     for k, v in vis_dict.items():
         ax.scatter(embedded[v][:, 0], embedded[v][:, 1], embedded[v][:, 2], s=1, label=k)
-    ax.legend(fontsize='large')
-    fig0.savefig(path_to_map)
+ax.legend(fontsize='large')
+fig0.savefig(path_to_map)
 
-fig1 = interactive_visualize_test(
+fig1 = interactive_visualize(
     visualize_dim,
     embedded,
     idx_dict,
