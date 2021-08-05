@@ -46,6 +46,7 @@ cat_list = []
 err_idx = []
 
 idx = 0
+
 for tree in test_tree_list.tree_list:
     for node in tree.node_list:
         if counter[tuple(node.content_id)] == 0:

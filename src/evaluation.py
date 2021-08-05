@@ -14,12 +14,6 @@ train_tree_list = load(condition.path_to_train_tree_list)
 dev_tree_list = load(condition.path_to_dev_tree_list)
 test_tree_list = load(condition.path_to_test_tree_list)
 
-new_weight_matrix = torch.tensor(load_weight_matrix(condition.path_to_weight_with_regression))
-
-NUM_VOCAB = len(test_tree_list.content_vocab)
-
-new_embedding = Embedding(NUM_VOCAB, condition.embedding_dim, _weight=new_weight_matrix)
-
 tree_net = torch.load(condition.path_to_model,
                       map_location=device)
 tree_net.eval()
@@ -44,11 +38,15 @@ evaluate(test_tree_list, tree_net, unk_content_id)
 print('***for entire tree***')
 evaluate(test_tree_list, tree_net)
 
-tree_net.embedding = new_embedding
+if condition.embedding_type == 'GloVe':
+    NUM_VOCAB = len(test_tree_list.content_vocab)
+    new_weight_matrix = torch.tensor(load_weight_matrix(condition.path_to_weight_with_regression))
+    new_embedding = Embedding(NUM_VOCAB, condition.embedding_dim, _weight=new_weight_matrix)
+    tree_net.embedding = new_embedding
 
-print('evaluating...')
-print('---with regression---')
-print('***for only unk nodes***')
-evaluate(test_tree_list, tree_net, unk_content_id)
-print('***for entire tree***')
-evaluate(test_tree_list, tree_net)
+    print('evaluating...')
+    print('---with regression---')
+    print('***for only unk nodes***')
+    evaluate(test_tree_list, tree_net, unk_content_id)
+    print('***for entire tree***')
+    evaluate(test_tree_list, tree_net)

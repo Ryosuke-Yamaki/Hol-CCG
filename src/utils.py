@@ -32,7 +32,7 @@ def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
 
 def generate_random_weight_matrix(NUM_VOCAB, EMBEDDING_DIM):
     weight_matrix = [
-        np.random.rand(EMBEDDING_DIM) for i in range(NUM_VOCAB)]
+        np.random.randn(EMBEDDING_DIM) for i in range(NUM_VOCAB)]
     return np.array(weight_matrix).astype(np.float32)
 
 

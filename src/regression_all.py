@@ -3,6 +3,7 @@ import numpy as np
 from utils import load
 import torch
 import torch.nn as nn
+from torch.nn import Embedding
 import torch.optim as optim
 from utils import load_weight_matrix, set_random_seed, Condition_Setter
 from tqdm import tqdm
@@ -131,12 +132,18 @@ for embedding_dim in [50, 100, 300]:
                             (np.linalg.norm(output) * np.linalg.norm(predict)))
         print("val_cos_sim: ", np.mean(cos_list))
 
-    torch.save(model, condition.path_to_model_with_regression)
-
     # predict projected vector from initial state of vector of unknown words
     for content_id, weight in zip(unk_content_id, initial_weight_of_unk):
         trained_weight_matrix[content_id] = model(weight)
     trained_weight_matrix = trained_weight_matrix.cpu().detach().numpy()
+
+    NUM_VOCAB = len(train_tree_list.content_vocab)
+    new_embedding = Embedding(
+        NUM_VOCAB,
+        condition.embedding_dim,
+        _weight=torch.tensor(trained_weight_matrix))
+    tree_net.embedding = new_embedding
+    torch.save(tree_net, condition.path_to_model_with_regression)
 
     with open(condition.path_to_weight_with_regression, 'w') as f:
         writer = csv.writer(f, lineterminator='\n')
