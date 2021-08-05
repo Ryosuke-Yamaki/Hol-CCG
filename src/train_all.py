@@ -59,7 +59,8 @@ for embedding_type in ['GloVe', 'random']:
             # save random weight matrix as initial state
             with open(condition.path_to_initial_weight_matrix, 'w') as f:
                 writer = csv.writer(f, lineterminator='\n')
-                writer.writerows(tree_net.embedding.weight.detach().numpy())
+                writer.writerows(
+                    tree_net.embedding.weight.cpu().detach().numpy())
 
         criteria = nn.CrossEntropyLoss()
         optimizer = optim.Adam(tree_net.parameters())
