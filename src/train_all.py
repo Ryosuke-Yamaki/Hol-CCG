@@ -37,7 +37,7 @@ PATIENCE = 3
 NUM_VOCAB = len(train_tree_list.content_vocab)
 NUM_CATEGORY = len(train_tree_list.category_vocab)
 
-for embedding_type in ['GloVe', 'random']:
+for embedding_type in ['random']:
     if embedding_type == 'GloVe':
         dim_list = [50, 100, 300]
     else:
