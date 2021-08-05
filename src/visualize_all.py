@@ -98,26 +98,26 @@ for embedding_type in ['GloVe', 'random']:
         embedding = tree_net.embedding
         test_tree_list.set_vector(embedding)
         vector_list, idx_dict, vis_dict, color_list = prepare_vector_list(test_tree_list)
-        for method in [0, 1]:
+        dump(vis_dict, condition.path_to_vis_dict)
+        dump(idx_dict, condition.path_to_idx_dict)
+        dump(color_list, condition.path_to_color_list)
+        for method in [1, 0]:
             for visualize_dim in [2, 3]:
                 if method == 0:
                     method = TSNE(n_components=visualize_dim)
                     path_to_visualize_weight = condition.path_to_visualize_weight + \
                         "_{}d_t-SNE.pickle".format(visualize_dim)
                     path_to_map = condition.path_to_map + "_{}d_t-SNE.png".format(visualize_dim)
-                    print("t-SNE_{} working.....".format(visualize_dim))
+                    print("t-SNE_{}d working.....".format(visualize_dim))
                 else:
                     method = PCA(n_components=visualize_dim)
                     path_to_visualize_weight = condition.path_to_visualize_weight + \
                         "_{}d_PCA.pickle".format(visualize_dim)
                     path_to_map = condition.path_to_map + "_{}d_PCA.png".format(visualize_dim)
-                    print("PCA_{} working.....".format(visualize_dim))
+                    print("PCA_{}d working.....".format(visualize_dim))
 
                 embedded = method.fit_transform(vector_list)
                 dump(embedded, path_to_visualize_weight)
-                dump(vis_dict, condition.path_to_vis_dict)
-                dump(idx_dict, condition.path_to_idx_dict)
-                dump(color_list, condition.path_to_color_list)
 
                 if method == 1:
                     print("experined variance ratio = ", method.explained_variance_ratio_)
