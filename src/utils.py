@@ -45,9 +45,11 @@ def set_random_seed(seed):
 
 def make_label_mask(batch, device=torch.device('cpu')):
     batch_label = batch[4]
-    label = torch.tensor(np.squeeze(np.vstack(batch_label)), dtype=torch.long, device=device)
+    label = torch.tensor(np.squeeze(np.vstack(batch_label)),
+                         dtype=torch.long, device=device)
     max_num_label = max([len(i) for i in batch_label])
-    true_mask = [torch.ones(len(i), dtype=torch.bool, device=device) for i in batch_label]
+    true_mask = [torch.ones(len(i), dtype=torch.bool, device=device)
+                 for i in batch_label]
     false_mask = [
         torch.zeros(
             max_num_label - len(i),
@@ -149,7 +151,8 @@ class History:
             acc = self.cal_top_k_acc(output[unk_cat_mask], label[unk_cat_mask])
             total_loss += loss.item()
             total_acc += acc.item()
-        self.loss_history = np.append(self.loss_history, total_loss / len(batch_list))
+        self.loss_history = np.append(
+            self.loss_history, total_loss / len(batch_list))
         self.acc_history = np.append(
             self.acc_history, total_acc / len(batch_list))
         self.update()
@@ -217,26 +220,35 @@ class Condition_Setter:
                     print("Error: embedding_dim")
                     exit()
             self.param_list.append(str(self.embedding_dim))
-        self.set_path(PATH_TO_DIR, set_embedding_type)
+        self.set_path(set_embedding_type)
 
-    def set_path(self, PATH_TO_DIR, set_embedding_type=True):
+    def set_path(self, set_embedding_type=True):
+        PATH_TO_DIR = self.PATH_TO_DIR
         # ******************** the path not depend on the embedding type********************
         # path to the tree data
         self.path_to_train_data = PATH_TO_DIR + "CCGbank/converted/train.txt"
         self.path_to_dev_data = PATH_TO_DIR + "CCGbank/converted/dev.txt"
         self.path_to_test_data = PATH_TO_DIR + "CCGbank/converted/test.txt"
-        self.path_to_train_tree_list = PATH_TO_DIR + "Hol-CCG/data/tree_list/train_tree_list.pickle"
-        self.path_to_dev_tree_list = PATH_TO_DIR + "Hol-CCG/data/tree_list/dev_tree_list.pickle"
-        self.path_to_test_tree_list = PATH_TO_DIR + "Hol-CCG/data/tree_list/test_tree_list.pickle"
+        self.path_to_train_tree_list = PATH_TO_DIR + \
+            "Hol-CCG/data/tree_list/train_tree_list.pickle"
+        self.path_to_dev_tree_list = PATH_TO_DIR + \
+            "Hol-CCG/data/tree_list/dev_tree_list.pickle"
+        self.path_to_test_tree_list = PATH_TO_DIR + \
+            "Hol-CCG/data/tree_list/test_tree_list.pickle"
 
         # path to counters, vocab
-        self.path_to_word_counter = PATH_TO_DIR + "Hol-CCG/data/counter/word_counter.pickle"
-        self.path_to_train_word_counter = PATH_TO_DIR + "Hol-CCG/data/counter/train_word_counter.pickle"
-        self.path_to_category_counter = PATH_TO_DIR + "Hol-CCG/data/counter/category_counter.pickle"
-        self.path_to_content_vocab = PATH_TO_DIR + "Hol-CCG/data/parsing/content_vocab.txt"
+        self.path_to_word_counter = PATH_TO_DIR + \
+            "Hol-CCG/data/counter/word_counter.pickle"
+        self.path_to_train_word_counter = PATH_TO_DIR + \
+            "Hol-CCG/data/counter/train_word_counter.pickle"
+        self.path_to_category_counter = PATH_TO_DIR + \
+            "Hol-CCG/data/counter/category_counter.pickle"
+        self.path_to_content_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/parsing/content_vocab.txt"
 
         # path_to_rule
-        self.path_to_grammar = PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar"
+        self.path_to_grammar = PATH_TO_DIR + \
+            "CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar"
         self.path_to_binary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt"
         self.path_to_unary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt"
 
@@ -244,30 +256,39 @@ class Condition_Setter:
         if set_embedding_type:
             # path_to_weight_matrix
             self.path_to_initial_weight_matrix = PATH_TO_DIR + \
-                "Hol-CCG/data/initial_weight/{}_{}d_initial_weight.csv".format(self.embedding_type, self.embedding_dim)
+                "Hol-CCG/data/initial_weight/{}_{}d_initial_weight.csv".format(
+                    self.embedding_type, self.embedding_dim)
             if self.embedding_type == "GloVe":
                 self.path_to_weight_with_regression = PATH_TO_DIR + \
-                    "Hol-CCG/result/data/weight_matrix/{}_{}d_weight_with_regression.csv".format(self.embedding_type, self.embedding_dim)
+                    "Hol-CCG/result/data/weight_matrix/{}_{}d_weight_with_regression.csv".format(
+                        self.embedding_type, self.embedding_dim)
 
             # path_to_model
             self.path_to_model = PATH_TO_DIR + \
-                "Hol-CCG/result/data/model/{}_{}d_model.pth".format(self.embedding_type, self.embedding_dim)
+                "Hol-CCG/result/data/model/{}_{}d_model.pth".format(
+                    self.embedding_type, self.embedding_dim)
             if self.embedding_type == "GloVe":
                 self.path_to_model_with_regression = PATH_TO_DIR + \
-                    "Hol-CCG/result/data/model/{}_{}d_model_with_regression.pth".format(self.embedding_type, self.embedding_dim)
+                    "Hol-CCG/result/data/model/{}_{}d_model_with_regression.pth".format(
+                        self.embedding_type, self.embedding_dim)
 
             # path_to_history
             self.path_to_train_history = PATH_TO_DIR + \
-                "Hol-CCG/result/data/history/{}_{}d_train_history.csv".format(self.embedding_type, self.embedding_dim)
+                "Hol-CCG/result/data/history/{}_{}d_train_history.csv".format(
+                    self.embedding_type, self.embedding_dim)
             self.path_to_dev_history = PATH_TO_DIR + \
-                "Hol-CCG/result/data/history/{}_{}d_dev_history.csv".format(self.embedding_type, self.embedding_dim)
+                "Hol-CCG/result/data/history/{}_{}d_dev_history.csv".format(
+                    self.embedding_type, self.embedding_dim)
             self.path_to_history_fig = PATH_TO_DIR + \
-                "Hol-CCG/result/fig/history/{}_{}d_history.png".format(self.embedding_type, self.embedding_dim)
+                "Hol-CCG/result/fig/history/{}_{}d_history.png".format(
+                    self.embedding_type, self.embedding_dim)
 
             # path_to_figures
             self.path_to_map = PATH_TO_DIR + \
-                "Hol-CCG/result/fig/map/{}_{}d".format(self.embedding_type, self.embedding_dim)
-            self.fig_name = "{} {}d".format(self.embedding_type, self.embedding_dim)
+                "Hol-CCG/result/fig/map/{}_{}d".format(
+                    self.embedding_type, self.embedding_dim)
+            self.fig_name = "{} {}d".format(
+                self.embedding_type, self.embedding_dim)
 
     def export_param_list(self, path, roop_count):
         if roop_count == 0:

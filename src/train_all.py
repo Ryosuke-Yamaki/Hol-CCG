@@ -37,7 +37,6 @@ PATIENCE = 3
 NUM_VOCAB = len(train_tree_list.content_vocab)
 NUM_CATEGORY = len(train_tree_list.category_vocab)
 
-
 for embedding_type in ['GloVe', 'random']:
     if embedding_type == 'GloVe':
         dim_list = [50, 100, 300]
@@ -52,7 +51,7 @@ for embedding_type in ['GloVe', 'random']:
             initial_weight_matrix = None
         else:
             initial_weight_matrix = load_weight_matrix(
-                condition.path_to_pretrained_weight_matrix)
+                condition.path_to_initial_weight_matrix)
 
         tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY, condition.embedding_dim,
                             initial_weight_matrix).to(device)
