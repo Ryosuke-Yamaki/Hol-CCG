@@ -1,10 +1,7 @@
-from utils import load
+from utils import load, set_random_seed, Condition_Setter
 from collections import Counter
-import os
 import torch
 import matplotlib.pyplot as plt
-from utils import set_random_seed, Condition_Setter
-from models import Tree_List, Tree_Net
 from torch.fft import fft
 
 
@@ -21,20 +18,19 @@ def freq_mean_std(vector_list):
     return mean, std
 
 
-PATH_TO_DIR = os.getcwd().replace("Hol-CCG/src", "")
-condition = Condition_Setter(PATH_TO_DIR)
+condition = Condition_Setter()
 
 device = torch.device('cpu')
-
 set_random_seed(0)
-print('loading tree list...')
-test_tree_list = load(PATH_TO_DIR + "Hol-CCG/data/test_tree_list.pickle")
 
-NUM_VOCAB = len(test_tree_list.content_vocab)
-NUM_CATEGORY = len(test_tree_list.category_vocab)
-tree_net = Tree_Net(NUM_VOCAB, NUM_CATEGORY, condition.embedding_dim).to(device)
-tree_net = torch.load(condition.path_to_model,
-                      map_location=device)
+print('loading tree list...')
+test_tree_list = load(condition.path_to_test_tree_list)
+
+if condition.embedding_type == 'random':
+    tree_net = torch.load(condition.path_to_model,
+                          map_location=device)
+else:
+    tree_net = torch.load(condition.path_to_model_with_regression, map_location=device)
 tree_net.eval()
 
 embedding = tree_net.embedding
@@ -51,11 +47,12 @@ for tree in test_tree_list.tree_list:
     for node in tree.node_list:
         if counter[tuple(node.content_id)] == 0:
             counter[tuple(node.content_id)] += 1
-            if node.category == 'N':
+            k = node.category
+            if 'NP' in k and ('/' not in k and '\\' not in k):
                 n_vector.append(node.vector)
-            elif node.category == 'NP':
+            elif 'N' in k and ('/' not in k and '\\' not in k):
                 np_vector.append(node.vector)
-            elif 'S' in node.category and '/' not in node.category and '\\' not in node.category:
+            elif 'S' in k and ('/' not in k and '\\' not in k):
                 s_vector.append(node.vector)
             else:
                 if node.is_leaf:
@@ -83,22 +80,26 @@ ax1.bar(x, n_mean)
 ax1.errorbar(x, n_mean, yerr=n_std, fmt='k.', capsize=2)
 ax1.set_ylim(0, amp_max)
 ax1.set_title('N')
-ax2.bar(x, np_mean)
-ax2.errorbar(x, np_mean, yerr=np_std, fmt='k.', capsize=2)
+
+ax2.bar(x, word_mean)
+ax2.errorbar(x, word_mean, yerr=word_std, fmt='k.', capsize=2)
 ax2.set_ylim(0, amp_max)
-ax2.set_title('NP')
-ax3.bar(x, s_mean)
-ax3.errorbar(x, s_mean, yerr=s_std, fmt='k.', capsize=2)
+ax2.set_title('Word')
+
+ax3.bar(x, np_mean)
+ax3.errorbar(x, np_mean, yerr=np_std, fmt='k.', capsize=2)
 ax3.set_ylim(0, amp_max)
-ax3.set_title('S')
-ax4.bar(x, word_mean)
-ax4.errorbar(x, word_mean, yerr=word_std, fmt='k.', capsize=2)
+ax3.set_title('NP')
+
+ax4.bar(x, phrase_mean)
+ax4.errorbar(x, phrase_mean, yerr=phrase_std, fmt='k.', capsize=2)
 ax4.set_ylim(0, amp_max)
-ax4.set_title('Word')
-ax5.bar(x, phrase_mean)
-ax5.errorbar(x, phrase_mean, yerr=phrase_std, fmt='k.', capsize=2)
+ax4.set_title('Phrase')
+
+ax5.bar(x, s_mean)
+ax5.errorbar(x, s_mean, yerr=s_std, fmt='k.', capsize=2)
 ax5.set_ylim(0, amp_max)
-ax5.set_title('Phrase')
-path_to_fig = condition.path_to_map + "_freq"
-fig.savefig(path_to_fig)
+ax5.set_title('S')
+
+fig.savefig(condition.path_to_freq)
 plt.show()
