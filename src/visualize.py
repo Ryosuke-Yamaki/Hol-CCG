@@ -156,13 +156,13 @@ if calculate == 0:
         method = TSNE(n_components=visualize_dim)
         path_to_visualize_weight = condition.path_to_visualize_weight + \
             "_{}d_t-SNE.pickle".format(visualize_dim)
-        path_to_map = condition.path_to_map + "_{}d_t-SNE.png".format(visualize_dim)
+        path_to_map = condition.path_to_map + "_{}d_t-SNE.pdf".format(visualize_dim)
         print("t-SNE working.....")
     else:
         method = PCA(n_components=visualize_dim)
         path_to_visualize_weight = condition.path_to_visualize_weight + \
             "_{}d_PCA.pickle".format(visualize_dim)
-        path_to_map = condition.path_to_map + "_{}d_PCA.png".format(visualize_dim)
+        path_to_map = condition.path_to_map + "_{}d_PCA.pdf".format(visualize_dim)
         print("PCA working.....")
 
     embedded = method.fit_transform(vector_list)
@@ -177,11 +177,11 @@ else:
     if method == 0:
         path_to_visualize_weight = condition.path_to_visualize_weight + \
             "_{}d_t-SNE.pickle".format(visualize_dim)
-        path_to_map = condition.path_to_map + "_{}d_t-SNE.png".format(visualize_dim)
+        path_to_map = condition.path_to_map + "_{}d_t-SNE.pdf".format(visualize_dim)
     else:
         path_to_visualize_weight = condition.path_to_visualize_weight + \
             "_{}d_PCA.pickle".format(visualize_dim)
-        path_to_map = condition.path_to_map + "_{}d_PCA.png".format(visualize_dim)
+        path_to_map = condition.path_to_map + "_{}d_PCA.pdf".format(visualize_dim)
     embedded = load(path_to_visualize_weight)
     vis_dict = load(condition.path_to_vis_dict)
     idx_dict = load(condition.path_to_idx_dict)

@@ -75,11 +75,11 @@ for tree in test_tree_list.tree_list:
 
 if method == 0:
     method = TSNE(n_components=visualize_dim)
-    path_to_map = condition.path_to_map + "_t-SNE.png"
+    path_to_map = condition.path_to_map + "_t-SNE.pdf"
     print("t-SNE working.....")
 else:
     method = PCA(n_components=visualize_dim)
-    path_to_map = condition.path_to_map + "_PCA.png"
+    path_to_map = condition.path_to_map + "_PCA.pdf"
     print("PCA working.....")
 
 embedded = method.fit_transform(vector_list)

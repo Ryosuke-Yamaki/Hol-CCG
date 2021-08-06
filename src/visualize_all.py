@@ -71,6 +71,10 @@ def prepare_vector_list(tree_list):
 
 
 condition = Condition_Setter(set_embedding_type=False)
+calculate = int(input('new calculation(0) or load(1): '))
+if calculate not in [0, 1]:
+    print('Error: new calculation or load')
+    exit()
 
 device = torch.device('cpu')
 
@@ -89,44 +93,59 @@ for embedding_type in ['GloVe', 'random']:
         condition.embedding_type = embedding_type
         condition.embedding_dim = embedding_dim
         condition.set_path()
-        if condition.embedding_type == "random":
-            tree_net = torch.load(condition.path_to_model,
-                                  map_location=torch.device('cpu'))
-        else:
-            tree_net = torch.load(
-                condition.path_to_model_with_regression,
-                map_location=torch.device('cpu'))
-        tree_net.eval()
-        embedding = tree_net.embedding
-        test_tree_list.set_vector(embedding)
-        vector_list, idx_dict, vis_dict, color_list = prepare_vector_list(
-            test_tree_list)
-        dump(vis_dict, condition.path_to_vis_dict)
-        dump(idx_dict, condition.path_to_idx_dict)
-        dump(color_list, condition.path_to_color_list)
+        if calculate == 0:
+            if condition.embedding_type == "random":
+                tree_net = torch.load(condition.path_to_model,
+                                      map_location=torch.device('cpu'))
+            else:
+                tree_net = torch.load(
+                    condition.path_to_model_with_regression,
+                    map_location=torch.device('cpu'))
+            tree_net.eval()
+            embedding = tree_net.embedding
+            test_tree_list.set_vector(embedding)
+            vector_list, idx_dict, vis_dict, color_list = prepare_vector_list(
+                test_tree_list)
+            dump(vis_dict, condition.path_to_vis_dict)
+            dump(idx_dict, condition.path_to_idx_dict)
+            dump(color_list, condition.path_to_color_list)
         for method_id in [0, 1]:
             for visualize_dim in [2, 3]:
-                if method_id == 0:
-                    method = TSNE(n_components=visualize_dim)
-                    path_to_visualize_weight = condition.path_to_visualize_weight + \
-                        "_{}d_t-SNE.pickle".format(visualize_dim)
-                    path_to_map = condition.path_to_map + \
-                        "_{}d_t-SNE.png".format(visualize_dim)
-                    print("t-SNE_{}d working.....".format(visualize_dim))
-                elif method_id == 1:
-                    method = PCA(n_components=visualize_dim)
-                    path_to_visualize_weight = condition.path_to_visualize_weight + \
-                        "_{}d_PCA.pickle".format(visualize_dim)
-                    path_to_map = condition.path_to_map + \
-                        "_{}d_PCA.png".format(visualize_dim)
-                    print("PCA_{}d working.....".format(visualize_dim))
+                if calculate == 0:
+                    if method_id == 0:
+                        method = TSNE(n_components=visualize_dim)
+                        path_to_visualize_weight = condition.path_to_visualize_weight + \
+                            "_{}d_t-SNE.pickle".format(visualize_dim)
+                        path_to_map = condition.path_to_map + \
+                            "_{}d_t-SNE.pdf".format(visualize_dim)
+                        print("t-SNE_{}d working.....".format(visualize_dim))
+                    elif method_id == 1:
+                        method = PCA(n_components=visualize_dim)
+                        path_to_visualize_weight = condition.path_to_visualize_weight + \
+                            "_{}d_PCA.pickle".format(visualize_dim)
+                        path_to_map = condition.path_to_map + \
+                            "_{}d_PCA.pdf".format(visualize_dim)
+                        print("PCA_{}d working.....".format(visualize_dim))
 
-                embedded = method.fit_transform(vector_list)
-                dump(embedded, path_to_visualize_weight)
+                    embedded = method.fit_transform(vector_list)
+                    dump(embedded, path_to_visualize_weight)
+                    if method == 1:
+                        print("experined variance ratio = ",
+                              method.explained_variance_ratio_)
 
-                if method == 1:
-                    print("experined variance ratio = ",
-                          method.explained_variance_ratio_)
+                else:
+                    if method_id == 0:
+                        path_to_visualize_weight = condition.path_to_visualize_weight + \
+                            "_{}d_t-SNE.pickle".format(visualize_dim)
+                        path_to_map = condition.path_to_map + "_{}d_t-SNE.pdf".format(visualize_dim)
+                    else:
+                        path_to_visualize_weight = condition.path_to_visualize_weight + \
+                            "_{}d_PCA.pickle".format(visualize_dim)
+                        path_to_map = condition.path_to_map + "_{}d_PCA.pdf".format(visualize_dim)
+                    embedded = load(path_to_visualize_weight)
+                    vis_dict = load(condition.path_to_vis_dict)
+                    idx_dict = load(condition.path_to_idx_dict)
+                    color_list = load(condition.path_to_color_list)
 
                 fig0 = plt.figure(figsize=(10, 10))
                 if visualize_dim == 2:

@@ -288,7 +288,7 @@ class Condition_Setter:
                 "Hol-CCG/result/data/history/{}_{}d_dev_history.csv".format(
                     self.embedding_type, self.embedding_dim)
             self.path_to_history_fig = PATH_TO_DIR + \
-                "Hol-CCG/result/fig/history/{}_{}d_history.png".format(
+                "Hol-CCG/result/fig/history/{}_{}d_history.pdf".format(
                     self.embedding_type, self.embedding_dim)
 
             # path_for_visualization
@@ -301,7 +301,7 @@ class Condition_Setter:
                 "Hol-CCG/result/fig/wave/{}_{}d".format(
                     self.embedding_type, self.embedding_dim)
             self.path_to_freq = PATH_TO_DIR + \
-                "Hol-CCG/result/fig/freq/{}_{}d_freq.png".format(
+                "Hol-CCG/result/fig/freq/{}_{}d_freq.pdf".format(
                     self.embedding_type, self.embedding_dim)
             self.fig_name = "{} {}d".format(
                 self.embedding_type, self.embedding_dim)

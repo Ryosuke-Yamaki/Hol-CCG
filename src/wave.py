@@ -40,5 +40,5 @@ for k, v in wave_list.items():
     plt.plot(x, v.detach().numpy())
     plt.title(condition.embedding_type + '_' +
               str(condition.embedding_dim) + 'd - ' + k.replace('_', ' '))
-    fig.savefig(condition.path_to_wave + '_' + k)
+    fig.savefig(condition.path_to_wave + '_' + k + '.pdf')
 plt.show()
