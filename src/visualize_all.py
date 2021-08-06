@@ -39,7 +39,8 @@ def prepare_vector_list(tree_list):
                 vector_list.append(node.vector.detach().numpy()[0])
                 category_counter = Counter()
                 category_counter[node.category_id] += 1
-                idx_dict[idx] = {'content': node.content_id, 'category_counter': category_counter}
+                idx_dict[idx] = {'content': node.content_id,
+                                 'category_counter': category_counter}
                 idx += 1
             else:
                 idx_dict[content_to_idx[tuple(node.content_id)]
@@ -89,7 +90,8 @@ for embedding_type in ['GloVe', 'random']:
         condition.embedding_dim = embedding_dim
         condition.set_path()
         if condition.embedding_type == "random":
-            tree_net = torch.load(condition.path_to_model, map_location=torch.device('cpu'))
+            tree_net = torch.load(condition.path_to_model,
+                                  map_location=torch.device('cpu'))
         else:
             tree_net = torch.load(
                 condition.path_to_model_with_regression,
@@ -97,36 +99,41 @@ for embedding_type in ['GloVe', 'random']:
         tree_net.eval()
         embedding = tree_net.embedding
         test_tree_list.set_vector(embedding)
-        vector_list, idx_dict, vis_dict, color_list = prepare_vector_list(test_tree_list)
+        vector_list, idx_dict, vis_dict, color_list = prepare_vector_list(
+            test_tree_list)
         dump(vis_dict, condition.path_to_vis_dict)
         dump(idx_dict, condition.path_to_idx_dict)
         dump(color_list, condition.path_to_color_list)
-        for method in [1, 0]:
+        for method_id in [0, 1]:
             for visualize_dim in [2, 3]:
-                if method == 0:
+                if method_id == 0:
                     method = TSNE(n_components=visualize_dim)
                     path_to_visualize_weight = condition.path_to_visualize_weight + \
                         "_{}d_t-SNE.pickle".format(visualize_dim)
-                    path_to_map = condition.path_to_map + "_{}d_t-SNE.png".format(visualize_dim)
+                    path_to_map = condition.path_to_map + \
+                        "_{}d_t-SNE.png".format(visualize_dim)
                     print("t-SNE_{}d working.....".format(visualize_dim))
-                else:
+                elif method_id == 1:
                     method = PCA(n_components=visualize_dim)
                     path_to_visualize_weight = condition.path_to_visualize_weight + \
                         "_{}d_PCA.pickle".format(visualize_dim)
-                    path_to_map = condition.path_to_map + "_{}d_PCA.png".format(visualize_dim)
+                    path_to_map = condition.path_to_map + \
+                        "_{}d_PCA.png".format(visualize_dim)
                     print("PCA_{}d working.....".format(visualize_dim))
 
                 embedded = method.fit_transform(vector_list)
                 dump(embedded, path_to_visualize_weight)
 
                 if method == 1:
-                    print("experined variance ratio = ", method.explained_variance_ratio_)
+                    print("experined variance ratio = ",
+                          method.explained_variance_ratio_)
 
                 fig0 = plt.figure(figsize=(10, 10))
                 if visualize_dim == 2:
                     ax = fig0.add_subplot()
                     for k, v in vis_dict.items():
-                        ax.scatter(embedded[v][:, 0], embedded[v][:, 1], s=1, label=k)
+                        ax.scatter(embedded[v][:, 0],
+                                   embedded[v][:, 1], s=1, label=k)
                 elif visualize_dim == 3:
                     ax = fig0.add_subplot(projection='3d')
                     for k, v in vis_dict.items():
@@ -134,3 +141,4 @@ for embedding_type in ['GloVe', 'random']:
                                    embedded[v][:, 2], s=1, label=k)
                 ax.legend(fontsize='large')
                 fig0.savefig(path_to_map)
+                plt.close(fig0)
