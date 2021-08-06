@@ -30,7 +30,7 @@ def extract_rule(path_to_grammar, category_vocab):
     return binary_rule, unary_rule
 
 
-condition = Condition_Setter()
+condition = Condition_Setter(set_embedding_type=False)
 PATH_TO_DIR = condition.PATH_TO_DIR
 
 path_to_grammar = PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar"
@@ -62,33 +62,44 @@ np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt", np.array(binary
 np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt", np.array(unary_rule) + 1,
            fmt='%d', header=str(len(train_tree_list.category_vocab) - 1), comments="")
 
-if condition.embedding_type == 'random':
-    tree_net = torch.load(condition.path_to_model,
-                          map_location=device)
-else:
-    tree_net = torch.load(condition.path_to_model_with_regression,
-                          map_location=device)
-tree_net.eval()
+for embedding_type in ['GloVe', 'random']:
+    if embedding_type == 'GloVe':
+        dim_list = [50, 100, 300]
+    else:
+        dim_list = [10, 50, 100, 300]
+    for embedding_dim in dim_list:
+        print(' '.join([embedding_type, str(embedding_dim)]))
+        condition.embedding_type = embedding_type
+        condition.embedding_dim = embedding_dim
+        condition.set_path()
 
-embedding_weight = tree_net.embedding.weight
-linear_weight = tree_net.linear.weight
-linear_bias = tree_net.linear.bias
+        if condition.embedding_type == 'random':
+            tree_net = torch.load(condition.path_to_model,
+                                  map_location=device)
+        else:
+            tree_net = torch.load(condition.path_to_model_with_regression,
+                                  map_location=device)
+        tree_net.eval()
 
-np.savetxt(
-    PATH_TO_DIR +
-    "Hol-CCG/data/parsing/embedding_weight_{}_{}d.csv".format(
-        condition.embedding_type,
-        condition.embedding_dim),
-    embedding_weight.detach().numpy())
-np.savetxt(
-    PATH_TO_DIR +
-    "Hol-CCG/data/parsing/linear_weight_{}_{}d.csv".format(
-        condition.embedding_type,
-        condition.embedding_dim),
-    linear_weight.detach().numpy())
-np.savetxt(
-    PATH_TO_DIR +
-    "Hol-CCG/data/parsing/linear_bias_{}_{}d.csv".format(
-        condition.embedding_type,
-        condition.embedding_dim),
-    linear_bias.detach().numpy())
+        embedding_weight = tree_net.embedding.weight
+        linear_weight = tree_net.linear.weight
+        linear_bias = tree_net.linear.bias
+
+        np.savetxt(
+            PATH_TO_DIR +
+            "Hol-CCG/data/parsing/embedding_weight_{}_{}d.csv".format(
+                condition.embedding_type,
+                condition.embedding_dim),
+            embedding_weight.detach().numpy())
+        np.savetxt(
+            PATH_TO_DIR +
+            "Hol-CCG/data/parsing/linear_weight_{}_{}d.csv".format(
+                condition.embedding_type,
+                condition.embedding_dim),
+            linear_weight.detach().numpy())
+        np.savetxt(
+            PATH_TO_DIR +
+            "Hol-CCG/data/parsing/linear_bias_{}_{}d.csv".format(
+                condition.embedding_type,
+                condition.embedding_dim),
+            linear_bias.detach().numpy())
