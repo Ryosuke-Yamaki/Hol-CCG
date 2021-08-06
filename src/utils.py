@@ -297,6 +297,12 @@ class Condition_Setter:
             self.path_to_map = PATH_TO_DIR + \
                 "Hol-CCG/result/fig/map/{}_{}d".format(
                     self.embedding_type, self.embedding_dim)
+            self.path_to_wave = PATH_TO_DIR + \
+                "Hol-CCG/result/fig/wave/{}_{}d".format(
+                    self.embedding_type, self.embedding_dim)
+            self.path_to_freq = PATH_TO_DIR + \
+                "Hol-CCG/result/fig/freq/{}_{}d".format(
+                    self.embedding_type, self.embedding_dim)
             self.fig_name = "{} {}d".format(
                 self.embedding_type, self.embedding_dim)
 
