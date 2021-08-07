@@ -19,8 +19,8 @@ binary_rule = load_binary_rule(path_to_binary_rule)
 unary_rule = load_unary_rule(path_to_unary_rule)
 embedding_weight = readdlm(path_to_embedding_weight, ' ', Float16, '\n')
 linear_weight = readdlm(path_to_linear_weight, ' ', Float16, '\n')
-linear_bias = readdlm(path_to_linear_bias, ' ', Float16, '\n')
+linear_bias = readdlm(path_to_linear_bias, ' ', Float16, '\n')[:]
 sentence_list = load_sentence_list(path_to_raw_sentence)
 
 test_sentence = sentence_list[1]
-@time cky_parse(test_sentence,content_vocab,embedding_weight,linear_weight,0.001,binary_rule,unary_rule)
+cky_parse(test_sentence,content_vocab,embedding_weight,linear_weight,0.001,binary_rule,unary_rule)

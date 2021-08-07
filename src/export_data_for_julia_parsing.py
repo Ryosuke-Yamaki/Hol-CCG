@@ -25,8 +25,8 @@ def extract_rule(path_to_grammar, category_vocab):
         elif len(tokens) == 5:
             parent_cat = category_vocab[tokens[2]] + 1
             child_cat = category_vocab[tokens[4]] + 1
-            if freq >= min_freq and unk_idx not in [parent_cat, child_cat]:
-                unary_rule.append([parent_cat, child_cat])
+            if freq >= min_freq and unk_idx not in [child_cat, parent_cat]:
+                unary_rule.append([child_cat, parent_cat])
     return binary_rule, unary_rule
 
 
