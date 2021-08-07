@@ -1,56 +1,53 @@
 using FFTW
 using LinearAlgebra
 
-function circular_correlation(a::Vector{Float64},b::Vector{Float64})
-    a = conj(fft(a))
-    b = fft(b)
-    return normalize(real(ifft(a.*b)),2)
+#time:ok, type:ok
+function circular_correlation(a::Vector{Float16},b::Vector{Float16})
+    freq_a::Vector{ComplexF32} = conj(fft(a))
+    freq_b::Vector{ComplexF32} = fft(b)
+    c::Vector{Float16} = normalize(real(ifft(freq_a.*freq_b)),2)
+    return c
 end
 
-function tokenize(sentence::String,content_vocab::Dict{String,Int},embedding_weight::Matrix{Float64})
+#time:ok, type:ok
+function tokenize(sentence::String,content_vocab::Dict{String,UInt16},embedding_weight::Matrix{Float16})
     words = split(sentence)
-    vector_list = zeros(Float64,size(words,1),size(embedding_weight,2))
+    vector_list = zeros(Float16,size(words,1),size(embedding_weight,2))
     for i = 1:size(words,1)
         word = lowercase(words[i])
         word = replace(word,r"\d+"=>'0')
         word = replace(word,r"\d,\d+"=>'0')
-        content_id = content_vocab[word]
-        vector = embedding_weight[content_id,:]
+        vector = embedding_weight[content_vocab[word],:]
         vector_list[i,:] = vector/norm(vector,2)
     end
     return vector_list
 end
 
-function softmax(input::Vector{Float64})
+#time:ok, type:ok
+function softmax(input::Vector{Float16})
     return exp.(input)/sum(exp.(input))
 end
 
-function top_beta(input::Vector{Float64},beta::Float64)
+#time:ok, type:ok
+function top_beta(input::Vector{Float16},beta::Float16)
     max_prob = maximum(input)
-    sorted_prob = sort(input,rev=true)
-    sorted_idx = sortperm(input,rev=true)
-    idx = 0
-    for i=2:size(sorted_prob,1)
-        if sorted_prob[i] < max_prob * beta
-            idx = i - 1
-            break
-        end
-        idx = i
-    end
-    return sorted_prob[1:idx], sorted_idx[1:idx]
+    idx = input .> max_prob * beta
+    return input[idx], Vector{UInt16}(1:length(input))[idx]
 end
 
-function nonzero_index(input::Vector{Int})
-    return sortperm(input,rev=true)[1:length(input[input.==1])]
+#time:ok, type:ok
+function nonzero_index(input::Vector{Bool})
+    idx = input .== 1
+    return Vector{UInt16}(1:length(input))[idx]
 end
         
-function cky_parse(sentence::String,content_vocab::Dict{String,Int},embedding_weight::Matrix{Float64},linear_weight::Matrix{Float64},beta::Float64,binary_rule::Matrix{Int},unary_rule::Matrix{Int})
+function cky_parse(sentence::String,content_vocab::Dict{String,UInt16},embedding_weight::Matrix{Float16},linear_weight::Matrix{Float16},beta::Float16,binary_rule::Array{Bool},unary_rule::Matrix{Bool})
     vector_list = tokenize(sentence,content_vocab,embedding_weight)
     n = size(vector_list,1)
-    category_table = zeros(Int,n+1,n+1,size(linear_weight,1))
-    prob = zeros(Float64,n+1,n+1,size(linear_weight,1))
-    backpointer = zeros(Int,n+1,n+1,size(linear_weight,1),3)
-    vector_table = zeros(Float64,n+1,n+1,size(linear_weight,1),size(embedding_weight,2))
+    category_table = zeros(Bool,n+1,n+1,size(linear_weight,1))
+    prob = zeros(Float16,n+1,n+1,size(linear_weight,1))
+    backpointer = zeros(UInt16,n+1,n+1,size(linear_weight,1),3)
+    vector_table = zeros(Float16,n+1,n+1,size(linear_weight,1),size(embedding_weight,2))
     for i=1:n
         output = softmax(linear_weight*vector_list[i,:])
         P, A = top_beta(output,beta)
@@ -62,7 +59,7 @@ function cky_parse(sentence::String,content_vocab::Dict{String,Int},embedding_we
     end
 
     for l=2:n
-        for i=i+l
+        for i=1:n-l+1
             j = i+l
             for k = i+1:j
                 S1_list = nonzero_index(category_table[i,k,:])
@@ -106,7 +103,7 @@ function cky_parse(sentence::String,content_vocab::Dict{String,Int},embedding_we
                         for idx5 = 1:length(possible_cat)
                             A = possible_cat[idx5]
                             category_table[i,j,A] = 1
-                            P = prob_dist[A] * prob[(i,j,S)]
+                            P = prob_dist[A] * prob[i,j,S]
                             if P > prob[i,j,A]
                                 prob[i,j,A] = P
                                 backpointer[i,j,A,:] = [0,S,0]
@@ -118,5 +115,10 @@ function cky_parse(sentence::String,content_vocab::Dict{String,Int},embedding_we
                 end
             end
         end
-    end                     
+    end       
+    if sum(category_table[1,n+1,:]) != 0
+        println("success")
+    else
+        println("failed")
+    end
 end
