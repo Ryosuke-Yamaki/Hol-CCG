@@ -2,17 +2,17 @@ using FFTW
 using LinearAlgebra
 
 #time:ok, type:ok
-function circular_correlation(a::Vector{Float16},b::Vector{Float16})
-    freq_a::Vector{ComplexF32} = conj(fft(a))
-    freq_b::Vector{ComplexF32} = fft(b)
-    c::Vector{Float16} = normalize(real(ifft(freq_a.*freq_b)),2)
+function circular_correlation(a::Vector{Float64},b::Vector{Float64})
+    freq_a::Vector{ComplexF64} = conj(fft(a))
+    freq_b::Vector{ComplexF64} = fft(b)
+    c::Vector{Float64} = normalize(real(ifft(freq_a.*freq_b)),2)
     return c/norm(c,2)
 end
 
 #time:ok, type:ok
-function tokenize(sentence::String,content_vocab::Dict{String,UInt16},embedding_weight::Matrix{Float16})
+function tokenize(sentence::String,content_vocab::Dict{String,Int},embedding_weight::Matrix{Float64})
     words = split(sentence)
-    vector_list = zeros(Float16,size(words,1),size(embedding_weight,2))
+    vector_list = zeros(Float64,size(words,1),size(embedding_weight,2))
     for i = 1:size(words,1)
         word = lowercase(words[i])
         word = replace(word,r"\d+"=>'0')
@@ -24,31 +24,30 @@ function tokenize(sentence::String,content_vocab::Dict{String,UInt16},embedding_
 end
 
 #time:ok, type:ok
-function softmax(input::Vector{Float16})
-    converted = convert(Vector{Float64},input)
-    output = exp.(converted)/sum(exp.(converted))
-    return convert(Vector{Float16},output)
+function softmax(input::Vector{Float64})
+    output = exp.(input)/sum(exp.(input))
+    return output
 end
 
 #time:ok, type:ok
-function top_beta(input::Vector{Float16},beta::Float16)
+function top_beta(input::Vector{Float64},beta::Float64)
     max_prob = maximum(input)
     idx = input .> max_prob * beta
-    return input[idx], Vector{UInt16}(1:length(input))[idx]
+    return input[idx], Vector{Int}(1:length(input))[idx]
 end
 
 #time:ok, type:ok
 function nonzero_index(input::Vector{Bool})
     idx = input .== 1
-    return Vector{UInt16}(1:length(input))[idx]
+    return Vector{Int}(1:length(input))[idx]
 end
 
 #time:ok, type:ok msec-order
-function initialize_chart(vector_list::Matrix{Float16},linear_weight::Matrix{Float16},linear_bias::Vector{Float16},beta::Float16)
+function initialize_chart(vector_list::Matrix{Float64},linear_weight::Matrix{Float64},linear_bias::Vector{Float64},beta::Float64)
     n = size(vector_list,1)
-    category_table = Dict{Tuple{UInt8,UInt8},Vector{UInt16}}()
-    prob = Dict{Tuple{UInt8,UInt8,UInt16},Tuple{Float16,Vector{Float16}}}()
-    backpointer = Dict{Tuple{UInt8,UInt8,UInt16},Tuple{UInt8,UInt16,UInt16}}()
+    category_table = Dict{Tuple{Int,Int},Vector{Int}}()
+    prob = Dict{Tuple{Int,Int,Int},Tuple{Float64,Vector{Float64}}}()
+    backpointer = Dict{Tuple{Int,Int,Int},Tuple{Int,Int,Int}}()
     for i=1:n
         vector = linear_weight*vector_list[i,:]+linear_bias
         output = softmax(vector)
@@ -62,10 +61,9 @@ function initialize_chart(vector_list::Matrix{Float16},linear_weight::Matrix{Flo
 end
 
 #time:ok, type:ok msec-order
-function fill_binary(category_table::Dict{Tuple{UInt8,UInt8},Vector{UInt16}},prob::Dict{Tuple{UInt8,UInt8,UInt16},Tuple{Float16,Vector{Float16}}},backpointer::Dict{Tuple{UInt8,UInt8,UInt16},Tuple{UInt8,UInt16,UInt16}},binary_rule::Array{Bool},linear_weight::Matrix{Float16},linear_bias::Vector{Float16},i::UInt8,j::UInt8)
+function fill_binary(category_table::Dict{Tuple{Int,Int},Vector{Int}},prob::Dict{Tuple{Int,Int,Int},Tuple{Float64,Vector{Float64}}},backpointer::Dict{Tuple{Int,Int,Int},Tuple{Int,Int,Int}},binary_rule::Array{Bool},linear_weight::Matrix{Float64},linear_bias::Vector{Float64},i::Int,j::Int)
     category_table[(i,j)] = []
-    for k_ = i+1:j-1
-        k = convert(UInt8,k_)
+    for k = i+1:j-1
         S1_list = category_table[(i,k)]
         S2_list = category_table[(k,j)]
         for S1 in S1_list
@@ -76,6 +74,7 @@ function fill_binary(category_table::Dict{Tuple{UInt8,UInt8},Vector{UInt16}},pro
                     output = softmax(linear_weight*vector+linear_bias)
                     for A in A_list
                         P = output[A] * prob[(i,k,S1)][1] * prob[(k,j,S2)][1]
+                        # P = output[A]
                         if A in category_table[(i,j)]
                             if P > prob[(i,j,A)][1]
                                 prob[(i,j,A)] = (P,vector)
@@ -95,7 +94,7 @@ function fill_binary(category_table::Dict{Tuple{UInt8,UInt8},Vector{UInt16}},pro
 end
 
 #time:ok, type:ok msec-order
-function fill_unary(category_table::Dict{Tuple{UInt8,UInt8},Vector{UInt16}},prob::Dict{Tuple{UInt8,UInt8,UInt16},Tuple{Float16,Vector{Float16}}},backpointer::Dict{Tuple{UInt8,UInt8,UInt16},Tuple{UInt8,UInt16,UInt16}},unary_rule::Array{Bool},linear_weight::Matrix{Float16},linear_bias::Vector{Float16},i::UInt8,j::UInt8)
+function fill_unary(category_table::Dict{Tuple{Int,Int},Vector{Int}},prob::Dict{Tuple{Int,Int,Int},Tuple{Float64,Vector{Float64}}},backpointer::Dict{Tuple{Int,Int,Int},Tuple{Int,Int,Int}},unary_rule::Array{Bool},linear_weight::Matrix{Float64},linear_bias::Vector{Float64},i::Int,j::Int)
     again = true
     while again
         again = false
@@ -107,6 +106,7 @@ function fill_unary(category_table::Dict{Tuple{UInt8,UInt8},Vector{UInt16}},prob
                 output = softmax(linear_weight*vector+linear_bias)
                 for A in A_list
                     P = output[A] * prob[(i,j,S)][1]
+                    # P = output[A]
                     if A in category_table[(i,j)]
                         if P > prob[(i,j,A)][1]
                             prob[(i,j,A)] = (P,vector)
@@ -126,18 +126,110 @@ function fill_unary(category_table::Dict{Tuple{UInt8,UInt8},Vector{UInt16}},prob
     return category_table, prob, backpointer
 end
 
+function cut_off_beta(category_table::Dict{Tuple{Int,Int},Vector{Int}},prob::Dict{Tuple{Int,Int,Int},Tuple{Float64,Vector{Float64}}},beta::Float64,i::Int,j::Int)
+    if length(category_table[(i,j)] ) != 0
+        prob_list = Float64[]
+        for category in category_table[(i,j)]
+            append!(prob_list,prob[(i,j,category)][1])
+        end
+        idx = prob_list .> maximum(prob_list) * beta
+        category_table[(i,j)] = category_table[(i,j)][idx]
+    end
+    return category_table
+end
+
 #type:ok
-function cky_parse(sentence::String,content_vocab::Dict{String,UInt16},embedding_weight::Matrix{Float16},linear_weight::Matrix{Float16},linear_bias::Vector{Float16},beta::Float16,binary_rule::Array{Bool},unary_rule::Matrix{Bool})
+function cky_parse(sentence::String,content_vocab::Dict{String,Int},embedding_weight::Matrix{Float64},linear_weight::Matrix{Float64},linear_bias::Vector{Float64},beta::Float64,binary_rule::Array{Bool},unary_rule::Matrix{Bool})
     vector_list = tokenize(sentence,content_vocab,embedding_weight)
     category_table, prob, backpointer = initialize_chart(vector_list,linear_weight,linear_bias,beta)
     n = size(vector_list,1)
     for l = 2:n
-        for i_ = 1:n-l+1
-            i = convert(UInt8,i_)
-            j = convert(UInt8,i + l)
+        for i = 1:n-l+1
+            j = i + l
             category_table, prob, backpointer = fill_binary(category_table,prob,backpointer,binary_rule,linear_weight,linear_bias,i,j)
             category_table, prob, backpointer = fill_unary(category_table,prob,backpointer,unary_rule,linear_weight,linear_bias,i,j)
+            category_table = cut_off_beta(category_table,prob,beta,i,j)
         end
     end
     return category_table, prob, backpointer
+end
+
+function follow_backpointer(sentence::String,category_table::Dict{Tuple{Int,Int},Vector{Int}},prob::Dict{Tuple{Int,Int,Int},Tuple{Float64,Vector{Float64}}},backpointer::Dict{Tuple{Int,Int,Int},Tuple{Int,Int,Int}})
+    waiting_list = []
+    result = []
+    n = length(split(sentence))
+    # when parsing was failed, or one word sentence
+    if length(category_table[(1,n+1)]) == 0 || n == 1
+        return result
+    # find top probability for whole sentence
+    else
+        prob_list = Float64[]
+        for category in category_table[(1,n+1)]
+            append!(prob_list,prob[(1,n+1,category)][1])
+        end
+        max_category = category_table[(1,n+1)][prob_list.==maximum(prob_list)][1]
+        push!(result,(1,n+1,max_category))
+    end
+    
+    # for unary_rule
+    if backpointer[(1,n+1,max_category)][1] == 0
+        push!(waiting_list,(1,n+1,backpointer[(1,n+1,max_category)][2]))
+    # for binary_rule
+    else
+        divide_point = backpointer[(1,n+1,max_category)][1]
+        left_cat = backpointer[(1,n+1,max_category)][2]
+        right_cat = backpointer[(1,n+1,max_category)][3]
+        # when not leaf node
+        if divide_point - 1 > 1
+            push!(waiting_list,(1,divide_point,left_cat))
+        end
+        # when not leaf node
+        if n + 1 - divide_point > 1
+            push!(waiting_list,(divide_point,n+1,right_cat))
+        end
+    end
+
+    while length(waiting_list) != 0
+        info = pop!(waiting_list)
+        push!(result,info)
+        # for unary_rule
+        if backpointer[info][1] == 0
+            push!(waiting_list,(info[1],info[2],backpointer[info][2]))
+        else
+            divide_point = backpointer[info][1]
+            left_cat = backpointer[info][2]
+            right_cat = backpointer[info][3]
+            # when not leaf node
+            if divide_point - info[1] > 1
+                push!(waiting_list,(info[1],divide_point,left_cat))
+            end
+            # when not leaf node
+            if info[2] - divide_point > 1
+                push!(waiting_list,(divide_point,info[2],right_cat))
+            end
+        end
+    end
+    return result
+end
+
+function f1_score(predict,correct)
+    n = 0
+    for info in predict
+        if info in correct
+            n += 1
+        end
+    end
+    precision = n/length(predict)
+    
+    m = 0
+    for info in correct
+        if info in predict
+            m += 1
+        end
+    end
+    recall = m/length(correct)
+
+    f1 = (2*precision*recall)/(precision+recall)
+
+    return f1, precision, recall
 end

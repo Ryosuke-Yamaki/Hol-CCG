@@ -17,9 +17,9 @@ path_to_raw_sentence = string(PATH_TO_DIR,"CCGbank/ccgbank_1_1/data/RAW/CCGbank.
 content_vocab = load_content_vocab(path_to_content_vocab)
 binary_rule = load_binary_rule(path_to_binary_rule)
 unary_rule = load_unary_rule(path_to_unary_rule)
-embedding_weight = readdlm(path_to_embedding_weight, ' ', Float16, '\n')
-linear_weight = readdlm(path_to_linear_weight, ' ', Float16, '\n')
-linear_bias = readdlm(path_to_linear_bias, ' ', Float16, '\n')[:]
+embedding_weight = readdlm(path_to_embedding_weight, ' ', Float64, '\n')
+linear_weight = readdlm(path_to_linear_weight, ' ', Float64, '\n')
+linear_bias = readdlm(path_to_linear_bias, ' ', Float64, '\n')[:]
 sentence_list = load_sentence_list(path_to_raw_sentence)
 
 test_sentence = sentence_list[1]

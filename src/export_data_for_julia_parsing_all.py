@@ -57,9 +57,9 @@ with open(PATH_TO_DIR + "Hol-CCG/data/parsing/content_vocab.txt", mode='w') as f
                 f.write(str(info + 1))
             i += 1
         f.write('\n')
-np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt", np.array(binary_rule) + 1,
+np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt", np.array(binary_rule),
            fmt='%d', header=str(len(train_tree_list.category_vocab) - 1), comments="")
-np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt", np.array(unary_rule) + 1,
+np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt", np.array(unary_rule),
            fmt='%d', header=str(len(train_tree_list.category_vocab) - 1), comments="")
 
 for embedding_type in ['GloVe', 'random']:
