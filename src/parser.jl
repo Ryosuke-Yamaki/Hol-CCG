@@ -156,11 +156,11 @@ end
 
 function follow_backpointer(sentence::String,category_table::Dict{Tuple{Int,Int},Vector{Int}},prob::Dict{Tuple{Int,Int,Int},Tuple{Float64,Vector{Float64}}},backpointer::Dict{Tuple{Int,Int,Int},Tuple{Int,Int,Int}})
     waiting_list = []
-    result = []
+    predict = []
     n = length(split(sentence))
     # when parsing was failed, or one word sentence
     if length(category_table[(1,n+1)]) == 0 || n == 1
-        return result
+        return predict
     # find top probability for whole sentence
     else
         prob_list = Float64[]
@@ -168,7 +168,7 @@ function follow_backpointer(sentence::String,category_table::Dict{Tuple{Int,Int}
             append!(prob_list,prob[(1,n+1,category)][1])
         end
         max_category = category_table[(1,n+1)][prob_list.==maximum(prob_list)][1]
-        push!(result,(1,n+1,max_category))
+        push!(predict,(1,n+1,max_category))
     end
     
     # for unary_rule
@@ -191,7 +191,7 @@ function follow_backpointer(sentence::String,category_table::Dict{Tuple{Int,Int}
 
     while length(waiting_list) != 0
         info = pop!(waiting_list)
-        push!(result,info)
+        push!(predict,info)
         # for unary_rule
         if backpointer[info][1] == 0
             push!(waiting_list,(info[1],info[2],backpointer[info][2]))
@@ -209,27 +209,31 @@ function follow_backpointer(sentence::String,category_table::Dict{Tuple{Int,Int}
             end
         end
     end
-    return result
+    return predict
 end
 
 function f1_score(predict,correct)
-    n = 0
-    for info in predict
-        if info in correct
-            n += 1
+    if length(correct) == 0
+        return 1, 1, 1
+    else
+        n = 0
+        for info in predict
+            if info in correct
+                n += 1
+            end
         end
-    end
-    precision = n/length(predict)
-    
-    m = 0
-    for info in correct
-        if info in predict
-            m += 1
+        precision = n/(length(predict)+1e-6)
+        
+        m = 0
+        for info in correct
+            if info in predict
+                m += 1
+            end
         end
+        recall = m/(length(correct)+1e-6)
+
+        f1 = (2*precision*recall)/(precision+recall+1e-6)
+
+        return f1, precision, recall
     end
-    recall = m/length(correct)
-
-    f1 = (2*precision*recall)/(precision+recall)
-
-    return f1, precision, recall
 end

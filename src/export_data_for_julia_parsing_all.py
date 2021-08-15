@@ -1,5 +1,5 @@
 import numpy as np
-from utils import load, Condition_Setter
+from utils import load, dump, Condition_Setter
 import torch
 
 
@@ -38,13 +38,18 @@ path_to_grammar = PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.
 device = torch.device('cpu')
 
 print('loading tree list...')
-train_tree_list = load(condition.path_to_train_tree_list)
+test_tree_list = load(condition.path_to_test_tree_list)
+
+correct_list = []
+for tree in test_tree_list.tree_list:
+    correct_list.append(tree.correct_parse())
+dump(correct_list, PATH_TO_DIR + "Hol-CCG/data/parsing/correct_list.pkl")
 
 content_vocab = []
-for k, v in train_tree_list.content_vocab.stoi.items():
+for k, v in test_tree_list.content_vocab.stoi.items():
     content_vocab.append([k, v])
 
-binary_rule, unary_rule = extract_rule(condition.path_to_grammar, train_tree_list.category_vocab)
+binary_rule, unary_rule = extract_rule(condition.path_to_grammar, test_tree_list.category_vocab)
 
 with open(PATH_TO_DIR + "Hol-CCG/data/parsing/content_vocab.txt", mode='w') as f:
     for info_list in content_vocab:
@@ -58,9 +63,9 @@ with open(PATH_TO_DIR + "Hol-CCG/data/parsing/content_vocab.txt", mode='w') as f
             i += 1
         f.write('\n')
 np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt", np.array(binary_rule),
-           fmt='%d', header=str(len(train_tree_list.category_vocab) - 1), comments="")
+           fmt='%d', header=str(len(test_tree_list.category_vocab) - 1), comments="")
 np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt", np.array(unary_rule),
-           fmt='%d', header=str(len(train_tree_list.category_vocab) - 1), comments="")
+           fmt='%d', header=str(len(test_tree_list.category_vocab) - 1), comments="")
 
 for embedding_type in ['GloVe', 'random']:
     if embedding_type == 'GloVe':
