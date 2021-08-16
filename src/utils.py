@@ -139,16 +139,15 @@ class History:
         self.max_acc_idx = np.argmax(self.acc_history)
 
     @torch.no_grad()
-    def validation(self, batch_list, unk_idx, device=torch.device('cpu')):
+    def validation(self, batch_list, device=torch.device('cpu')):
         total_loss = 0.0
         total_acc = 0.0
         for batch in batch_list:
             label, mask = make_label_mask(batch, device=device)
-            unk_cat_mask = label != unk_idx
             output = self.tree_net(batch)
             output = output[torch.nonzero(mask, as_tuple=True)]
-            loss = self.criteria(output[unk_cat_mask], label[unk_cat_mask])
-            acc = self.cal_top_k_acc(output[unk_cat_mask], label[unk_cat_mask])
+            loss = self.criteria(output, label)
+            acc = self.cal_top_k_acc(output, label)
             total_loss += loss.item()
             total_acc += acc.item()
         self.loss_history = np.append(
@@ -158,7 +157,7 @@ class History:
         self.update()
 
     @torch.no_grad()
-    def cal_top_k_acc(self, output, label, k=5):
+    def cal_top_k_acc(self, output, label, k=1):
         output = torch.topk(output, k=k)[1]
         label = torch.reshape(label, (output.shape[0], -1))
         comparison = output - label
@@ -235,6 +234,9 @@ class Condition_Setter:
             "Hol-CCG/data/tree_list/dev_tree_list.pickle"
         self.path_to_test_tree_list = PATH_TO_DIR + \
             "Hol-CCG/data/tree_list/test_tree_list.pickle"
+
+        self.path_to_elmo_options = PATH_TO_DIR + "Hol-CCG/data/elmo/elmo_options.json"
+        self.path_to_elmo_weights = PATH_TO_DIR + "Hol-CCG/data/elmo/elmo_weights.hdf5"
 
         # path to counters, vocab
         self.path_to_word_counter = PATH_TO_DIR + \

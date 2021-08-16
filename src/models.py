@@ -1,8 +1,9 @@
-import re
 import torch
 import torch.nn as nn
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from operator import itemgetter
-from utils import circular_correlation, generate_random_weight_matrix, single_circular_correlation
+from utils import circular_correlation, single_circular_correlation
+from allennlp.modules.elmo import batch_to_ids
 
 
 class Node:
@@ -13,10 +14,8 @@ class Node:
             self.is_leaf = False
         self.self_id = int(node_info[1])
         if self.is_leaf:
-            content = node_info[2].lower()
-            content = re.sub(r'\d+', '0', content)
-            content = re.sub(r'\d,\d', '0', content)
-            self.content = content
+            content = node_info[2]
+            self.content = [self.convert_content(content)]
             self.category = node_info[3]
             self.ready = True
         else:
@@ -28,6 +27,15 @@ class Node:
             else:
                 self.left_child_node_id = int(node_info[4])
                 self.right_child_node_id = int(node_info[5])
+
+    def convert_content(self, content):
+        if content == "-LRB-" or content == "-LCB-":
+            content = "("
+        elif content == "-RRB-" or content == "-RCB-":
+            content = ")"
+        elif r"\/" in content:
+            content = content.replace(r"\/", "/")
+        return content
 
 
 class Tree:
@@ -46,7 +54,7 @@ class Tree:
                     if node.num_child == 1:
                         child_node = self.node_list[node.child_node_id]
                         if child_node.ready:
-                            node.content_id = child_node.content_id
+                            node.content = child_node.content
                             node.ready = True
                             self.composition_info.append(
                                 [node.num_child, node.self_id, child_node.self_id, 0])
@@ -54,20 +62,58 @@ class Tree:
                         left_child_node = self.node_list[node.left_child_node_id]
                         right_child_node = self.node_list[node.right_child_node_id]
                         if left_child_node.ready and right_child_node.ready:
-                            node.content_id = left_child_node.content_id + right_child_node.content_id
+                            node.content = left_child_node.content + right_child_node.content
                             node.ready = True
                             self.composition_info.append(
                                 [node.num_child, node.self_id, left_child_node.self_id, right_child_node.self_id])
             if num_ready_node == len(self.node_list):
                 break
+        self.sentence = self.node_list[-1].content
+
+    def set_original_position_of_leaf_node(self):
+        self.original_pos = []
+        node = self.node_list[-1]
+        if node.is_leaf:
+            node.original_pos = 0
+            self.original_pos.append([node.self_id, node.original_pos])
+        else:
+            node.start_idx = 0
+            node.end_idx = len(node.content)
+        for info in reversed(self.composition_info):
+            num_child = info[0]
+            if num_child == 1:
+                parent_node = self.node_list[info[1]]
+                child_node = self.node_list[info[2]]
+                child_node.start_idx = parent_node.start_idx
+                child_node.end_idx = parent_node.end_idx
+                if child_node.is_leaf:
+                    child_node.original_pos = child_node.start_idx
+                    self.original_pos.append([child_node.self_id, child_node.original_pos])
+
+            else:
+                parent_node = self.node_list[info[1]]
+                left_child_node = self.node_list[info[2]]
+                right_child_node = self.node_list[info[3]]
+                left_child_node.start_idx = parent_node.start_idx
+                left_child_node.end_idx = parent_node.start_idx + len(left_child_node.content)
+                right_child_node.start_idx = left_child_node.end_idx
+                right_child_node.end_idx = parent_node.end_idx
+                if left_child_node.is_leaf:
+                    left_child_node.original_pos = left_child_node.start_idx
+                    self.original_pos.append(
+                        [left_child_node.self_id, left_child_node.original_pos])
+                if right_child_node.is_leaf:
+                    right_child_node.original_pos = right_child_node.start_idx
+                    self.original_pos.append(
+                        [right_child_node.self_id, right_child_node.original_pos])
 
     def correct_parse(self):
         correct_node_list = []
         top_node = self.node_list[-1]
         top_node.start_idx = 0
-        top_node.end_idx = len(top_node.content_id)
+        top_node.end_idx = len(top_node.content)
         if not top_node.is_leaf:
-            correct_node_list.append((1, len(top_node.content_id) + 1, top_node.category_id + 1))
+            correct_node_list.append((1, len(top_node.content) + 1, top_node.category_id + 1))
         for info in reversed(self.composition_info):
             num_child = info[0]
             if num_child == 1:
@@ -85,7 +131,7 @@ class Tree:
                 left_child_node = self.node_list[info[2]]
                 right_child_node = self.node_list[info[3]]
                 left_child_node.start_idx = parent_node.start_idx
-                left_child_node.end_idx = parent_node.start_idx + len(left_child_node.content_id)
+                left_child_node.end_idx = parent_node.start_idx + len(left_child_node.content)
                 right_child_node.start_idx = left_child_node.end_idx
                 right_child_node.end_idx = parent_node.end_idx
                 if not left_child_node.is_leaf:
@@ -105,14 +151,12 @@ class Tree_List:
     def __init__(
             self,
             PATH_TO_DATA,
-            content_vocab,
             category_vocab=None,
             device=torch.device('cpu')):
-        self.content_vocab = content_vocab
         self.category_vocab = category_vocab
         self.device = device
         self.set_tree_list(PATH_TO_DATA)
-        self.set_content_category_id(self.content_vocab, self.category_vocab)
+        self.set_category_id(self.category_vocab)
 
     def set_tree_list(self, PATH_TO_DATA):
         self.tree_list = []
@@ -131,36 +175,31 @@ class Tree_List:
                 node_list = []
                 tree_id += 1
 
-    def set_content_category_id(self, content_vocab, category_vocab):
+    def set_category_id(self, category_vocab):
         for tree in self.tree_list:
             for node in tree.node_list:
-                if node.is_leaf:
-                    node.content_id = [content_vocab[node.content]]
                 node.category_id = category_vocab[node.category]
             tree.set_node_composition_info()
+            tree.set_original_position_of_leaf_node()
 
     def set_info_for_training(self):
         self.num_node = []
-        self.leaf_node_content_id = []
+        self.sentence_list = []
         self.label_list = []
+        self.original_pos = []
         self.composition_info = []
         for tree in self.tree_list:
             self.num_node.append(len(tree.node_list))
-            leaf_node_content_id = []
+            self.sentence_list.append(tree.sentence)
             label_list = []
             for node in tree.node_list:
-                if node.is_leaf:
-                    # save the index of leaf node and its content
-                    leaf_node_content_id.append(
-                        [node.self_id, node.content_id[0]])
-                    # label with multiple bit corresponding to possible category id
                 label_list.append([node.category_id])
-            self.leaf_node_content_id.append(
+            self.label_list.append(label_list)
+            self.original_pos.append(
                 torch.tensor(
-                    leaf_node_content_id,
+                    tree.original_pos,
                     dtype=torch.long,
                     device=self.device))
-            self.label_list.append(label_list)
             self.composition_info.append(
                 torch.tensor(
                     tree.composition_info,
@@ -170,8 +209,9 @@ class Tree_List:
     def make_batch(self, BATCH_SIZE=None):
         # make batch content id includes leaf node content id for each tree belongs to batch
         batch_num_node = []
-        batch_leaf_content_id = []
+        batch_sentence_list = []
         batch_label_list = []
+        batch_original_pos = []
         batch_composition_info = []
         num_tree = len(self.tree_list)
 
@@ -179,10 +219,10 @@ class Tree_List:
             batch_tree_id_list = list(range(num_tree))
             batch_num_node.append(
                 list(itemgetter(*batch_tree_id_list)(self.num_node)))
-            batch_leaf_content_id.append(list(itemgetter(
-                *batch_tree_id_list)(self.leaf_node_content_id)))
+            batch_sentence_list.append(list(itemgetter(*batch_tree_id_list)(self.sentence_list)))
             batch_label_list.append(list(itemgetter(
                 *batch_tree_id_list)(self.label_list)))
+            batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(self.original_pos)))
             batch_composition_info.append(list(itemgetter(
                 *batch_tree_id_list)(self.composition_info)))
         else:
@@ -192,48 +232,31 @@ class Tree_List:
                 batch_tree_id_list = shuffled_tree_id[idx:idx + BATCH_SIZE]
                 batch_num_node.append(
                     list(itemgetter(*batch_tree_id_list)(self.num_node)))
-                batch_leaf_content_id.append(list(itemgetter(
-                    *batch_tree_id_list)(self.leaf_node_content_id)))
+                batch_sentence_list.append(
+                    list(
+                        itemgetter(
+                            *
+                            batch_tree_id_list)(
+                            self.sentence_list)))
                 batch_label_list.append(list(itemgetter(
                     *batch_tree_id_list)(self.label_list)))
+                batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(self.original_pos)))
                 batch_composition_info.append(list(itemgetter(
                     *batch_tree_id_list)(self.composition_info)))
             # the part cannot devided by BATCH_SIZE
             batch_num_node.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.num_node)))
-            batch_leaf_content_id.append(list(itemgetter(
-                *shuffled_tree_id[idx + BATCH_SIZE:])(self.leaf_node_content_id)))
+            batch_sentence_list.append(
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.sentence_list)))
             batch_label_list.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.label_list)))
+            batch_original_pos.append(
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.original_pos)))
             batch_composition_info.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.composition_info)))
 
-        content_mask = []
         for idx in range(len(batch_num_node)):
-            content_id = batch_leaf_content_id[idx]
             composition_list = batch_composition_info[idx]
-
-            max_num_leaf_node = max([len(i) for i in content_id])
-            # set the mask for each tree in batch
-            # content_mask used for embedding leaf node vector
-            true_mask = [torch.ones(len(i), dtype=torch.bool, device=self.device)
-                         for i in content_id]
-            false_mask = [
-                torch.zeros(
-                    max_num_leaf_node - len(i),
-                    dtype=torch.bool,
-                    device=self.device) for i in content_id]
-            content_mask.append(torch.stack(
-                [torch.cat((i, j)) for (i, j) in zip(true_mask, false_mask)]))
-            # make dummy content id to fill blank in batch
-            dummy_content_id = [
-                torch.zeros(
-                    (max_num_leaf_node - len(i), 2),
-                    dtype=torch.long,
-                    device=self.device) for i in content_id]
-            batch_leaf_content_id[idx] = torch.stack([torch.cat((i, j)) for (
-                i, j) in zip(content_id, dummy_content_id)])
-
             # set mask for composition info in each batch
             max_num_composition = max([len(i) for i in composition_list])
             # make dummy compoisition info to fill blank in batch
@@ -249,8 +272,8 @@ class Tree_List:
         # return zipped batch information, when training, extract each batch from zip itteration
         return list(zip(
             batch_num_node,
-            batch_leaf_content_id,
-            content_mask,
+            batch_sentence_list,
+            batch_original_pos,
             batch_composition_info,
             batch_label_list))
 
@@ -276,49 +299,65 @@ class Tree_List:
 
 
 class Tree_Net(nn.Module):
-    def __init__(self, NUM_VOCAB, NUM_CATEGORY, embedding_dim, initial_weight_matrix=None):
+    def __init__(self, NUM_CATEGORY, elmo, embedding_dim=1024):
         super(Tree_Net, self).__init__()
-        self.num_embedding = NUM_VOCAB
         self.num_category = NUM_CATEGORY
         self.embedding_dim = embedding_dim
-        if initial_weight_matrix is None:
-            initial_weight_matrix = generate_random_weight_matrix(
-                self.num_embedding, self.embedding_dim)
-        initial_weight_matrix = torch.from_numpy(initial_weight_matrix).clone()
-        self.embedding = nn.Embedding(
-            self.num_embedding,
-            self.embedding_dim,
-            _weight=initial_weight_matrix)
-        # final output layer, except <unk> category
-        self.linear = nn.Linear(self.embedding_dim, self.num_category - 1)
+        self.elmo = elmo
+        self.hidden_dim = 512
+        self.lstm = nn.LSTM(
+            input_size=self.embedding_dim,
+            hidden_size=self.hidden_dim,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True)
+        self.W1 = torch.randn(self.hidden_dim, self.hidden_dim, requires_grad=True)
+        self.W2 = torch.randn(self.hidden_dim, self.hidden_dim, requires_grad=True)
+        self.relu = nn.ReLU()
+        self.linear = nn.Linear(self.hidden_dim, self.num_category)
 
     # input batch as tuple of training info
     def forward(self, batch):
-        # the content_id of leaf nodes
         num_node = batch[0]
-        leaf_content_id = batch[1]
-        content_mask = batch[2]
-        # the composition info of each tree
+        sentence = batch[1]
+        original_pos = batch[2]
         composition_info = batch[3]
-        vector = self.embed_leaf_nodes(num_node, leaf_content_id, content_mask)
+        packed_sequence = self.elmo_embedding(sentence)
+        combined_rep, len_unpacked = self.combine_foward_backward(packed_sequence)
+        vector = self.set_leaf_node_vector(num_node, combined_rep, len_unpacked, original_pos)
         vector = self.compose(vector, composition_info)
         output = self.linear(vector)
         return output
 
-    def embed_leaf_nodes(self, num_node, leaf_content_id, content_mask):
+    def elmo_embedding(self, sentence):
+        input = batch_to_ids(sentence)
+        output = self.elmo(input)
+        rep = output['elmo_representations'][0]
+        mask = output['mask']
+        packed_sequence = pack_padded_sequence(rep, torch.count_nonzero(
+            mask, dim=1), batch_first=True, enforce_sorted=False)
+        return packed_sequence
+
+    # combine the output of bidirectional LSTM, the output of foward and backward LSTM
+    def combine_foward_backward(self, packed_sequence):
+        seq_unapcked, len_unpacked = pad_packed_sequence(packed_sequence, batch_first=True)
+        combined_rep = self.relu(torch.matmul(
+            seq_unapcked[:, :, :self.hidden_dim], self.W1) + torch.matmul(seq_unapcked[:, :, self.hidden_dim:], self.W2))
+        return combined_rep, len_unpacked
+
+    def set_leaf_node_vector(self, num_node, combined_rep, len_unpacked, original_pos):
         vector = torch.zeros(
-            (leaf_content_id.shape[0],
+            (len(num_node),
              torch.tensor(max(num_node)),
-             self.embedding_dim), device=content_mask.device)
-        # leaf_node_vector including padding tokens
-        leaf_node_index = leaf_content_id[:, :, 0]
-        leaf_node_vector = self.embedding(leaf_content_id[:, :, 1])
-        # extract leaf node vector not padding tokens, using content_mask
-        vector[(content_mask.nonzero(as_tuple=True)[0], leaf_node_index[content_mask.nonzero(
-            as_tuple=True)])] = leaf_node_vector[content_mask.nonzero(as_tuple=True)]
-        # calculate norm for normalization
-        norm = vector.norm(dim=2, keepdim=True) + 1e-6
-        return vector / norm
+             self.hidden_dim), device=combined_rep.device)
+        for idx in range(len(num_node)):
+            batch_id = torch.tensor([idx for i in range(len_unpacked[idx])])
+            # target_id is node.self_id
+            target_id = torch.squeeze(original_pos[idx][:, 0])
+            # source_id is node.original_pos
+            source_id = torch.squeeze(original_pos[idx][:, 1])
+            vector[(batch_id, target_id)] = combined_rep[(batch_id, source_id)]
+        return vector / (vector.norm(dim=2, keepdim=True) + 1e-6)
 
     def compose(self, vector, composition_info):
         # itteration of composition
