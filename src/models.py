@@ -1,9 +1,15 @@
+from tqdm import tqdm
+import numpy as np
+from numpy.lib.type_check import nan_to_num
+from torch.nn.functional import normalize
+from torch.nn.utils.rnn import pack_padded_sequence, pack_sequence
+from allennlp.modules.elmo import batch_to_ids
 import torch
 import torch.nn as nn
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pad_packed_sequence
 from operator import itemgetter
 from utils import circular_correlation, single_circular_correlation
-from allennlp.modules.elmo import batch_to_ids
+from torch.nn.functional import normalize
 
 
 class Node:
@@ -205,6 +211,15 @@ class Tree_List:
                     tree.composition_info,
                     dtype=torch.long,
                     device=self.device))
+        self.sorted_tree_id = np.argsort(self.num_node)
+
+    def make_shuffled_tree_id(self):
+        shuffled_tree_id = []
+        splitted = np.array_split(self.sorted_tree_id, 50)
+        for id_list in splitted:
+            np.random.shuffle(id_list)
+            shuffled_tree_id.append(id_list)
+        return np.concatenate(shuffled_tree_id)
 
     def make_batch(self, BATCH_SIZE=None):
         # make batch content id includes leaf node content id for each tree belongs to batch
@@ -227,7 +242,7 @@ class Tree_List:
                 *batch_tree_id_list)(self.composition_info)))
         else:
             # shuffle the tree_id in tree_list
-            shuffled_tree_id = torch.randperm(num_tree, device=self.device)
+            shuffled_tree_id = self.make_shuffled_tree_id()
             for idx in range(0, num_tree - BATCH_SIZE, BATCH_SIZE):
                 batch_tree_id_list = shuffled_tree_id[idx:idx + BATCH_SIZE]
                 batch_num_node.append(
@@ -277,25 +292,32 @@ class Tree_List:
             batch_composition_info,
             batch_label_list))
 
-    def set_vector(self, embedding):
-        for tree in self.tree_list:
-            for node in tree.node_list:
-                if node.is_leaf:
-                    node.vector = embedding(torch.tensor(node.content_id))
-                    node.vector = node.vector / torch.norm(node.vector)
-
-        for tree in self.tree_list:
-            for composition_info in tree.composition_info:
-                num_child = composition_info[0]
-                parent_node = tree.node_list[composition_info[1]]
-                if num_child == 1:
-                    child_node = tree.node_list[composition_info[2]]
-                    parent_node.vector = child_node.vector
-                else:
-                    left_node = tree.node_list[composition_info[2]]
-                    right_node = tree.node_list[composition_info[3]]
-                    parent_node.vector = single_circular_correlation(
-                        left_node.vector, right_node.vector)
+    def set_vector(self, tree_net):
+        with tqdm(total=len(self.tree_list)) as pbar:
+            pbar.set_description("setting vector...")
+            for tree in self.tree_list:
+                sentence = [tree.sentence]
+                packed_sequence = tree_net.elmo_embedding(sentence)
+                bi_lstm_output = tree_net.bi_lstm(packed_sequence)[0]
+                combined_rep, _ = tree_net.combine_foward_backward_rep(bi_lstm_output)
+                for pos in tree.original_pos:
+                    vector_list = combined_rep[0]
+                    node_id = pos[0]
+                    original_pos = pos[1]
+                    node = tree.node_list[node_id]
+                    node.vector = torch.squeeze(vector_list[original_pos])
+                for composition_info in tree.composition_info:
+                    num_child = composition_info[0]
+                    parent_node = tree.node_list[composition_info[1]]
+                    if num_child == 1:
+                        child_node = tree.node_list[composition_info[2]]
+                        parent_node.vector = child_node.vector
+                    else:
+                        left_node = tree.node_list[composition_info[2]]
+                        right_node = tree.node_list[composition_info[3]]
+                        parent_node.vector = single_circular_correlation(
+                            left_node.vector, right_node.vector)
+                pbar.update(1)
 
 
 class Tree_Net(nn.Module):
@@ -305,15 +327,15 @@ class Tree_Net(nn.Module):
         self.embedding_dim = embedding_dim
         self.elmo = elmo
         self.hidden_dim = 512
-        self.lstm = nn.LSTM(
+        self.bi_lstm = nn.LSTM(
             input_size=self.embedding_dim,
             hidden_size=self.hidden_dim,
             num_layers=1,
             batch_first=True,
             bidirectional=True)
-        self.W1 = torch.randn(self.hidden_dim, self.hidden_dim, requires_grad=True)
-        self.W2 = torch.randn(self.hidden_dim, self.hidden_dim, requires_grad=True)
-        self.relu = nn.ReLU()
+        self.W1 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+        self.W2 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+        self.relu = nn.LeakyReLU()
         self.linear = nn.Linear(self.hidden_dim, self.num_category)
 
     # input batch as tuple of training info
@@ -323,33 +345,36 @@ class Tree_Net(nn.Module):
         original_pos = batch[2]
         composition_info = batch[3]
         packed_sequence = self.elmo_embedding(sentence)
-        combined_rep, len_unpacked = self.combine_foward_backward(packed_sequence)
+        bi_lstm_output = self.bi_lstm(packed_sequence)[0]
+        combined_rep, len_unpacked = self.combine_foward_backward_rep(bi_lstm_output)
         vector = self.set_leaf_node_vector(num_node, combined_rep, len_unpacked, original_pos)
-        vector = self.compose(vector, composition_info)
-        output = self.linear(vector)
+        composed_vector = self.compose(vector, composition_info)
+        output = self.linear(composed_vector)
         return output
 
+    @torch.no_grad()
     def elmo_embedding(self, sentence):
-        input = batch_to_ids(sentence)
+        input = batch_to_ids(sentence).to(self.device)
         output = self.elmo(input)
         rep = output['elmo_representations'][0]
-        mask = output['mask']
+        mask = output['mask'].to('cpu')
         packed_sequence = pack_padded_sequence(rep, torch.count_nonzero(
             mask, dim=1), batch_first=True, enforce_sorted=False)
         return packed_sequence
 
     # combine the output of bidirectional LSTM, the output of foward and backward LSTM
-    def combine_foward_backward(self, packed_sequence):
+    def combine_foward_backward_rep(self, packed_sequence):
         seq_unapcked, len_unpacked = pad_packed_sequence(packed_sequence, batch_first=True)
-        combined_rep = self.relu(torch.matmul(
-            seq_unapcked[:, :, :self.hidden_dim], self.W1) + torch.matmul(seq_unapcked[:, :, self.hidden_dim:], self.W2))
+        forward_rep = seq_unapcked[:, :, :self.hidden_dim]
+        backward_rep = seq_unapcked[:, :, self.hidden_dim:]
+        combined_rep = self.relu(self.W1(forward_rep) + self.W2(backward_rep))
         return combined_rep, len_unpacked
 
     def set_leaf_node_vector(self, num_node, combined_rep, len_unpacked, original_pos):
         vector = torch.zeros(
             (len(num_node),
              torch.tensor(max(num_node)),
-             self.hidden_dim), device=combined_rep.device)
+             self.hidden_dim), device=self.device)
         for idx in range(len(num_node)):
             batch_id = torch.tensor([idx for i in range(len_unpacked[idx])])
             # target_id is node.self_id
@@ -357,7 +382,7 @@ class Tree_Net(nn.Module):
             # source_id is node.original_pos
             source_id = torch.squeeze(original_pos[idx][:, 1])
             vector[(batch_id, target_id)] = combined_rep[(batch_id, source_id)]
-        return vector / (vector.norm(dim=2, keepdim=True) + 1e-6)
+        return normalize(vector, dim=2)
 
     def compose(self, vector, composition_info):
         # itteration of composition

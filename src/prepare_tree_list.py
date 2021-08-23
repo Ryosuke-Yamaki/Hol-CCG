@@ -6,7 +6,7 @@ from models import Tree_List
 condition = Condition_Setter(set_embedding_type=False)
 
 category_counter = load(condition.path_to_category_counter)
-category_vocab = Vocab(category_counter, specials=[])
+category_vocab = Vocab(category_counter, specials=['<unk>'])
 
 print('loading tree list...')
 train_tree_list = Tree_List(condition.path_to_train_data, category_vocab)

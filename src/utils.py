@@ -1,3 +1,4 @@
+from tqdm import tqdm
 import os
 import pickle
 import csv
@@ -6,21 +7,23 @@ import numpy as np
 import torch
 from torch import conj
 from torch.fft import fft, ifft
+from torch.nn.functional import normalize
 
 
 def circular_correlation(a, b):
-    a = conj(fft(a))
-    b = fft(b)
-    c = ifft(a * b).real
-    norm = c.norm(dim=1, keepdim=True) + 1e-6
-    return c / norm
+    a_ = conj(fft(a))
+    b_ = fft(b)
+    c_ = a_ * b_
+    c = ifft(c_).real
+    return normalize(c, dim=1)
 
 
 def single_circular_correlation(a, b):
-    a = conj(fft(a))
-    b = fft(b)
-    c = ifft(a * b).real
-    return c / (torch.norm(c) + 1e-6)
+    a_ = conj(fft(a))
+    b_ = fft(b)
+    c_ = a_ * b_
+    c = ifft(c_).real
+    return normalize(c, dim=-1)
 
 
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
@@ -81,42 +84,30 @@ def include_unk(content_id, unk_content_id):
         return False
 
 
-def evaluate(tree_list, tree_net, unk_content_id=None):
-    embedding = tree_net.embedding
+@torch.no_grad()
+def evaluate(tree_list, tree_net):
+    tree_list.set_vector(tree_net)
     linear = tree_net.linear
-    tree_list.set_vector(embedding)
     for k in [1, 5]:
         num_word = 0
         num_phrase = 0
         num_correct_word = 0
         num_correct_phrase = 0
-        if unk_content_id is None:
+        with tqdm(total=len(tree_list.tree_list)) as pbar:
+            pbar.set_description("evaluating...")
             for tree in tree_list.tree_list:
                 for node in tree.node_list:
                     output = linear(node.vector)
                     predict = torch.topk(output, k=k)[1]
                     if node.is_leaf:
                         num_word += 1
-                        if node.category_id in predict:
+                        if node.category_id in predict and node.category_id != 0:
                             num_correct_word += 1
                     else:
                         num_phrase += 1
-                        if node.category_id in predict:
+                        if node.category_id in predict and node.category_id != 0:
                             num_correct_phrase += 1
-        else:
-            for tree in tree_list.tree_list:
-                for node in tree.node_list:
-                    if include_unk(node.content_id, unk_content_id):
-                        output = linear(node.vector)
-                        predict = torch.topk(output, k=k)[1]
-                        if node.is_leaf:
-                            num_word += 1
-                            if node.category_id in predict:
-                                num_correct_word += 1
-                        else:
-                            num_phrase += 1
-                            if node.category_id in predict:
-                                num_correct_phrase += 1
+                pbar.update(1)
         print('-' * 50)
         print('overall top-{}: {}'.format(k, (num_correct_word +
                                               num_correct_phrase) / (num_word + num_phrase)))
@@ -142,19 +133,23 @@ class History:
     def validation(self, batch_list, device=torch.device('cpu')):
         total_loss = 0.0
         total_acc = 0.0
-        for batch in batch_list:
-            label, mask = make_label_mask(batch, device=device)
-            output = self.tree_net(batch)
-            output = output[torch.nonzero(mask, as_tuple=True)]
-            loss = self.criteria(output, label)
-            acc = self.cal_top_k_acc(output, label)
-            total_loss += loss.item()
-            total_acc += acc.item()
+        with tqdm(total=len(batch_list), unit="batch") as pbar:
+            pbar.set_description("validating...")
+            for batch in batch_list:
+                label, mask = make_label_mask(batch, device=device)
+                output = self.tree_net(batch)
+                output = output[torch.nonzero(mask, as_tuple=True)]
+                loss = self.criteria(output, label)
+                acc = self.cal_top_k_acc(output, label)
+                total_loss += loss.item()
+                total_acc += acc.item()
+                pbar.update(1)
         self.loss_history = np.append(
             self.loss_history, total_loss / len(batch_list))
         self.acc_history = np.append(
             self.acc_history, total_acc / len(batch_list))
         self.update()
+        return total_loss / len(batch_list), total_acc / len(batch_list)
 
     @torch.no_grad()
     def cal_top_k_acc(self, output, label, k=1):
@@ -162,7 +157,7 @@ class History:
         label = torch.reshape(label, (output.shape[0], -1))
         comparison = output - label
         num_sample = output.shape[0]
-        num_false = torch.count_nonzero(torch.all(comparison, dim=1))
+        num_false = torch.count_nonzero(comparison)
         num_true = num_sample - num_false
         return num_true / num_sample
 
