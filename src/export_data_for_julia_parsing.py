@@ -12,7 +12,7 @@ def extract_rule(path_to_grammar, category_vocab):
     data = f.readlines()
     f.close()
 
-    min_freq = 10
+    min_freq = 1
     for rule in data:
         tokens = rule.split()
         freq = int(tokens[0])
@@ -30,7 +30,7 @@ def extract_rule(path_to_grammar, category_vocab):
     return binary_rule, unary_rule
 
 
-condition = Condition_Setter()
+condition = Condition_Setter(set_embedding_type=False)
 PATH_TO_DIR = condition.PATH_TO_DIR
 
 path_to_grammar = PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar"
@@ -57,18 +57,24 @@ tree_net = torch.load(condition.path_to_model,
                       map_location=device)
 tree_net.eval()
 
-linear_weight = tree_net.phrase_classifier.weight
-linear_bias = tree_net.phrase_classifer.bias
+word_classifier_weight = tree_net.word_classifier.weight
+word_classifier_bias = tree_net.word_classifer.bias
+phrase_classifier_weight = tree_net.phrase_classifier.weight
+phrase_classifier_bias = tree_net.phrase_classifer.bias
 
 np.savetxt(
     PATH_TO_DIR +
-    "Hol-CCG/data/parsing/linear_weight_{}_{}d.csv".format(
-        condition.embedding_type,
-        condition.embedding_dim),
-    linear_weight.detach().numpy())
+    "Hol-CCG/data/parsing/word_classifier_weight.csv",
+    word_classifier_weight.detach().numpy())
 np.savetxt(
     PATH_TO_DIR +
-    "Hol-CCG/data/parsing/linear_bias_{}_{}d.csv".format(
-        condition.embedding_type,
-        condition.embedding_dim),
-    linear_bias.detach().numpy())
+    "Hol-CCG/data/parsing/word_classifier_bias.csv",
+    word_classifier_bias.detach().numpy())
+np.savetxt(
+    PATH_TO_DIR +
+    "Hol-CCG/data/parsing/phrase_classifier_weight.csv",
+    phrase_classifier_weight.detach().numpy())
+np.savetxt(
+    PATH_TO_DIR +
+    "Hol-CCG/data/parsing/phrase_classifier_bias.csv",
+    phrase_classifier_bias.detach().numpy())
