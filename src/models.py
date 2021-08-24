@@ -157,12 +157,14 @@ class Tree_List:
     def __init__(
             self,
             PATH_TO_DATA,
-            category_vocab=None,
+            word_category_vocab,
+            phrase_category_vocab,
             device=torch.device('cpu')):
-        self.category_vocab = category_vocab
+        self.word_category_vocab = word_category_vocab
+        self.phrase_category_vocab = phrase_category_vocab
         self.device = device
         self.set_tree_list(PATH_TO_DATA)
-        self.set_category_id(self.category_vocab)
+        self.set_category_id(self.word_category_vocab, self.phrase_category_vocab)
 
     def set_tree_list(self, PATH_TO_DATA):
         self.tree_list = []
@@ -181,10 +183,13 @@ class Tree_List:
                 node_list = []
                 tree_id += 1
 
-    def set_category_id(self, category_vocab):
+    def set_category_id(self, word_category_vocab, phrase_category_vocab):
         for tree in self.tree_list:
             for node in tree.node_list:
-                node.category_id = category_vocab[node.category]
+                if node.is_leaf:
+                    node.category_id = word_category_vocab[node.category]
+                else:
+                    node.category_id = phrase_category_vocab[node.category]
             tree.set_node_composition_info()
             tree.set_original_position_of_leaf_node()
 
@@ -321,9 +326,10 @@ class Tree_List:
 
 
 class Tree_Net(nn.Module):
-    def __init__(self, NUM_CATEGORY, elmo, embedding_dim=1024):
+    def __init__(self, num_word_cat, num_phrase_cat, elmo, embedding_dim=1024):
         super(Tree_Net, self).__init__()
-        self.num_category = NUM_CATEGORY
+        self.num_word_cat = num_word_cat
+        self.num_phrase_cat = num_phrase_cat
         self.embedding_dim = embedding_dim
         self.elmo = elmo
         self.hidden_dim = 512
@@ -336,7 +342,8 @@ class Tree_Net(nn.Module):
         self.W1 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
         self.W2 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
         self.relu = nn.LeakyReLU()
-        self.linear = nn.Linear(self.hidden_dim, self.num_category)
+        self.word_classifier = nn.Linear(self.hidden_dim, self.num_word_cat)
+        self.phrase_classifier = nn.Linear(self.hidden_dim, self.num_phrase_cat)
 
     # input batch as tuple of training info
     def forward(self, batch):
@@ -344,13 +351,17 @@ class Tree_Net(nn.Module):
         sentence = batch[1]
         original_pos = batch[2]
         composition_info = batch[3]
+        batch_label = batch[4]
         packed_sequence = self.elmo_embedding(sentence)
         bi_lstm_output = self.bi_lstm(packed_sequence)[0]
         combined_rep, len_unpacked = self.combine_foward_backward_rep(bi_lstm_output)
         vector = self.set_leaf_node_vector(num_node, combined_rep, len_unpacked, original_pos)
         composed_vector = self.compose(vector, composition_info)
-        output = self.linear(composed_vector)
-        return output
+        word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
+            composed_vector, batch_label, original_pos)
+        word_output = self.word_classifier(word_vector)
+        phrase_output = self.phrase_classifier(phrase_vector)
+        return word_output, phrase_output, word_label, phrase_label
 
     @torch.no_grad()
     def elmo_embedding(self, sentence):
@@ -409,3 +420,30 @@ class Tree_Net(nn.Module):
                 composed_vector = circular_correlation(left_child_vector, right_child_vector)
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
+
+    def devide_word_phrase(self, vector, batch_label, original_pos):
+        word_vector = []
+        phrase_vector = []
+        word_label = []
+        phrase_label = []
+        for i in range(vector.shape[0]):
+            word_idx = torch.zeros(len(batch_label[i]), dtype=torch.bool, device=self.device)
+            word_idx[original_pos[i][:, 0]] = True
+            phrase_idx = torch.logical_not(word_idx)
+            word_vector.append(vector[i, :len(batch_label[i])][word_idx])
+            phrase_vector.append(vector[i, :len(batch_label[i])][phrase_idx])
+            word_label.append(
+                torch.tensor(
+                    batch_label[i],
+                    dtype=torch.long,
+                    device=self.device)[word_idx])
+            phrase_label.append(
+                torch.tensor(
+                    batch_label[i],
+                    dtype=torch.long,
+                    device=self.device)[phrase_idx])
+        word_vector = torch.cat(word_vector)
+        phrase_vector = torch.cat(phrase_vector)
+        word_label = torch.squeeze(torch.vstack(word_label))
+        phrase_label = torch.squeeze(torch.vstack(phrase_label))
+        return word_vector, phrase_vector, word_label, phrase_label

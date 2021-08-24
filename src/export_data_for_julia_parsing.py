@@ -45,46 +45,21 @@ for tree in test_tree_list.tree_list:
     correct_list.append(tree.correct_parse())
 dump(correct_list, PATH_TO_DIR + "Hol-CCG/data/parsing/correct_list.pkl")
 
-content_vocab = []
-for k, v in test_tree_list.content_vocab.stoi.items():
-    content_vocab.append([k, v])
-
 binary_rule, unary_rule = extract_rule(condition.path_to_grammar, test_tree_list.category_vocab)
 
-with open(PATH_TO_DIR + "Hol-CCG/data/parsing/content_vocab.txt", mode='w') as f:
-    for info_list in content_vocab:
-        i = 0
-        for info in info_list:
-            if i % 2 == 0:
-                f.write(str(info))
-                f.write(' ')
-            else:
-                f.write(str(info + 1))
-            i += 1
-        f.write('\n')
 np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt", np.array(binary_rule),
            fmt='%d', header=str(len(test_tree_list.category_vocab) - 1), comments="")
 np.savetxt(PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt", np.array(unary_rule),
            fmt='%d', header=str(len(test_tree_list.category_vocab) - 1), comments="")
 
-if condition.embedding_type == 'random':
-    tree_net = torch.load(condition.path_to_model,
-                          map_location=device)
-else:
-    tree_net = torch.load(condition.path_to_model_with_regression,
-                          map_location=device)
+
+tree_net = torch.load(condition.path_to_model,
+                      map_location=device)
 tree_net.eval()
 
-embedding_weight = tree_net.embedding.weight
-linear_weight = tree_net.linear.weight
-linear_bias = tree_net.linear.bias
+linear_weight = tree_net.phrase_classifier.weight
+linear_bias = tree_net.phrase_classifer.bias
 
-np.savetxt(
-    PATH_TO_DIR +
-    "Hol-CCG/data/parsing/embedding_weight_{}_{}d.csv".format(
-        condition.embedding_type,
-        condition.embedding_dim),
-    embedding_weight.detach().numpy())
 np.savetxt(
     PATH_TO_DIR +
     "Hol-CCG/data/parsing/linear_weight_{}_{}d.csv".format(

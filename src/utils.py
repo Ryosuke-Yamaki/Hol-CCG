@@ -87,7 +87,8 @@ def include_unk(content_id, unk_content_id):
 @torch.no_grad()
 def evaluate(tree_list, tree_net):
     tree_list.set_vector(tree_net)
-    linear = tree_net.linear
+    word_classifier = tree_net.word_classifier
+    phrase_classifier = tree_net.phrase_classifier
     for k in [1, 5]:
         num_word = 0
         num_phrase = 0
@@ -97,13 +98,15 @@ def evaluate(tree_list, tree_net):
             pbar.set_description("evaluating...")
             for tree in tree_list.tree_list:
                 for node in tree.node_list:
-                    output = linear(node.vector)
-                    predict = torch.topk(output, k=k)[1]
                     if node.is_leaf:
+                        output = word_classifier(node.vector)
+                        predict = torch.topk(output, k=k)[1]
                         num_word += 1
                         if node.category_id in predict and node.category_id != 0:
                             num_correct_word += 1
                     else:
+                        output = phrase_classifier(node.vector)
+                        predict = torch.topk(output, k=k)[1]
                         num_phrase += 1
                         if node.category_id in predict and node.category_id != 0:
                             num_correct_phrase += 1
@@ -130,26 +133,30 @@ class History:
         self.max_acc_idx = np.argmax(self.acc_history)
 
     @torch.no_grad()
-    def validation(self, batch_list, device=torch.device('cpu')):
-        total_loss = 0.0
-        total_acc = 0.0
+    def evaluation(self, batch_list):
+        sum_loss = 0.0
+        sum_acc = 0.0
         with tqdm(total=len(batch_list), unit="batch") as pbar:
-            pbar.set_description("validating...")
+            pbar.set_description("evaluating...")
             for batch in batch_list:
-                label, mask = make_label_mask(batch, device=device)
-                output = self.tree_net(batch)
-                output = output[torch.nonzero(mask, as_tuple=True)]
-                loss = self.criteria(output, label)
-                acc = self.cal_top_k_acc(output, label)
-                total_loss += loss.item()
-                total_acc += acc.item()
+                word_output, phrase_output, word_label, phrase_label = self.tree_net(batch)
+                word_loss = self.criteria(word_output, word_label)
+                phrase_loss = self.criteria(phrase_output, phrase_label)
+                total_loss = word_loss + phrase_loss
+                word_acc = self.cal_top_k_acc(word_output, word_label)
+                phrase_acc = self.cal_top_k_acc(phrase_output, phrase_label)
+                total_acc = (
+                    word_acc * word_output.shape[0] + phrase_acc * phrase_output.shape[0]) / (
+                    word_output.shape[0] + phrase_output.shape[0])
+                sum_loss += total_loss.item()
+                sum_acc += total_acc.item()
                 pbar.update(1)
         self.loss_history = np.append(
-            self.loss_history, total_loss / len(batch_list))
+            self.loss_history, sum_loss / len(batch_list))
         self.acc_history = np.append(
-            self.acc_history, total_acc / len(batch_list))
+            self.acc_history, sum_acc / len(batch_list))
         self.update()
-        return total_loss / len(batch_list), total_acc / len(batch_list)
+        return sum_loss / len(batch_list), sum_acc / len(batch_list)
 
     @torch.no_grad()
     def cal_top_k_acc(self, output, label, k=1):
@@ -234,14 +241,10 @@ class Condition_Setter:
         self.path_to_elmo_weights = PATH_TO_DIR + "Hol-CCG/data/elmo/elmo_weights.hdf5"
 
         # path to counters, vocab
-        self.path_to_word_counter = PATH_TO_DIR + \
-            "Hol-CCG/data/counter/word_counter.pickle"
-        self.path_to_train_word_counter = PATH_TO_DIR + \
-            "Hol-CCG/data/counter/train_word_counter.pickle"
-        self.path_to_category_counter = PATH_TO_DIR + \
-            "Hol-CCG/data/counter/category_counter.pickle"
-        self.path_to_content_vocab = PATH_TO_DIR + \
-            "Hol-CCG/data/parsing/content_vocab.txt"
+        self.path_to_word_category_counter = PATH_TO_DIR + \
+            "Hol-CCG/data/counter/word_category_counter.pickle"
+        self.path_to_phrase_category_counter = PATH_TO_DIR + \
+            "Hol-CCG/data/counter/phrasecategory_counter.pickle"
 
         # path_to_rule
         self.path_to_grammar = PATH_TO_DIR + \
