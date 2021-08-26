@@ -7,8 +7,8 @@ condition = Condition_Setter(set_embedding_type=False)
 
 word_category_counter = load(condition.path_to_word_category_counter)
 phrase_category_counter = load(condition.path_to_phrase_category_counter)
-word_category_vocab = Vocab(word_category_counter, specials=['<unk>'])
-phrase_category_vocab = Vocab(phrase_category_counter, specials=['<unk>'])
+word_category_vocab = Vocab(word_category_counter, min_freq=1, specials=['<unk>'])
+phrase_category_vocab = Vocab(phrase_category_counter, min_freq=1, specials=['<unk>'])
 
 print('loading tree list...')
 train_tree_list = Tree_List(

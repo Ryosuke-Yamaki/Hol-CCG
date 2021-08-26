@@ -85,11 +85,11 @@ def include_unk(content_id, unk_content_id):
 
 
 @torch.no_grad()
-def evaluate(tree_list, tree_net):
+def evaluate(tree_list, tree_net, k_list=[1, 5]):
     tree_list.set_vector(tree_net)
     word_classifier = tree_net.word_classifier
     phrase_classifier = tree_net.phrase_classifier
-    for k in [1, 5]:
+    for k in k_list:
         num_word = 0
         num_phrase = 0
         num_correct_word = 0
@@ -111,11 +111,15 @@ def evaluate(tree_list, tree_net):
                         if node.category_id in predict and node.category_id != 0:
                             num_correct_phrase += 1
                 pbar.update(1)
+        total_acc = (num_correct_word + num_correct_phrase) / (num_word + num_phrase)
+        word_acc = num_correct_word / num_word
+        phrase_acc = num_correct_phrase / num_phrase
         print('-' * 50)
-        print('overall top-{}: {}'.format(k, (num_correct_word +
-                                              num_correct_phrase) / (num_word + num_phrase)))
-        print('word top-{}: {}'.format(k, num_correct_word / num_word))
-        print('phrase top-{}: {}'.format(k, num_correct_phrase / num_phrase))
+        print('overall top-{}: {}'.format(k, total_acc))
+        print('word top-{}: {}'.format(k, word_acc))
+        print('phrase top-{}: {}'.format(k, phrase_acc))
+        if len(k_list) == 1:
+            return total_acc, word_acc, phrase_acc
 
 
 class History:
@@ -132,7 +136,7 @@ class History:
         self.max_acc = np.max(self.acc_history)
         self.max_acc_idx = np.argmax(self.acc_history)
 
-    @torch.no_grad()
+    @ torch.no_grad()
     def evaluation(self, batch_list):
         sum_loss = 0.0
         sum_acc = 0.0
@@ -140,6 +144,11 @@ class History:
             pbar.set_description("evaluating...")
             for batch in batch_list:
                 word_output, phrase_output, word_label, phrase_label = self.tree_net(batch)
+                # for frequency cut-off
+                word_output = word_output[word_label != 0]
+                phrase_output = phrase_output[phrase_label != 0]
+                word_label = word_label[word_label != 0]
+                phrase_label = phrase_label[phrase_label != 0]
                 word_loss = self.criteria(word_output, word_label)
                 phrase_loss = self.criteria(phrase_output, phrase_label)
                 total_loss = word_loss + phrase_loss
@@ -158,7 +167,7 @@ class History:
         self.update()
         return sum_loss / len(batch_list), sum_acc / len(batch_list)
 
-    @torch.no_grad()
+    @ torch.no_grad()
     def cal_top_k_acc(self, output, label, k=1):
         output = torch.topk(output, k=k)[1]
         label = torch.reshape(label, (output.shape[0], -1))
@@ -293,7 +302,8 @@ class Condition_Setter:
 
             # path_for_visualization
             self.path_to_visualize_weight = PATH_TO_DIR + \
-                "Hol-CCG/result/data/visualize/{}_{}d".format(self.embedding_type, self.embedding_dim)
+                "Hol-CCG/result/data/visualize/{}_{}d".format(
+                    self.embedding_type, self.embedding_dim)
             self.path_to_map = PATH_TO_DIR + \
                 "Hol-CCG/result/fig/map/{}_{}d".format(
                     self.embedding_type, self.embedding_dim)

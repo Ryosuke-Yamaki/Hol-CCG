@@ -11,7 +11,7 @@ set_random_seed(0)
 print('loading tree list...')
 test_tree_list = load(condition.path_to_test_tree_list)
 
-tree_net = torch.load("lstm_with_two_classifiers.pth",
+tree_net = torch.load("PReLU.pth",
                       map_location=device)
 tree_net.eval()
 

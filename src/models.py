@@ -1,15 +1,14 @@
+from typing import *
+from torch.nn.utils.rnn import PackedSequence
 from tqdm import tqdm
 import numpy as np
-from numpy.lib.type_check import nan_to_num
-from torch.nn.functional import normalize
-from torch.nn.utils.rnn import pack_padded_sequence, pack_sequence
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from allennlp.modules.elmo import batch_to_ids
 import torch
 import torch.nn as nn
-from torch.nn.utils.rnn import pad_packed_sequence
 from operator import itemgetter
 from utils import circular_correlation, single_circular_correlation
-from torch.nn.functional import normalize
+# from torch.nn.functional import normalize
 
 
 class Node:
@@ -326,24 +325,38 @@ class Tree_List:
 
 
 class Tree_Net(nn.Module):
-    def __init__(self, num_word_cat, num_phrase_cat, elmo, embedding_dim=1024):
+    def __init__(
+            self,
+            num_word_cat,
+            num_phrase_cat,
+            elmo,
+            embedding_dim=1024,
+            hidden_dim=512,
+            classifier_dropout=0.5,
+            lstm_dropout=0.5,
+            device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
         self.num_phrase_cat = num_phrase_cat
-        self.embedding_dim = embedding_dim
         self.elmo = elmo
-        self.hidden_dim = 512
-        self.bi_lstm = nn.LSTM(
+        self.embedding_dim = embedding_dim
+        self.hidden_dim = hidden_dim
+        self.bi_lstm = LSTM(
             input_size=self.embedding_dim,
             hidden_size=self.hidden_dim,
             num_layers=1,
+            dropouti=lstm_dropout,
+            dropoutw=lstm_dropout,
+            dropouto=lstm_dropout,
             batch_first=True,
             bidirectional=True)
         self.W1 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
         self.W2 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
-        self.relu = nn.LeakyReLU()
+        self.relu = nn.PReLU()
+        self.classifier_dropout = nn.Dropout(p=classifier_dropout)
         self.word_classifier = nn.Linear(self.hidden_dim, self.num_word_cat)
         self.phrase_classifier = nn.Linear(self.hidden_dim, self.num_phrase_cat)
+        self.device = device
 
     # input batch as tuple of training info
     def forward(self, batch):
@@ -359,8 +372,8 @@ class Tree_Net(nn.Module):
         composed_vector = self.compose(vector, composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
             composed_vector, batch_label, original_pos)
-        word_output = self.word_classifier(word_vector)
-        phrase_output = self.phrase_classifier(phrase_vector)
+        word_output = self.word_classifier(self.classifier_dropout(word_vector))
+        phrase_output = self.phrase_classifier(self.classifier_dropout(phrase_vector))
         return word_output, phrase_output, word_label, phrase_label
 
     @torch.no_grad()
@@ -393,7 +406,7 @@ class Tree_Net(nn.Module):
             # source_id is node.original_pos
             source_id = torch.squeeze(original_pos[idx][:, 1])
             vector[(batch_id, target_id)] = combined_rep[(batch_id, source_id)]
-        return normalize(vector, dim=2)
+        return vector
 
     def compose(self, vector, composition_info):
         # itteration of composition
@@ -447,3 +460,90 @@ class Tree_Net(nn.Module):
         word_label = torch.squeeze(torch.vstack(word_label))
         phrase_label = torch.squeeze(torch.vstack(phrase_label))
         return word_vector, phrase_vector, word_label, phrase_label
+
+
+class VariationalDropout(nn.Module):
+    """
+    Applies the same dropout mask across the temporal dimension
+    See https://arxiv.org/abs/1512.05287 for more details.
+    Note that this is not applied to the recurrent activations in the LSTM like the above paper.
+    Instead, it is applied to the inputs and outputs of the recurrent layer.
+    """
+
+    def __init__(self, dropout: float, batch_first: Optional[bool] = False):
+        super().__init__()
+        self.dropout = dropout
+        self.batch_first = batch_first
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if not self.training or self.dropout <= 0.:
+            return x
+
+        is_packed = isinstance(x, PackedSequence)
+        if is_packed:
+            x, seq_length = pad_packed_sequence(x, batch_first=True)
+        else:
+            max_batch_size = x.size(0)
+
+        # Drop same mask across entire sequence
+        if self.batch_first:
+            m = x.new_empty(
+                x.shape[0],
+                x.shape[1],
+                x.shape[2],
+                requires_grad=False).bernoulli_(
+                1 - self.dropout)
+        else:
+            m = x.new_empty(
+                1,
+                max_batch_size,
+                x.size(2),
+                requires_grad=False).bernoulli_(
+                1 - self.dropout)
+        x = x.masked_fill(m == 0, 0) / (1 - self.dropout)
+
+        if is_packed:
+            return pack_padded_sequence(x, seq_length, batch_first=True, enforce_sorted=False)
+        else:
+            return x
+
+
+class LSTM(nn.LSTM):
+    def __init__(self, *args, dropouti: float = 0.,
+                 dropoutw: float = 0., dropouto: float = 0.,
+                 batch_first=True, unit_forget_bias=True, **kwargs):
+        super().__init__(*args, **kwargs, batch_first=batch_first)
+        self.unit_forget_bias = unit_forget_bias
+        self.dropoutw = dropoutw
+        self.input_drop = VariationalDropout(dropouti,
+                                             batch_first=batch_first)
+        self.output_drop = VariationalDropout(dropouto,
+                                              batch_first=batch_first)
+        self._init_weights()
+
+    def _init_weights(self):
+        """
+        Use orthogonal init for recurrent layers, xavier uniform for input layers
+        Bias is 0 except for forget gate
+        """
+        for name, param in self.named_parameters():
+            if "weight_hh" in name:
+                nn.init.orthogonal_(param.data)
+            elif "weight_ih" in name:
+                nn.init.xavier_uniform_(param.data)
+            elif "bias" in name and self.unit_forget_bias:
+                nn.init.zeros_(param.data)
+                param.data[self.hidden_size:2 * self.hidden_size] = 1
+
+    def _drop_weights(self):
+        for name, param in self.named_parameters():
+            if "weight_hh" in name:
+                getattr(self, name).data = \
+                    torch.nn.functional.dropout(param.data, p=self.dropoutw,
+                                                training=self.training).contiguous()
+
+    def forward(self, input, hx=None):
+        self._drop_weights()
+        input = self.input_drop(input)
+        seq, state = super().forward(input, hx=hx)
+        return self.output_drop(seq), state
