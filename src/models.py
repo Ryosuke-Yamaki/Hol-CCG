@@ -113,17 +113,18 @@ class Tree:
                     self.original_pos.append(
                         [right_child_node.self_id, right_child_node.original_pos])
 
-    def correct_parse(self):
+    def correct_parse(self, whole_category_vocab):
         correct_node_list = []
         top_node = self.node_list[-1]
         top_node.start_idx = 0
         top_node.end_idx = len(top_node.content)
         if not top_node.is_leaf:
             # for unk category
-            if top_node.category_id == 0:
+            if whole_category_vocab[top_node.category] == 0:
                 correct_node_list.append((1, len(top_node.content) + 1, -1))
             else:
-                correct_node_list.append((1, len(top_node.content) + 1, top_node.category_id + 1))
+                correct_node_list.append(
+                    (1, len(top_node.content) + 1, whole_category_vocab[top_node.category] + 1))
         for info in reversed(self.composition_info):
             num_child = info[0]
             if num_child == 1:
@@ -133,7 +134,7 @@ class Tree:
                 child_node.end_idx = parent_node.end_idx
                 if not child_node.is_leaf:
                     # for unk category
-                    if child_node.category_id == 0:
+                    if whole_category_vocab[child_node.category] == 0:
                         correct_node_list.append(
                             (child_node.start_idx + 1,
                              child_node.end_idx + 1,
@@ -142,7 +143,7 @@ class Tree:
                         correct_node_list.append(
                             (child_node.start_idx + 1,
                              child_node.end_idx + 1,
-                             child_node.category_id + 1))
+                             whole_category_vocab[child_node.category] + 1))
             else:
                 parent_node = self.node_list[info[1]]
                 left_child_node = self.node_list[info[2]]
@@ -153,7 +154,7 @@ class Tree:
                 right_child_node.end_idx = parent_node.end_idx
                 if not left_child_node.is_leaf:
                     # for unk category
-                    if left_child_node.category_id == 0:
+                    if whole_category_vocab[left_child_node.category] == 0:
                         correct_node_list.append(
                             (left_child_node.start_idx + 1,
                              left_child_node.end_idx + 1,
@@ -162,10 +163,10 @@ class Tree:
                         correct_node_list.append(
                             (left_child_node.start_idx + 1,
                              left_child_node.end_idx + 1,
-                             left_child_node.category_id + 1))
+                             whole_category_vocab[left_child_node.category] + 1))
                 if not right_child_node.is_leaf:
                     # for unk category
-                    if right_child_node.category_id == 0:
+                    if whole_category_vocab[right_child_node.category] == 0:
                         correct_node_list.append(
                             (right_child_node.start_idx + 1,
                              right_child_node.end_idx + 1,
@@ -174,7 +175,7 @@ class Tree:
                         correct_node_list.append(
                             (right_child_node.start_idx + 1,
                              right_child_node.end_idx + 1,
-                             right_child_node.category_id + 1))
+                             whole_category_vocab[right_child_node.category] + 1))
         return correct_node_list
 
 
@@ -418,7 +419,7 @@ class Tree_Net(nn.Module):
             # source_id is node.original_pos
             source_id = torch.squeeze(original_pos[idx][:, 1])
             vector[(batch_id, target_id)] = combined_rep[(batch_id, source_id)]
-        return normalize(vector, dim=2)
+        return vector
 
     def compose(self, vector, composition_info):
         # itteration of composition
@@ -472,3 +473,15 @@ class Tree_Net(nn.Module):
         word_label = torch.squeeze(torch.vstack(word_label))
         phrase_label = torch.squeeze(torch.vstack(phrase_label))
         return word_vector, phrase_vector, word_label, phrase_label
+
+    # calculate the vector to start parsing
+    @torch.no_grad()
+    def cal_word_vectors(self, sentence):
+        input = batch_to_ids([sentence])
+        output = self.elmo(input)
+        rep = output['elmo_representations'][0]
+        bi_lstm_output, _ = self.bi_lstm(rep)
+        forward_rep = bi_lstm_output[0, :, :self.hidden_dim]
+        backward_rep = bi_lstm_output[0, :, self.hidden_dim:]
+        combined_rep = self.relu(self.W1(forward_rep) + self.W2(backward_rep))
+        return combined_rep

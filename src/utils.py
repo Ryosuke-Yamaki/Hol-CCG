@@ -118,6 +118,41 @@ def evaluate(tree_list, tree_net):
         print('phrase top-{}: {}'.format(k, num_correct_phrase / num_phrase))
 
 
+@torch.no_grad()
+def evaluate_beta(tree_list, tree_net, beta):
+    tree_list.set_vector(tree_net)
+    word_classifier = tree_net.word_classifier
+    phrase_classifier = tree_net.phrase_classifier
+    num_word = 0
+    num_phrase = 0
+    num_correct_word = 0
+    num_correct_phrase = 0
+    with tqdm(total=len(tree_list.tree_list)) as pbar:
+        pbar.set_description("evaluating...")
+        for tree in tree_list.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    output = word_classifier(node.vector)
+                    max_output = torch.max(output)
+                    predict = list(range(len(output)))[output > max_output * beta]
+                    num_word += 1
+                    if node.category_id in predict and node.category_id != 0:
+                        num_correct_word += 1
+                else:
+                    output = phrase_classifier(node.vector)
+                    max_output = torch.max(output)
+                    predict = list(range(len(output)))[output > max_output * beta]
+                    num_phrase += 1
+                    if node.category_id in predict and node.category_id != 0:
+                        num_correct_phrase += 1
+            pbar.update(1)
+    print('-' * 50)
+    print('overall top-{}: {}'.format(beta, (num_correct_word +
+                                             num_correct_phrase) / (num_word + num_phrase)))
+    print('word top-{}: {}'.format(beta, num_correct_word / num_word))
+    print('phrase top-{}: {}'.format(beta, num_correct_phrase / num_phrase))
+
+
 class History:
     def __init__(self, tree_net, tree_list, criteria):
         self.tree_net = tree_net
@@ -241,10 +276,18 @@ class Condition_Setter:
         self.path_to_elmo_weights = PATH_TO_DIR + "Hol-CCG/data/elmo/elmo_weights.hdf5"
 
         # path to counters, vocab
-        self.path_to_word_category_counter = PATH_TO_DIR + \
-            "Hol-CCG/data/counter/word_category_counter.pickle"
-        self.path_to_phrase_category_counter = PATH_TO_DIR + \
-            "Hol-CCG/data/counter/phrasecategory_counter.pickle"
+        self.path_to_word_category_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/word_category_vocab.pickle"
+        self.path_to_phrase_category_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/phrase_category_vocab.pickle"
+        self.path_to_whole_category_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/whole_category_vocab.pickle"
+        self.path_to_evalb_category_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/evalb_category_vocab.pickle"
+        self.path_to_word_to_whole = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/word_to_whole.pickle"
+        self.path_to_whole_to_phrase = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/whole_to_phrase.pickle"
 
         # path_to_rule
         self.path_to_grammar = PATH_TO_DIR + \
