@@ -178,6 +178,28 @@ class Tree:
                              whole_category_vocab[right_child_node.category] + 1))
         return correct_node_list
 
+    def set_word_split(self, tokenizer):
+        sentence = " ".join(self.sentence)
+        tokens = tokenizer.tokenize(sentence)
+        tokenized_pos = 0
+        word_split = []
+        for original_pos in range(len(self.sentence)):
+            word = self.sentence[original_pos]
+            length = 1
+            while True:
+                temp = tokenizer.convert_tokens_to_string(
+                    tokens[tokenized_pos:tokenized_pos + length]).replace(" ", "")
+                if word == temp:
+                    word_split.append([tokenized_pos, tokenized_pos + length])
+                    tokenized_pos += length
+                    break
+                else:
+                    length += 1
+        if len(self.sentence) == len(word_split):
+            return word_split
+        else:
+            print("error")
+
 
 class Tree_List:
     def __init__(
@@ -219,12 +241,13 @@ class Tree_List:
             tree.set_node_composition_info()
             tree.set_original_position_of_leaf_node()
 
-    def set_info_for_training(self):
+    def set_info_for_training(self, tokenizer=None):
         self.num_node = []
         self.sentence_list = []
         self.label_list = []
         self.original_pos = []
         self.composition_info = []
+        self.word_split = []
         for tree in self.tree_list:
             self.num_node.append(len(tree.node_list))
             self.sentence_list.append(tree.sentence)
@@ -242,6 +265,10 @@ class Tree_List:
                     tree.composition_info,
                     dtype=torch.long,
                     device=self.device))
+            if self.embedder == 'roberta':
+                self.word_split.append(tree.set_word_split(tokenizer))
+            else:
+                self.word_split.append([])
         self.sorted_tree_id = np.argsort(self.num_node)
 
     def make_shuffled_tree_id(self):
