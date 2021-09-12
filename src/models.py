@@ -2,7 +2,7 @@ from tqdm import tqdm
 import numpy as np
 from numpy.lib.type_check import nan_to_num
 from torch.nn.functional import normalize
-from torch.nn.utils.rnn import pack_padded_sequence, pack_sequence
+from torch.nn.utils.rnn import pack_padded_sequence, pack_sequence, pad_sequence
 from allennlp.modules.elmo import batch_to_ids
 import torch
 import torch.nn as nn
@@ -286,6 +286,7 @@ class Tree_List:
         batch_label_list = []
         batch_original_pos = []
         batch_composition_info = []
+        batch_word_split = []
         num_tree = len(self.tree_list)
 
         if BATCH_SIZE is None:
@@ -298,6 +299,8 @@ class Tree_List:
             batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(self.original_pos)))
             batch_composition_info.append(list(itemgetter(
                 *batch_tree_id_list)(self.composition_info)))
+            batch_word_split.append(list(itemgetter(
+                *batch_tree_id_list)(self.word_split)))
         else:
             # shuffle the tree_id in tree_list
             shuffled_tree_id = self.make_shuffled_tree_id()
@@ -316,6 +319,8 @@ class Tree_List:
                 batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(self.original_pos)))
                 batch_composition_info.append(list(itemgetter(
                     *batch_tree_id_list)(self.composition_info)))
+                batch_word_split.append(list(itemgetter(
+                    *batch_tree_id_list)(self.word_split)))
             # the part cannot devided by BATCH_SIZE
             batch_num_node.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.num_node)))
@@ -327,6 +332,8 @@ class Tree_List:
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.original_pos)))
             batch_composition_info.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.composition_info)))
+            batch_word_split.append(
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.word_split)))
 
         for idx in range(len(batch_num_node)):
             composition_list = batch_composition_info[idx]
@@ -348,7 +355,8 @@ class Tree_List:
             batch_sentence_list,
             batch_original_pos,
             batch_composition_info,
-            batch_label_list))
+            batch_label_list,
+            batch_word_split))
 
     def set_vector(self, tree_net):
         with tqdm(total=len(self.tree_list)) as pbar:
@@ -379,12 +387,23 @@ class Tree_List:
 
 
 class Tree_Net(nn.Module):
-    def __init__(self, num_word_cat, num_phrase_cat, elmo, embedding_dim=1024):
+    def __init__(
+            self,
+            num_word_cat,
+            num_phrase_cat,
+            embedder,
+            model,
+            tokenizer=None,
+            learn_embedder=False,
+            embedding_dim=1024):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
         self.num_phrase_cat = num_phrase_cat
         self.embedding_dim = embedding_dim
-        self.elmo = elmo
+        self.embedder = embedder
+        self.model = model
+        self.tokenizer = tokenizer
+        self.learn_embedder = learn_embedder
         self.hidden_dim = 512
         self.bi_lstm = nn.LSTM(
             input_size=self.embedding_dim,
@@ -405,7 +424,15 @@ class Tree_Net(nn.Module):
         original_pos = batch[2]
         composition_info = batch[3]
         batch_label = batch[4]
-        packed_sequence = self.elmo_embedding(sentence)
+        if self.embedder == 'roberta':
+            word_split = batch[5]
+        elif self.embedder == 'elmo':
+            word_split = None
+        if self.learn_embedder:
+            packed_sequence = self.embed(sentence, word_split)
+        else:
+            with torch.no_grad:
+                packed_sequence = self.embed(sentence, word_split)
         bi_lstm_output = self.bi_lstm(packed_sequence)[0]
         combined_rep, len_unpacked = self.combine_foward_backward_rep(bi_lstm_output)
         vector = self.set_leaf_node_vector(num_node, combined_rep, len_unpacked, original_pos)
@@ -416,14 +443,34 @@ class Tree_Net(nn.Module):
         phrase_output = self.phrase_classifier(phrase_vector)
         return word_output, phrase_output, word_label, phrase_label
 
-    @torch.no_grad()
-    def elmo_embedding(self, sentence):
-        input = batch_to_ids(sentence).to(self.device)
-        output = self.elmo(input)
-        rep = output['elmo_representations'][0]
-        mask = output['mask'].to('cpu')
-        packed_sequence = pack_padded_sequence(rep, torch.count_nonzero(
-            mask, dim=1), batch_first=True, enforce_sorted=False)
+    def embed(self, sentence, word_split=None):
+        if self.embedder == 'roberta':
+            input = self.tokenizer(
+                sentence,
+                padding=True,
+                return_tensors='pt',
+                is_split_into_words=True)
+            output = self.model(**input).last_hidden_state
+            rep = []
+            lengths = []
+            for vector, info in zip(output, word_split):
+                temp = []
+                for start_idx, end_idx in info:
+                    temp.append(torch.mean(vector[start_idx:end_idx], dim=0))
+                rep.append(torch.stack(temp))
+                lengths.append(len(temp))
+            rep = pad_sequence(rep, batch_first=True)
+            lengths = torch.tensor(lengths, device=torch.device('cpu'))
+
+        elif self.embedder == 'elmo':
+            input = batch_to_ids(sentence).to(self.device)
+            output = self.model(input)
+            rep = output['elmo_representations'][0]
+            mask = output['mask'].to(torch.device('cpu'))
+            lengths = torch.count_nonzero(mask, dim=1)
+
+        packed_sequence = pack_padded_sequence(
+            rep, lengths=lengths, batch_first=True, enforce_sorted=False)
         return packed_sequence
 
     # combine the output of bidirectional LSTM, the output of foward and backward LSTM
@@ -440,7 +487,7 @@ class Tree_Net(nn.Module):
              torch.tensor(max(num_node)),
              self.hidden_dim), device=self.device)
         for idx in range(len(num_node)):
-            batch_id = torch.tensor([idx for i in range(len_unpacked[idx])])
+            batch_id = torch.tensor([idx for _ in range(len_unpacked[idx])])
             # target_id is node.self_id
             target_id = torch.squeeze(original_pos[idx][:, 0])
             # source_id is node.original_pos
