@@ -1,3 +1,4 @@
+import torch.nn as nn
 from tqdm import tqdm
 import os
 import pickle
@@ -85,7 +86,10 @@ def include_unk(content_id, unk_content_id):
 
 
 @torch.no_grad()
-def evaluate(tree_list, tree_net, k_list=[1, 5]):
+def evaluate_tree_list(tree_list, tree_net, k_list=[1, 5]):
+    if tree_list.embedder == 'roberta':
+        for tree in tree_list.tree_list:
+            tree.set_word_split(tree_net.tokenizer)
     tree_list.set_vector(tree_net)
     word_classifier = tree_net.word_classifier
     phrase_classifier = tree_net.phrase_classifier
@@ -120,6 +124,87 @@ def evaluate(tree_list, tree_net, k_list=[1, 5]):
         print('phrase top-{}: {}'.format(k, phrase_acc))
         if len(k_list) == 1:
             return total_acc, word_acc, phrase_acc
+
+
+@torch.no_grad()
+def evaluate_batch_list(batch_list, tree_net, criteria=nn.CrossEntropyLoss()):
+    print("evaluating...")
+    num_word = 0
+    num_phrase = 0
+    num_correct_word = 0
+    num_correct_phrase = 0
+    word_loss = 0
+    phrase_loss = 0
+    with tqdm(total=len(batch_list), unit="batch") as pbar:
+        for batch in batch_list:
+            word_output, phrase_output, word_label, phrase_label = tree_net(batch)
+            num_word += word_output.shape[0]
+            num_phrase += phrase_output.shape[0]
+
+            word_loss += criteria(word_output, word_label)
+            phrase_loss += criteria(phrase_output, phrase_label)
+
+            # remove unknown categories
+            word_output = word_output[word_label != 0]
+            phrase_output = phrase_output[phrase_label != 0]
+            word_label = word_label[word_label != 0]
+            phrase_label = phrase_label[phrase_label != 0]
+
+            num_correct_word += torch.count_nonzero(torch.argmax(word_output, dim=1) == word_label)
+            num_correct_phrase += torch.count_nonzero(
+                torch.argmax(phrase_output, dim=1) == phrase_label)
+            pbar.update(1)
+    word_loss = word_loss / len(batch_list)
+    phrase_loss = phrase_loss / len(batch_list)
+    total_loss = word_loss + phrase_loss
+    total_acc = (num_correct_word + num_correct_phrase) / (num_word + num_phrase)
+    word_acc = num_correct_word / num_word
+    phrase_acc = num_correct_phrase / num_phrase
+    stat = {
+        "total_acc": total_acc,
+        "word_acc": word_acc,
+        "phrase_acc": phrase_acc,
+        "total_loss": total_loss,
+        "word_loss": word_loss,
+        "phrase_loss": phrase_loss}
+    print("total_acc:{}\nword_acc:{}\nphrase_acc:{}".format(
+        stat["total_acc"], stat["word_acc"], stat["phrase_acc"]))
+    return stat
+
+
+@torch.no_grad()
+def evaluate_beta(tree_list, tree_net, beta):
+    tree_list.set_vector(tree_net)
+    word_classifier = tree_net.word_classifier
+    phrase_classifier = tree_net.phrase_classifier
+    num_word = 0
+    num_phrase = 0
+    num_correct_word = 0
+    num_correct_phrase = 0
+    with tqdm(total=len(tree_list.tree_list)) as pbar:
+        pbar.set_description("evaluating...")
+        for tree in tree_list.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    output = word_classifier(node.vector)
+                    max_output = torch.max(output)
+                    predict = list(range(len(output)))[output > max_output * beta]
+                    num_word += 1
+                    if node.category_id in predict and node.category_id != 0:
+                        num_correct_word += 1
+                else:
+                    output = phrase_classifier(node.vector)
+                    max_output = torch.max(output)
+                    predict = list(range(len(output)))[output > max_output * beta]
+                    num_phrase += 1
+                    if node.category_id in predict and node.category_id != 0:
+                        num_correct_phrase += 1
+            pbar.update(1)
+    print('-' * 50)
+    print('overall top-{}: {}'.format(beta, (num_correct_word +
+                                             num_correct_phrase) / (num_word + num_phrase)))
+    print('word top-{}: {}'.format(beta, num_correct_word / num_word))
+    print('phrase top-{}: {}'.format(beta, num_correct_phrase / num_phrase))
 
 
 class History:
@@ -250,10 +335,18 @@ class Condition_Setter:
         self.path_to_elmo_weights = PATH_TO_DIR + "Hol-CCG/data/elmo/elmo_weights.hdf5"
 
         # path to counters, vocab
-        self.path_to_word_category_counter = PATH_TO_DIR + \
-            "Hol-CCG/data/counter/word_category_counter.pickle"
-        self.path_to_phrase_category_counter = PATH_TO_DIR + \
-            "Hol-CCG/data/counter/phrasecategory_counter.pickle"
+        self.path_to_word_category_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/word_category_vocab.pickle"
+        self.path_to_phrase_category_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/phrase_category_vocab.pickle"
+        self.path_to_whole_category_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/whole_category_vocab.pickle"
+        self.path_to_evalb_category_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/evalb_category_vocab.pickle"
+        self.path_to_word_to_whole = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/word_to_whole.pickle"
+        self.path_to_whole_to_phrase = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/whole_to_phrase.pickle"
 
         # path_to_rule
         self.path_to_grammar = PATH_TO_DIR + \

@@ -2,7 +2,7 @@ from typing import *
 from torch.nn.utils.rnn import PackedSequence
 from tqdm import tqdm
 import numpy as np
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, pad_sequence
 from allennlp.modules.elmo import batch_to_ids
 import torch
 import torch.nn as nn
@@ -112,13 +112,18 @@ class Tree:
                     self.original_pos.append(
                         [right_child_node.self_id, right_child_node.original_pos])
 
-    def correct_parse(self):
+    def correct_parse(self, whole_category_vocab):
         correct_node_list = []
         top_node = self.node_list[-1]
         top_node.start_idx = 0
         top_node.end_idx = len(top_node.content)
         if not top_node.is_leaf:
-            correct_node_list.append((1, len(top_node.content) + 1, top_node.category_id + 1))
+            # for unk category
+            if whole_category_vocab[top_node.category] == 0:
+                correct_node_list.append((1, len(top_node.content) + 1, -1))
+            else:
+                correct_node_list.append(
+                    (1, len(top_node.content) + 1, whole_category_vocab[top_node.category] + 1))
         for info in reversed(self.composition_info):
             num_child = info[0]
             if num_child == 1:
@@ -127,10 +132,17 @@ class Tree:
                 child_node.start_idx = parent_node.start_idx
                 child_node.end_idx = parent_node.end_idx
                 if not child_node.is_leaf:
-                    correct_node_list.append(
-                        (child_node.start_idx + 1,
-                         child_node.end_idx + 1,
-                         child_node.category_id + 1))
+                    # for unk category
+                    if whole_category_vocab[child_node.category] == 0:
+                        correct_node_list.append(
+                            (child_node.start_idx + 1,
+                             child_node.end_idx + 1,
+                             -1))
+                    else:
+                        correct_node_list.append(
+                            (child_node.start_idx + 1,
+                             child_node.end_idx + 1,
+                             whole_category_vocab[child_node.category] + 1))
             else:
                 parent_node = self.node_list[info[1]]
                 left_child_node = self.node_list[info[2]]
@@ -140,16 +152,50 @@ class Tree:
                 right_child_node.start_idx = left_child_node.end_idx
                 right_child_node.end_idx = parent_node.end_idx
                 if not left_child_node.is_leaf:
-                    correct_node_list.append(
-                        (left_child_node.start_idx + 1,
-                         left_child_node.end_idx + 1,
-                         left_child_node.category_id + 1))
+                    # for unk category
+                    if whole_category_vocab[left_child_node.category] == 0:
+                        correct_node_list.append(
+                            (left_child_node.start_idx + 1,
+                             left_child_node.end_idx + 1,
+                             -1))
+                    else:
+                        correct_node_list.append(
+                            (left_child_node.start_idx + 1,
+                             left_child_node.end_idx + 1,
+                             whole_category_vocab[left_child_node.category] + 1))
                 if not right_child_node.is_leaf:
-                    correct_node_list.append(
-                        (right_child_node.start_idx + 1,
-                         right_child_node.end_idx + 1,
-                         right_child_node.category_id + 1))
+                    # for unk category
+                    if whole_category_vocab[right_child_node.category] == 0:
+                        correct_node_list.append(
+                            (right_child_node.start_idx + 1,
+                             right_child_node.end_idx + 1,
+                             -1))
+                    else:
+                        correct_node_list.append(
+                            (right_child_node.start_idx + 1,
+                             right_child_node.end_idx + 1,
+                             whole_category_vocab[right_child_node.category] + 1))
         return correct_node_list
+
+    def set_word_split(self, tokenizer):
+        sentence = " ".join(self.sentence)
+        tokens = tokenizer.tokenize(sentence)
+        tokenized_pos = 0
+        word_split = []
+        for original_pos in range(len(self.sentence)):
+            word = self.sentence[original_pos]
+            length = 1
+            while True:
+                temp = tokenizer.convert_tokens_to_string(
+                    tokens[tokenized_pos:tokenized_pos + length]).replace(" ", "")
+                if word == temp:
+                    word_split.append([tokenized_pos, tokenized_pos + length])
+                    tokenized_pos += length
+                    break
+                else:
+                    length += 1
+        self.word_split = word_split
+        return word_split
 
 
 class Tree_List:
@@ -192,15 +238,19 @@ class Tree_List:
             tree.set_node_composition_info()
             tree.set_original_position_of_leaf_node()
 
-    def set_info_for_training(self):
+    def set_info_for_training(self, tokenizer=None):
         self.num_node = []
         self.sentence_list = []
         self.label_list = []
         self.original_pos = []
         self.composition_info = []
+        self.word_split = []
         for tree in self.tree_list:
             self.num_node.append(len(tree.node_list))
-            self.sentence_list.append(tree.sentence)
+            if self.embedder == 'roberta':
+                self.sentence_list.append(" ".join(tree.sentence))
+            elif self.embedder == 'elmo':
+                self.sentence_list.append(tree.sentence)
             label_list = []
             for node in tree.node_list:
                 label_list.append([node.category_id])
@@ -215,6 +265,10 @@ class Tree_List:
                     tree.composition_info,
                     dtype=torch.long,
                     device=self.device))
+            if self.embedder == 'roberta':
+                self.word_split.append(tree.set_word_split(tokenizer))
+            else:
+                self.word_split.append([])
         self.sorted_tree_id = np.argsort(self.num_node)
 
     def make_shuffled_tree_id(self):
@@ -232,6 +286,7 @@ class Tree_List:
         batch_label_list = []
         batch_original_pos = []
         batch_composition_info = []
+        batch_word_split = []
         num_tree = len(self.tree_list)
 
         if BATCH_SIZE is None:
@@ -244,6 +299,8 @@ class Tree_List:
             batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(self.original_pos)))
             batch_composition_info.append(list(itemgetter(
                 *batch_tree_id_list)(self.composition_info)))
+            batch_word_split.append(list(itemgetter(
+                *batch_tree_id_list)(self.word_split)))
         else:
             # shuffle the tree_id in tree_list
             shuffled_tree_id = self.make_shuffled_tree_id()
@@ -262,6 +319,8 @@ class Tree_List:
                 batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(self.original_pos)))
                 batch_composition_info.append(list(itemgetter(
                     *batch_tree_id_list)(self.composition_info)))
+                batch_word_split.append(list(itemgetter(
+                    *batch_tree_id_list)(self.word_split)))
             # the part cannot devided by BATCH_SIZE
             batch_num_node.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.num_node)))
@@ -273,6 +332,8 @@ class Tree_List:
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.original_pos)))
             batch_composition_info.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.composition_info)))
+            batch_word_split.append(
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.word_split)))
 
         for idx in range(len(batch_num_node)):
             composition_list = batch_composition_info[idx]
@@ -294,14 +355,20 @@ class Tree_List:
             batch_sentence_list,
             batch_original_pos,
             batch_composition_info,
-            batch_label_list))
+            batch_label_list,
+            batch_word_split))
 
     def set_vector(self, tree_net):
         with tqdm(total=len(self.tree_list)) as pbar:
             pbar.set_description("setting vector...")
             for tree in self.tree_list:
-                sentence = [tree.sentence]
-                packed_sequence = tree_net.elmo_embedding(sentence)
+                if self.embedder == 'roberta':
+                    sentence = [" ".join(tree.sentence)]
+                    word_split = [tree.word_split]
+                else:
+                    sentence = [tree.sentence]
+                    word_split = None
+                packed_sequence = tree_net.embed(sentence, word_split=word_split)
                 bi_lstm_output = tree_net.bi_lstm(packed_sequence)[0]
                 combined_rep, _ = tree_net.combine_foward_backward_rep(bi_lstm_output)
                 for pos in tree.original_pos:
@@ -329,30 +396,34 @@ class Tree_Net(nn.Module):
             self,
             num_word_cat,
             num_phrase_cat,
-            elmo,
+            embedder,
+            model,
+            tokenizer=None,
+            learn_embedder=False,
             embedding_dim=1024,
             hidden_dim=512,
-            classifier_dropout=0.5,
             lstm_dropout=0.5,
+            classifier_dropout=0.5,
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
         self.num_phrase_cat = num_phrase_cat
-        self.elmo = elmo
         self.embedding_dim = embedding_dim
+        self.embedder = embedder
+        self.model = model
+        self.tokenizer = tokenizer
+        self.learn_embedder = learn_embedder
         self.hidden_dim = hidden_dim
-        self.bi_lstm = LSTM(
+        self.bi_lstm = nn.LSTM(
             input_size=self.embedding_dim,
             hidden_size=self.hidden_dim,
-            num_layers=1,
-            dropouti=lstm_dropout,
-            dropoutw=lstm_dropout,
-            dropouto=lstm_dropout,
+            num_layers=2,
+            dropout=lstm_dropout,
             batch_first=True,
             bidirectional=True)
         self.W1 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
         self.W2 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
-        self.relu = nn.PReLU()
+        self.relu = nn.LeakyReLU()
         self.classifier_dropout = nn.Dropout(p=classifier_dropout)
         self.word_classifier = nn.Linear(self.hidden_dim, self.num_word_cat)
         self.phrase_classifier = nn.Linear(self.hidden_dim, self.num_phrase_cat)
@@ -365,7 +436,15 @@ class Tree_Net(nn.Module):
         original_pos = batch[2]
         composition_info = batch[3]
         batch_label = batch[4]
-        packed_sequence = self.elmo_embedding(sentence)
+        if self.embedder == 'roberta':
+            word_split = batch[5]
+        elif self.embedder == 'elmo':
+            word_split = None
+        if self.learn_embedder:
+            packed_sequence = self.embed(sentence, word_split)
+        else:
+            with torch.no_grad():
+                packed_sequence = self.embed(sentence, word_split)
         bi_lstm_output = self.bi_lstm(packed_sequence)[0]
         combined_rep, len_unpacked = self.combine_foward_backward_rep(bi_lstm_output)
         vector = self.set_leaf_node_vector(num_node, combined_rep, len_unpacked, original_pos)
@@ -376,14 +455,35 @@ class Tree_Net(nn.Module):
         phrase_output = self.phrase_classifier(self.classifier_dropout(phrase_vector))
         return word_output, phrase_output, word_label, phrase_label
 
-    @torch.no_grad()
-    def elmo_embedding(self, sentence):
-        input = batch_to_ids(sentence).to(self.device)
-        output = self.elmo(input)
-        rep = output['elmo_representations'][0]
-        mask = output['mask'].to('cpu')
-        packed_sequence = pack_padded_sequence(rep, torch.count_nonzero(
-            mask, dim=1), batch_first=True, enforce_sorted=False)
+    def embed(self, sentence, word_split=None):
+        if self.embedder == 'roberta':
+            input = self.tokenizer(
+                sentence,
+                padding=True,
+                return_tensors='pt').to(self.device)
+            output = self.model(**input).last_hidden_state[:, 1:-1]
+            # output = self.model(**input, output_hidden_states=True).hidden_states[-4:]
+            # output = torch.sum(torch.stack(output, dim=1), dim=1)[:, 1:-1]
+            rep = []
+            lengths = []
+            for vector, info in zip(output, word_split):
+                temp = []
+                for start_idx, end_idx in info:
+                    temp.append(torch.mean(vector[start_idx:end_idx], dim=0))
+                rep.append(torch.stack(temp))
+                lengths.append(len(temp))
+            rep = pad_sequence(rep, batch_first=True)
+            lengths = torch.tensor(lengths, device=torch.device('cpu'))
+
+        elif self.embedder == 'elmo':
+            input = batch_to_ids(sentence).to(self.device)
+            output = self.model(input)
+            rep = output['elmo_representations'][0]
+            mask = output['mask'].to(torch.device('cpu'))
+            lengths = torch.count_nonzero(mask, dim=1)
+
+        packed_sequence = pack_padded_sequence(
+            rep, lengths=lengths, batch_first=True, enforce_sorted=False)
         return packed_sequence
 
     # combine the output of bidirectional LSTM, the output of foward and backward LSTM
@@ -400,7 +500,7 @@ class Tree_Net(nn.Module):
              torch.tensor(max(num_node)),
              self.hidden_dim), device=self.device)
         for idx in range(len(num_node)):
-            batch_id = torch.tensor([idx for i in range(len_unpacked[idx])])
+            batch_id = torch.tensor([idx for _ in range(len_unpacked[idx])])
             # target_id is node.self_id
             target_id = torch.squeeze(original_pos[idx][:, 0])
             # source_id is node.original_pos
@@ -462,88 +562,88 @@ class Tree_Net(nn.Module):
         return word_vector, phrase_vector, word_label, phrase_label
 
 
-class VariationalDropout(nn.Module):
-    """
-    Applies the same dropout mask across the temporal dimension
-    See https://arxiv.org/abs/1512.05287 for more details.
-    Note that this is not applied to the recurrent activations in the LSTM like the above paper.
-    Instead, it is applied to the inputs and outputs of the recurrent layer.
-    """
+# class VariationalDropout(nn.Module):
+#     """
+#     Applies the same dropout mask across the temporal dimension
+#     See https://arxiv.org/abs/1512.05287 for more details.
+#     Note that this is not applied to the recurrent activations in the LSTM like the above paper.
+#     Instead, it is applied to the inputs and outputs of the recurrent layer.
+#     """
 
-    def __init__(self, dropout: float, batch_first: Optional[bool] = False):
-        super().__init__()
-        self.dropout = dropout
-        self.batch_first = batch_first
+#     def __init__(self, dropout: float, batch_first: Optional[bool] = False):
+#         super().__init__()
+#         self.dropout = dropout
+#         self.batch_first = batch_first
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if not self.training or self.dropout <= 0.:
-            return x
+#     def forward(self, x: torch.Tensor) -> torch.Tensor:
+#         if not self.training or self.dropout <= 0.:
+#             return x
 
-        is_packed = isinstance(x, PackedSequence)
-        if is_packed:
-            x, seq_length = pad_packed_sequence(x, batch_first=True)
-        else:
-            max_batch_size = x.size(0)
+#         is_packed = isinstance(x, PackedSequence)
+#         if is_packed:
+#             x, seq_length = pad_packed_sequence(x, batch_first=True)
+#         else:
+#             max_batch_size = x.size(0)
 
-        # Drop same mask across entire sequence
-        if self.batch_first:
-            m = x.new_empty(
-                x.shape[0],
-                x.shape[1],
-                x.shape[2],
-                requires_grad=False).bernoulli_(
-                1 - self.dropout)
-        else:
-            m = x.new_empty(
-                1,
-                max_batch_size,
-                x.size(2),
-                requires_grad=False).bernoulli_(
-                1 - self.dropout)
-        x = x.masked_fill(m == 0, 0) / (1 - self.dropout)
+#         # Drop same mask across entire sequence
+#         if self.batch_first:
+#             m = x.new_empty(
+#                 x.shape[0],
+#                 x.shape[1],
+#                 x.shape[2],
+#                 requires_grad=False).bernoulli_(
+#                 1 - self.dropout)
+#         else:
+#             m = x.new_empty(
+#                 1,
+#                 max_batch_size,
+#                 x.size(2),
+#                 requires_grad=False).bernoulli_(
+#                 1 - self.dropout)
+#         x = x.masked_fill(m == 0, 0) / (1 - self.dropout)
 
-        if is_packed:
-            return pack_padded_sequence(x, seq_length, batch_first=True, enforce_sorted=False)
-        else:
-            return x
+#         if is_packed:
+#             return pack_padded_sequence(x, seq_length, batch_first=True, enforce_sorted=False)
+#         else:
+#             return x
 
 
-class LSTM(nn.LSTM):
-    def __init__(self, *args, dropouti: float = 0.,
-                 dropoutw: float = 0., dropouto: float = 0.,
-                 batch_first=True, unit_forget_bias=True, **kwargs):
-        super().__init__(*args, **kwargs, batch_first=batch_first)
-        self.unit_forget_bias = unit_forget_bias
-        self.dropoutw = dropoutw
-        self.input_drop = VariationalDropout(dropouti,
-                                             batch_first=batch_first)
-        self.output_drop = VariationalDropout(dropouto,
-                                              batch_first=batch_first)
-        self._init_weights()
+# class LSTM(nn.LSTM):
+#     def __init__(self, *args, dropouti: float = 0.,
+#                  dropoutw: float = 0., dropouto: float = 0.,
+#                  batch_first=True, unit_forget_bias=True, **kwargs):
+#         super().__init__(*args, **kwargs, batch_first=batch_first)
+#         self.unit_forget_bias = unit_forget_bias
+#         self.dropoutw = dropoutw
+#         self.input_drop = VariationalDropout(dropouti,
+#                                              batch_first=batch_first)
+#         self.output_drop = VariationalDropout(dropouto,
+#                                               batch_first=batch_first)
+#         self._init_weights()
 
-    def _init_weights(self):
-        """
-        Use orthogonal init for recurrent layers, xavier uniform for input layers
-        Bias is 0 except for forget gate
-        """
-        for name, param in self.named_parameters():
-            if "weight_hh" in name:
-                nn.init.orthogonal_(param.data)
-            elif "weight_ih" in name:
-                nn.init.xavier_uniform_(param.data)
-            elif "bias" in name and self.unit_forget_bias:
-                nn.init.zeros_(param.data)
-                param.data[self.hidden_size:2 * self.hidden_size] = 1
+#     def _init_weights(self):
+#         """
+#         Use orthogonal init for recurrent layers, xavier uniform for input layers
+#         Bias is 0 except for forget gate
+#         """
+#         for name, param in self.named_parameters():
+#             if "weight_hh" in name:
+#                 nn.init.orthogonal_(param.data)
+#             elif "weight_ih" in name:
+#                 nn.init.xavier_uniform_(param.data)
+#             elif "bias" in name and self.unit_forget_bias:
+#                 nn.init.zeros_(param.data)
+#                 param.data[self.hidden_size:2 * self.hidden_size] = 1
 
-    def _drop_weights(self):
-        for name, param in self.named_parameters():
-            if "weight_hh" in name:
-                getattr(self, name).data = \
-                    torch.nn.functional.dropout(param.data, p=self.dropoutw,
-                                                training=self.training).contiguous()
+#     def _drop_weights(self):
+#         for name, param in self.named_parameters():
+#             if "weight_hh" in name:
+#                 getattr(self, name).data = \
+#                     torch.nn.functional.dropout(param.data, p=self.dropoutw,
+#                                                 training=self.training).contiguous()
 
-    def forward(self, input, hx=None):
-        self._drop_weights()
-        input = self.input_drop(input)
-        seq, state = super().forward(input, hx=hx)
-        return self.output_drop(seq), state
+#     def forward(self, input, hx=None):
+#         self._drop_weights()
+#         input = self.input_drop(input)
+#         seq, state = super().forward(input, hx=hx)
+#         return self.output_drop(seq), state

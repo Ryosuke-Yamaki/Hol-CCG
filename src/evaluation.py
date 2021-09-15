@@ -1,4 +1,4 @@
-from utils import evaluate, load, set_random_seed, Condition_Setter
+from utils import evaluate_tree_list, load, set_random_seed, Condition_Setter
 import torch
 
 
@@ -10,9 +10,10 @@ set_random_seed(0)
 
 print('loading tree list...')
 test_tree_list = load(condition.path_to_test_tree_list)
+test_tree_list.embedder = 'roberta'
 
-tree_net = torch.load("PReLU.pth",
+tree_net = torch.load("roberta.pth",
                       map_location=device)
 tree_net.eval()
 
-evaluate(test_tree_list, tree_net)
+evaluate_tree_list(test_tree_list, tree_net)

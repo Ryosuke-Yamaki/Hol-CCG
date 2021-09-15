@@ -65,8 +65,53 @@ function load_unary_rule(path_to_unary_rule::String)
     return unary_rule
 end
 
+function load_binary_prob(path_to_binary_prob::String)
+    f = open(path_to_binary_prob)
+    info_list = readlines(f)
+    num_category = parse(Int,info_list[1])
+    binary_prob = Dict{Tuple{Int,Int,Int},Float16}()
+    for info in info_list[2:end]
+        info = split(info)
+        parent = Int(parse(Float32,info[1]))
+        left = Int(parse(Float32,info[2]))
+        right = Int(parse(Float32,info[3]))
+        prob = parse(Float32,info[4])
+        binary_prob[(parent,left,right)] = prob
+    end
+    return binary_prob
+end
+
+function load_unary_prob(path_to_unary_prob::String)
+    f = open(path_to_unary_prob)
+    info_list = readlines(f)
+    num_category = parse(Int,info_list[1])
+    unary_prob = Dict{Tuple{Int,Int},Float16}()
+    for info in info_list[2:end]
+        info = split(info)
+        parent = Int(parse(Float32,info[1]))
+        child = Int(parse(Float32,info[2]))
+        prob = parse(Float32,info[3])
+        unary_prob[(parent,child)] = prob
+    end
+    return unary_prob
+end
+
 function load_sentence_list(path_to_raw_sentence::String)
     f = open(path_to_raw_sentence)
     sentence_list = readlines(f)
     return sentence_list
+end
+
+function convert_sentence(sentence::String)
+    sentence = split(sentence)
+    for idx in 1:length(sentence)
+        if sentence[idx] == "-LRB-" || sentence[idx] == "-LCB-"
+            sentence[idx] = "("
+        elseif sentence[idx] == "-RRB-" || sentence[idx] == "-RCB-"
+            sentence[idx] = ")"
+        elseif r"\/" in sentence[idx]
+            sentence[idx] = replace(sentence[idx],r"\/"=>'/')
+        end
+    end
+    return sentence
 end
