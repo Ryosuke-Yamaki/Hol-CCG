@@ -417,7 +417,7 @@ class Tree_Net(nn.Module):
         self.bi_lstm = nn.LSTM(
             input_size=self.embedding_dim,
             hidden_size=self.hidden_dim,
-            num_layers=2,
+            num_layers=1,
             dropout=lstm_dropout,
             batch_first=True,
             bidirectional=True)
