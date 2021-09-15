@@ -1,7 +1,7 @@
 from collections import Counter
 from models import Node, Tree
 from utils import Condition_Setter, dump
-from torchtext.vocab import Vocab
+from torchtext.vocab import build_vocab_from_iterator
 
 
 def set_tree_list(PATH_TO_DATA):
@@ -49,10 +49,10 @@ for tree in test_tree_list:
     for node in tree.node_list:
         evalb_counter[node.category] += 1
 
-word_category_vocab = Vocab(word_category_counter, specials=['<unk>'])
-phrase_category_vocab = Vocab(phrase_category_counter, specials=['<unk>'])
-whole_category_vocab = Vocab(whole_category_counter, specials=['<unk>'])
-evalb_category_vocab = Vocab(evalb_counter, specials=['<unk>'])
+word_category_vocab = build_vocab_from_iterator(word_category_counter, specials=['<unk>'])
+phrase_category_vocab = build_vocab_from_iterator(phrase_category_counter, specials=['<unk>'])
+whole_category_vocab = build_vocab_from_iterator(whole_category_counter, specials=['<unk>'])
+evalb_category_vocab = build_vocab_from_iterator(evalb_counter, specials=['<unk>'])
 
 word_to_whole = []
 whole_to_phrase = []
