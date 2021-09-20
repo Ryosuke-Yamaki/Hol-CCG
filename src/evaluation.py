@@ -12,7 +12,7 @@ print('loading tree list...')
 test_tree_list = load(condition.path_to_test_tree_list)
 test_tree_list.embedder = 'bert'
 
-tree_net = torch.load("bert.pth",
+tree_net = torch.load("roberta_without_phrase.pth",
                       map_location=device)
 tree_net.eval()
 
