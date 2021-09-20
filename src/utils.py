@@ -87,7 +87,7 @@ def include_unk(content_id, unk_content_id):
 
 @torch.no_grad()
 def evaluate_tree_list(tree_list, tree_net, k_list=[1, 5]):
-    if tree_list.embedder == 'roberta':
+    if tree_list.embedder == 'bert':
         for tree in tree_list.tree_list:
             tree.set_word_split(tree_net.tokenizer)
     tree_list.set_vector(tree_net)

@@ -247,7 +247,7 @@ class Tree_List:
         self.word_split = []
         for tree in self.tree_list:
             self.num_node.append(len(tree.node_list))
-            if self.embedder == 'roberta':
+            if self.embedder == 'bert':
                 self.sentence_list.append(" ".join(tree.sentence))
             elif self.embedder == 'elmo':
                 self.sentence_list.append(tree.sentence)
@@ -265,7 +265,7 @@ class Tree_List:
                     tree.composition_info,
                     dtype=torch.long,
                     device=self.device))
-            if self.embedder == 'roberta':
+            if self.embedder == 'bert':
                 self.word_split.append(tree.set_word_split(tokenizer))
             else:
                 self.word_split.append([])
@@ -362,7 +362,7 @@ class Tree_List:
         with tqdm(total=len(self.tree_list)) as pbar:
             pbar.set_description("setting vector...")
             for tree in self.tree_list:
-                if self.embedder == 'roberta':
+                if self.embedder == 'bert':
                     sentence = [" ".join(tree.sentence)]
                     word_split = [tree.word_split]
                 else:
@@ -400,6 +400,7 @@ class Tree_Net(nn.Module):
             model,
             tokenizer=None,
             learn_embedder=False,
+            use_lstm=True,
             embedding_dim=1024,
             hidden_dim=512,
             lstm_dropout=0.5,
@@ -408,21 +409,25 @@ class Tree_Net(nn.Module):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
         self.num_phrase_cat = num_phrase_cat
-        self.embedding_dim = embedding_dim
         self.embedder = embedder
         self.model = model
         self.tokenizer = tokenizer
-        self.learn_embedder = learn_embedder
+        self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
-        self.bi_lstm = nn.LSTM(
-            input_size=self.embedding_dim,
-            hidden_size=self.hidden_dim,
-            num_layers=2,
-            dropout=lstm_dropout,
-            batch_first=True,
-            bidirectional=True)
-        self.W1 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
-        self.W2 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+        self.learn_embedder = learn_embedder
+        self.use_lstm = use_lstm
+        if self.use_lstm:
+            self.bi_lstm = nn.LSTM(
+                input_size=self.embedding_dim,
+                hidden_size=self.hidden_dim,
+                num_layers=2,
+                dropout=lstm_dropout,
+                batch_first=True,
+                bidirectional=True)
+            self.W1 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+            self.W2 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+        else:
+            self.W = nn.Linear(self.embedding_dim, self.hidden_dim, bias=True)
         self.relu = nn.LeakyReLU()
         self.classifier_dropout = nn.Dropout(p=classifier_dropout)
         self.word_classifier = nn.Linear(self.hidden_dim, self.num_word_cat)
@@ -436,7 +441,7 @@ class Tree_Net(nn.Module):
         original_pos = batch[2]
         composition_info = batch[3]
         batch_label = batch[4]
-        if self.embedder == 'roberta':
+        if self.embedder == 'bert':
             word_split = batch[5]
         elif self.embedder == 'elmo':
             word_split = None
@@ -445,9 +450,12 @@ class Tree_Net(nn.Module):
         else:
             with torch.no_grad():
                 packed_sequence = self.embed(sentence, word_split)
-        bi_lstm_output = self.bi_lstm(packed_sequence)[0]
-        combined_rep, len_unpacked = self.combine_foward_backward_rep(bi_lstm_output)
-        vector = self.set_leaf_node_vector(num_node, combined_rep, len_unpacked, original_pos)
+        if self.use_lstm:
+            bi_lstm_output = self.bi_lstm(packed_sequence)[0]
+            transformed_rep, len_unpacked = self.combine_foward_backward_rep(bi_lstm_output)
+        else:
+            transformed_rep, len_unpacked = self.transform_bert_output(packed_sequence)
+        vector = self.set_leaf_node_vector(num_node, transformed_rep, len_unpacked, original_pos)
         composed_vector = self.compose(vector, composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
             composed_vector, batch_label, original_pos)
@@ -455,8 +463,9 @@ class Tree_Net(nn.Module):
         phrase_output = self.phrase_classifier(self.classifier_dropout(phrase_vector))
         return word_output, phrase_output, word_label, phrase_label
 
+    # embedding word vector using bert or elmo
     def embed(self, sentence, word_split=None):
-        if self.embedder == 'roberta':
+        if self.embedder == 'bert':
             input = self.tokenizer(
                 sentence,
                 padding=True,
@@ -493,6 +502,12 @@ class Tree_Net(nn.Module):
         backward_rep = seq_unapcked[:, :, self.hidden_dim:]
         combined_rep = self.relu(self.W1(forward_rep) + self.W2(backward_rep))
         return combined_rep, len_unpacked
+
+    # non linear transformation of bert representation
+    def transform_bert_output(self, packed_sequence):
+        bert_rep, len_unpacked = pad_packed_sequence(packed_sequence, batch_first=True)
+        transformed_bert_rep = self.relu(self.W(bert_rep))
+        return transformed_bert_rep, len_unpacked
 
     def set_leaf_node_vector(self, num_node, combined_rep, len_unpacked, original_pos):
         vector = torch.zeros(
