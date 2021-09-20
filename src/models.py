@@ -369,10 +369,13 @@ class Tree_List:
                     sentence = [tree.sentence]
                     word_split = None
                 packed_sequence = tree_net.embed(sentence, word_split=word_split)
-                bi_lstm_output = tree_net.bi_lstm(packed_sequence)[0]
-                combined_rep, _ = tree_net.combine_foward_backward_rep(bi_lstm_output)
+                if tree_net.use_lstm:
+                    bi_lstm_output = tree_net.bi_lstm(packed_sequence)[0]
+                    transformed_rep, _ = tree_net.combine_foward_backward_rep(bi_lstm_output)
+                else:
+                    transformed_rep, _ = tree_net.transform_bert_output(packed_sequence)
                 for pos in tree.original_pos:
-                    vector_list = combined_rep[0]
+                    vector_list = transformed_rep[0]
                     node_id = pos[0]
                     original_pos = pos[1]
                     node = tree.node_list[node_id]

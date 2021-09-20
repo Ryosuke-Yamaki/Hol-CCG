@@ -4,7 +4,7 @@ import torch
 
 condition = Condition_Setter(set_embedding_type=False)
 
-device = torch.device('cuda')
+device = torch.device('cuda:1')
 
 set_random_seed(0)
 
