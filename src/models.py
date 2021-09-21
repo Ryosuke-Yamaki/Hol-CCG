@@ -188,7 +188,7 @@ class Tree:
             while True:
                 temp = tokenizer.convert_tokens_to_string(
                     tokens[tokenized_pos:tokenized_pos + length]).replace(" ", "")
-                if word == temp:
+                if word == temp or word.lower() == temp:
                     word_split.append([tokenized_pos, tokenized_pos + length])
                     tokenized_pos += length
                     break

@@ -15,5 +15,6 @@ test_tree_list.embedder = 'bert'
 tree_net = torch.load("roberta_without_phrase.pth",
                       map_location=device)
 tree_net.eval()
+print(tree_net.embedder)
 
 evaluate_tree_list(test_tree_list, tree_net)
