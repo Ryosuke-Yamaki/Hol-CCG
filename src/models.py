@@ -34,10 +34,14 @@ class Node:
                 self.right_child_node_id = int(node_info[5])
 
     def convert_content(self, content):
-        if content == "-LRB-" or content == "-LCB-":
+        if content == "-LRB-":
             content = "("
-        elif content == "-RRB-" or content == "-RCB-":
+        elif content == "-LCB-":
+            content = "{"
+        elif content == "-RRB-":
             content = ")"
+        elif content == "-RCB-":
+            content = "}"
         elif r"\/" in content:
             content = content.replace(r"\/", "/")
         return content
