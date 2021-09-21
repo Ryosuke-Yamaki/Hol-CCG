@@ -441,9 +441,7 @@ class Tree_Net(nn.Module):
         self.word_dropout = nn.Dropout(p=word_dropout)
         self.phrase_dropout = nn.Dropout(p=phrase_dropout)
         xavier_normal_(self.word_classifier.weight)
-        xavier_normal_(self.word_classifier.bias)
         xavier_normal_(self.phrase_classifier.weight)
-        xavier_normal_(self.phrase_classifier.bias)
         self.device = device
 
     # input batch as tuple of training info
