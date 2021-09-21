@@ -93,6 +93,8 @@ def evaluate_tree_list(tree_list, tree_net, k_list=[1, 5]):
     tree_list.set_vector(tree_net)
     word_classifier = tree_net.word_classifier
     phrase_classifier = tree_net.phrase_classifier
+    word_dropout = tree_net.word_dropout
+    phrase_dropout = tree_net.phrase_dropout
     for k in k_list:
         num_word = 0
         num_phrase = 0
@@ -103,13 +105,13 @@ def evaluate_tree_list(tree_list, tree_net, k_list=[1, 5]):
             for tree in tree_list.tree_list:
                 for node in tree.node_list:
                     if node.is_leaf:
-                        output = word_classifier(node.vector)
+                        output = word_classifier(word_dropout(node.vector))
                         predict = torch.topk(output, k=k)[1]
                         num_word += 1
                         if node.category_id in predict and node.category_id != 0:
                             num_correct_word += 1
                     else:
-                        output = phrase_classifier(node.vector)
+                        output = phrase_classifier(phrase_dropout(node.vector))
                         predict = torch.topk(output, k=k)[1]
                         num_phrase += 1
                         if node.category_id in predict and node.category_id != 0:
