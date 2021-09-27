@@ -1,4 +1,4 @@
-from torch.nn.init import xavier_normal_
+from torch.nn.init import xavier_uniform_, kaiming_uniform_, orthogonal_
 from tqdm import tqdm
 import numpy as np
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, pad_sequence
@@ -375,7 +375,7 @@ class Tree_List:
                     bi_lstm_output = tree_net.bi_lstm(packed_sequence)[0]
                     transformed_rep, _ = tree_net.combine_foward_backward_rep(bi_lstm_output)
                 else:
-                    transformed_rep, _ = tree_net.transform_bert_output(packed_sequence)
+                    transformed_rep, _ = tree_net.unpack_bert_output(packed_sequence)
                 for pos in tree.original_pos:
                     vector_list = transformed_rep[0]
                     node_id = pos[0]
@@ -404,13 +404,11 @@ class Tree_Net(nn.Module):
             embedder,
             model,
             tokenizer=None,
-            learn_embedder=False,
-            use_lstm=False,
+            learn_embedder=True,
+            use_lstm=True,
             embedding_dim=1024,
-            hidden_dim=1024,
-            lstm_dropout=0.5,
-            word_dropout=0.5,
-            phrase_dropout=0.5,
+            word_dropout=0.2,
+            phrase_dropout=0.2,
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
@@ -419,29 +417,42 @@ class Tree_Net(nn.Module):
         self.model = model
         self.tokenizer = tokenizer
         self.embedding_dim = embedding_dim
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = embedding_dim
         self.learn_embedder = learn_embedder
         self.use_lstm = use_lstm
+        self.base_modules = []
+        self.base_params = []
         if self.use_lstm:
             self.bi_lstm = nn.LSTM(
                 input_size=self.embedding_dim,
                 hidden_size=self.hidden_dim,
-                num_layers=2,
-                dropout=lstm_dropout,
                 batch_first=True,
                 bidirectional=True)
             self.W1 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
             self.W2 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
             self.relu = nn.LeakyReLU()
+            orthogonal_(self.bi_lstm.weight_ih_l0)
+            orthogonal_(self.bi_lstm.weight_hh_l0)
+            kaiming_uniform_(self.W1.weight)
+            kaiming_uniform_(self.W2.weight)
             self.word_classifier = nn.Linear(self.hidden_dim, self.num_word_cat)
             self.phrase_classifier = nn.Linear(self.hidden_dim, self.num_phrase_cat)
+            self.base_modules.append(self.bi_lstm)
+            self.base_modules.append(self.W1)
+            self.base_modules.append(self.W2)
         else:
             self.word_classifier = nn.Linear(self.embedding_dim, self.num_word_cat)
             self.phrase_classifier = nn.Linear(self.embedding_dim, self.num_phrase_cat)
         self.word_dropout = nn.Dropout(p=word_dropout)
         self.phrase_dropout = nn.Dropout(p=phrase_dropout)
-        xavier_normal_(self.word_classifier.weight)
-        xavier_normal_(self.phrase_classifier.weight)
+        xavier_uniform_(self.word_classifier.weight)
+        xavier_uniform_(self.phrase_classifier.weight)
+        self.base_modules.append(self.word_classifier)
+        self.base_modules.append(self.phrase_classifier)
+        for module in self.base_modules:
+            for params in module.parameters():
+                self.base_params.append(params)
+        self.base_params = iter(self.base_params)
         self.device = device
 
     # input batch as tuple of training info
