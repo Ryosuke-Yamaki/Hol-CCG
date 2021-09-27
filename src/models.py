@@ -375,7 +375,7 @@ class Tree_List:
                     bi_lstm_output = tree_net.bi_lstm(packed_sequence)[0]
                     transformed_rep, _ = tree_net.combine_foward_backward_rep(bi_lstm_output)
                 else:
-                    transformed_rep, _ = tree_net.transform_bert_output(packed_sequence)
+                    transformed_rep, _ = tree_net.unpack_bert_output(packed_sequence)
                 for pos in tree.original_pos:
                     vector_list = transformed_rep[0]
                     node_id = pos[0]
