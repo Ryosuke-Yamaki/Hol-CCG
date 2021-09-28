@@ -492,8 +492,6 @@ class Tree_Net(nn.Module):
                 padding=True,
                 return_tensors='pt').to(self.device)
             output = self.model(**input).last_hidden_state[:, 1:-1]
-            # output = self.model(**input, output_hidden_states=True).hidden_states[-4:]
-            # output = torch.sum(torch.stack(output, dim=1), dim=1)[:, 1:-1]
             rep = []
             lengths = []
             for vector, info in zip(output, word_split):
@@ -594,3 +592,34 @@ class Tree_Net(nn.Module):
         word_label = torch.squeeze(torch.vstack(word_label))
         phrase_label = torch.squeeze(torch.vstack(phrase_label))
         return word_vector, phrase_vector, word_label, phrase_label
+
+    def set_word_split(self, sentence):
+        tokenizer = self.tokenizer
+        sentence = " ".join(sentence)
+        tokens = tokenizer.tokenize(sentence)
+        tokenized_pos = 0
+        word_split = []
+        for original_pos in range(len(sentence.split())):
+            word = sentence.split()[original_pos]
+            length = 1
+            while True:
+                temp = tokenizer.convert_tokens_to_string(
+                    tokens[tokenized_pos:tokenized_pos + length]).replace(" ", "")
+                if word == temp or word.lower() == temp:
+                    word_split.append([tokenized_pos, tokenized_pos + length])
+                    tokenized_pos += length
+                    break
+                else:
+                    length += 1
+        self.word_split = word_split
+        return word_split
+
+    def cal_word_vectors(self, sentence):
+        word_split = self.set_word_split(sentence)
+        packed_sequence = self.embed([" ".join(sentence)], [word_split])
+        if self.use_lstm:
+            bi_lstm_output = self.bi_lstm(packed_sequence)[0]
+            encoded_rep, _ = self.combine_foward_backward_rep(bi_lstm_output)
+        else:
+            encoded_rep, _ = self.unpack_bert_output(packed_sequence)
+        return encoded_rep[0]
