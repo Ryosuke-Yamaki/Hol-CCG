@@ -4,13 +4,11 @@ import stanza
 import sys
 from tqdm import tqdm
 
-# args = sys.argv
-# model = args[1]
-# dev_test = args[2]
-model = 'bert-base-cased_with_LSTM.pth'
-dev_test = 'dev'
+args = sys.argv
+model = args[1]
+dev_test = args[2]
 condition = Condition_Setter(set_embedding_type=False)
-device = torch.device("cpu")
+device = torch.device("cuda")
 word_category_vocab = load(condition.path_to_word_category_vocab)
 tree_net = torch.load(model, map_location=device)
 tree_net.device = device
@@ -33,6 +31,7 @@ with tqdm(total=len(sentence_list)) as pbar:
         sentence = sentence.split()
         # make the set of super-tags
         converted_sentence = []
+        converted_sentence_ = []
         for i in range(len(sentence)):
             content = sentence[i]
             if content == "-LRB-":
@@ -43,7 +42,8 @@ with tqdm(total=len(sentence_list)) as pbar:
                 content = ")"
             elif content == "-RCB-":
                 content = "}"
-            elif r"\/" in content:
+            converted_sentence_.append(content)
+            if r"\/" in content:
                 content = content.replace(r"\/", "/")
             converted_sentence.append(content)
         word_vectors = tree_net.cal_word_vectors(converted_sentence)
@@ -63,13 +63,15 @@ with tqdm(total=len(sentence_list)) as pbar:
                     break
 
         # make the set of pos-tags for each sentence
-        tagged_sentence = pos_tagger(" ".join(sentence)).sentences[0]
+        temp = pos_tagger(" ".join(sentence)).sentences
+        tagged_sentences = pos_tagger(" ".join(sentence)).sentences
         pos_tags = []
-        for word in tagged_sentence.words:
-            pos_tags.append(word.xpos)
+        for tagged_sentence in tagged_sentences:
+            for word in tagged_sentence.words:
+                pos_tags.append(word.xpos)
 
         # concat word|pos|super
-        for word, pos, super in zip(sentence, pos_tags, super_tags):
+        for word, pos, super in zip(converted_sentence_, pos_tags, super_tags):
             temp = []
             temp.append(word)
             temp.append(pos)
@@ -77,10 +79,11 @@ with tqdm(total=len(sentence_list)) as pbar:
             for info in super:
                 temp.append(info[0])
                 temp.append(str(info[1]))
-            parser_input.append('\t'.join(temp))
+            parser_input.append('\t'.join(temp) + '\n')
         parser_input.append('\n')
         pbar.update(1)
 
-f = open("parser_input.txt", "w")
+output_file = model.replace('.pth', '') + dev_test + '.stagged'
+f = open(output_file, "w")
 f.writelines(parser_input)
 f.close()
