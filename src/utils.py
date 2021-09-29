@@ -362,6 +362,9 @@ class Condition_Setter:
         self.path_to_color_list = PATH_TO_DIR + \
             "Hol-CCG/result/data/visualize/color_list.pickle"
 
+        # path to trained_model
+        self.path_to_model = PATH_TO_DIR + "Hol-CCG/result/data/model/"
+
         # ******************** the path depend on the embedding type********************
         if set_embedding_type:
             # path_to_weight_matrix
@@ -373,12 +376,12 @@ class Condition_Setter:
                     "Hol-CCG/result/data/weight_matrix/{}_{}d_weight_with_regression.csv".format(
                         self.embedding_type, self.embedding_dim)
 
-            # path_to_model
-            self.path_to_model = PATH_TO_DIR + \
+            # path_to_glove_model
+            self.path_to_glove_model = PATH_TO_DIR + \
                 "Hol-CCG/result/data/model/{}_{}d_model.pth".format(
                     self.embedding_type, self.embedding_dim)
             if self.embedding_type == "GloVe":
-                self.path_to_model_with_regression = PATH_TO_DIR + \
+                self.path_to_glove_model_with_regression = PATH_TO_DIR + \
                     "Hol-CCG/result/data/model/{}_{}d_model_with_regression.pth".format(
                         self.embedding_type, self.embedding_dim)
 

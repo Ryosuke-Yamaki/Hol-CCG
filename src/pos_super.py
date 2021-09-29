@@ -10,7 +10,7 @@ dev_test = args[2]
 condition = Condition_Setter(set_embedding_type=False)
 device = torch.device("cuda")
 word_category_vocab = load(condition.path_to_word_category_vocab)
-tree_net = torch.load(model, map_location=device)
+tree_net = torch.load(condition.path_to_model + model, map_location=device)
 tree_net.device = device
 tree_net.eval()
 word_classifier = tree_net.word_classifier
@@ -22,11 +22,11 @@ elif dev_test == 'test':
     path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
 with open(path_to_sentence, "r") as f:
     sentence_list = f.readlines()
-beta = 1e-3
+beta = 1e-4
 
 parser_input = []
 with tqdm(total=len(sentence_list)) as pbar:
-    pbar.set_description("setting up parser input")
+    pbar.set_description("supertagging")
     for sentence in sentence_list:
         sentence = sentence.split()
         # make the set of super-tags
@@ -50,12 +50,12 @@ with tqdm(total=len(sentence_list)) as pbar:
         word_outputs = word_classifier(word_vectors)
         word_cat_prob = softmax(word_outputs)
         predict_cat_id = torch.argsort(word_cat_prob, descending=True)
+        max_prob, _ = torch.max(word_cat_prob, dim=1)
         super_tags = []
         for idx in range(word_cat_prob.shape[0]):
             temp = []
-            max_prob = torch.max(word_cat_prob)
             for cat_id in predict_cat_id[idx]:
-                if word_cat_prob[idx, cat_id] > max_prob * beta:
+                if word_cat_prob[idx, cat_id] > max_prob[idx] * beta:
                     temp.append([word_category_vocab.itos[cat_id],
                                  word_cat_prob[idx, cat_id].item()])
                 else:
@@ -70,7 +70,6 @@ with tqdm(total=len(sentence_list)) as pbar:
             for word in tagged_sentence.words:
                 pos_tags.append(word.xpos)
 
-        # concat word|pos|super
         for word, pos, super in zip(converted_sentence_, pos_tags, super_tags):
             temp = []
             temp.append(word)
@@ -83,7 +82,8 @@ with tqdm(total=len(sentence_list)) as pbar:
         parser_input.append('\n')
         pbar.update(1)
 
-output_file = model.replace('.pth', '') + dev_test + '.stagged'
+output_file = condition.PATH_TO_DIR + "java-candc/data/auto-stagged/" + \
+    model.replace('.pth', '_') + dev_test + '.stagged'
 f = open(output_file, "w")
 f.writelines(parser_input)
 f.close()
