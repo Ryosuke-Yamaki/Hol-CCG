@@ -11,13 +11,15 @@ set_random_seed(0)
 print('loading tree list...')
 test_tree_list = load(condition.path_to_test_tree_list)
 test_tree_list.embedder = 'bert'
-dev_tree_list = load(condition.path_to_test_tree_list)
+dev_tree_list = load(condition.path_to_dev_tree_list)
 dev_tree_list.embedder = 'bert'
 
 model = "roberta-large_with_LSTM_phrase.pth"
 tree_net = torch.load(condition.path_to_model + model,
                       map_location=device)
+tree_net.device = device
 tree_net.eval()
 
+dev_tree_list.tree_list = dev_tree_list.tree_list
 evaluate_beta(dev_tree_list, tree_net)
-# evaluate_tree_list(test_tree_list, tree_net)
+# evaluate_tree_list(dev_tree_list, tree_net)

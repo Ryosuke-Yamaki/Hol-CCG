@@ -193,18 +193,18 @@ def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
                 if node.is_leaf:
                     output = softmax(word_classifier(node.vector))
                     max_output = torch.max(output)
-                    predict = list(range(len(output)))[output > max_output * beta]
+                    predict = torch.nonzero(output > max_output * beta).view(-1)
                     predict = predict[:alpha]
                     num_word += 1
-                    num_predicted_word += len(predict)
+                    num_predicted_word += predict.shape[0]
                     if node.category_id in predict and node.category_id != 0:
                         num_correct_word += 1
                 else:
                     output = softmax(phrase_classifier(node.vector))
                     max_output = torch.max(output)
-                    predict = list(range(len(output)))[output > max_output * beta]
+                    predict = torch.nonzero(output > max_output * beta).view(-1)
                     num_phrase += 1
-                    num_predicted_phrase += len(predict)
+                    num_predicted_phrase += predict.shape[0]
                     if node.category_id in predict and node.category_id != 0:
                         num_correct_phrase += 1
             pbar.update(1)
