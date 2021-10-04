@@ -11,5 +11,5 @@ else
 fi
 python pos_super.py ${model} ${dev_test}
 cd ~/java-candc
-java -Xmx6g -classpath bin ParserBeam data/auto-stagged/${candc_target}.stagged  data/output/${candc_target}.out data/output/${candc_target}.log model/weights
+java -Xmx6g -classpath bin ParserBeam data/auto-stagged/${candc_target}.stagged  data/output/${candc_target}.out data/output/${candc_target}.log model/weights params
 python2 scripts/evaluate_new data/gold/${gold}.stagged data/gold/${gold}.ccgbank_deps data/output/${candc_target}.out|tee data/eval/${candc_target}.eval

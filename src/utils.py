@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch import conj
 from torch.fft import fft, ifft
-from torch.nn.functional import normalize
+from torch.nn.functional import normalize, softmax
 
 
 def circular_correlation(a, b):
@@ -173,7 +173,10 @@ def evaluate_batch_list(batch_list, tree_net, criteria=nn.CrossEntropyLoss()):
 
 
 @torch.no_grad()
-def evaluate_beta(tree_list, tree_net, beta):
+def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
+    if tree_list.embedder == 'bert':
+        for tree in tree_list.tree_list:
+            tree.set_word_split(tree_net.tokenizer)
     tree_list.set_vector(tree_net)
     word_classifier = tree_net.word_classifier
     phrase_classifier = tree_net.phrase_classifier
@@ -181,30 +184,38 @@ def evaluate_beta(tree_list, tree_net, beta):
     num_phrase = 0
     num_correct_word = 0
     num_correct_phrase = 0
+    num_predicted_word = 0
+    num_predicted_phrase = 0
     with tqdm(total=len(tree_list.tree_list)) as pbar:
         pbar.set_description("evaluating...")
         for tree in tree_list.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
-                    output = word_classifier(node.vector)
+                    output = softmax(word_classifier(node.vector))
                     max_output = torch.max(output)
                     predict = list(range(len(output)))[output > max_output * beta]
+                    predict = predict[:alpha]
                     num_word += 1
+                    num_predicted_word += len(predict)
                     if node.category_id in predict and node.category_id != 0:
                         num_correct_word += 1
                 else:
-                    output = phrase_classifier(node.vector)
+                    output = softmax(phrase_classifier(node.vector))
                     max_output = torch.max(output)
                     predict = list(range(len(output)))[output > max_output * beta]
                     num_phrase += 1
+                    num_predicted_phrase += len(predict)
                     if node.category_id in predict and node.category_id != 0:
                         num_correct_phrase += 1
             pbar.update(1)
     print('-' * 50)
-    print('overall top-{}: {}'.format(beta, (num_correct_word +
-                                             num_correct_phrase) / (num_word + num_phrase)))
-    print('word top-{}: {}'.format(beta, num_correct_word / num_word))
-    print('phrase top-{}: {}'.format(beta, num_correct_phrase / num_phrase))
+    print('beta={}'.format(beta))
+    print('overall: {}'.format((num_correct_word +
+                                num_correct_phrase) / (num_word + num_phrase)))
+    print('word: {}'.format(num_correct_word / num_word))
+    print('cat per word: {}'.format(num_predicted_word / num_word))
+    print('phrase: {}'.format(num_correct_phrase / num_phrase))
+    print('cat per phrase: {}'.format(num_predicted_phrase / num_phrase))
 
 
 class History:

@@ -22,7 +22,7 @@ elif dev_test == 'test':
     path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
 with open(path_to_sentence, "r") as f:
     sentence_list = f.readlines()
-beta = 1e-4
+beta = 1e-5
 
 parser_input = []
 with tqdm(total=len(sentence_list)) as pbar:
