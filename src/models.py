@@ -1,3 +1,4 @@
+import random
 from torch.nn.init import xavier_uniform_, kaiming_uniform_, orthogonal_
 from tqdm import tqdm
 import numpy as np
@@ -79,6 +80,7 @@ class Tree:
 
     def set_original_position_of_leaf_node(self):
         self.original_pos = []
+        self.spans = []
         node = self.node_list[-1]
         if node.is_leaf:
             node.original_pos = 0
@@ -96,9 +98,9 @@ class Tree:
                 if child_node.is_leaf:
                     child_node.original_pos = child_node.start_idx
                     self.original_pos.append([child_node.self_id, child_node.original_pos])
-
             else:
                 parent_node = self.node_list[info[1]]
+                self.spans.append([parent_node.start_idx, parent_node.end_idx])
                 left_child_node = self.node_list[info[2]]
                 right_child_node = self.node_list[info[3]]
                 left_child_node.start_idx = parent_node.start_idx
@@ -178,6 +180,55 @@ class Tree:
                              right_child_node.end_idx + 1,
                              whole_category_vocab[right_child_node.category] + 1))
         return correct_node_list
+
+    # generate the random binary tree in order to obtain negative training sample for span scoring
+    def generate_random_tree(self):
+        node_id = 0
+        node = [0, len(self.sentence), node_id]
+        self.random_nodes = [node]
+        node_id += 1
+        self.random_composition_info = []
+        self.random_original_pos = []
+        if len(self.sentence) > 1:
+            wait_list = [node]
+        else:
+            wait_list = []
+            self.random_original_pos = [[0, 0]]
+
+        while True:
+            if wait_list == []:
+                break
+            # information about parent node which is split into two child nodes
+            parent_node = wait_list.pop(0)
+            start_idx = parent_node[0]
+            end_idx = parent_node[1]
+            parent_id = parent_node[2]
+
+            # decide split point
+            split_idx = random.randint(start_idx + 1, end_idx - 1)
+
+            # define left child node
+            left_node = [start_idx, split_idx, node_id]
+            self.random_nodes.append(left_node)
+            # when left node is not leaf node
+            if left_node[1] - left_node[0] > 1:
+                wait_list.append(left_node)
+            # when left node is leaf node
+            else:
+                self.random_original_pos.append([node_id, split_idx])
+            node_id += 1
+
+            # define right child node
+            right_node = [split_idx, end_idx, node_id]
+            self.random_nodes.append(right_node)
+            # when right node is not leaf node
+            if right_node[1] - right_node[0] > 1:
+                wait_list.append(right_node)
+            else:
+                self.random_original_pos.append([node_id, end_idx])
+            node_id += 1
+
+            self.random_composition_info.append([2, parent_id, node_id - 2, node_id - 1])
 
     def set_word_split(self, tokenizer):
         sentence = " ".join(self.sentence)
