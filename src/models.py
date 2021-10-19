@@ -183,17 +183,24 @@ class Tree:
 
     # generate the random binary tree in order to obtain negative training sample for span scoring
     def generate_random_tree(self):
+        random_composition_info = []
+        random_original_pos = []
+        # list of span's id which do not exist in gold tree
+        negative_node_id = []
+
         node_id = 0
         node = [0, len(self.sentence), node_id]
-        self.random_nodes = [node]
-        node_id += 1
-        self.random_composition_info = []
-        self.random_original_pos = []
+        node_list = [node]
+
         if len(self.sentence) > 1:
+            if node[:2] not in self.spans:
+                negative_node_id.append(node_id)
             wait_list = [node]
         else:
             wait_list = []
-            self.random_original_pos = [[0, 0]]
+            random_original_pos = [[0, 0]]
+
+        node_id += 1
 
         while True:
             if wait_list == []:
@@ -209,26 +216,31 @@ class Tree:
 
             # define left child node
             left_node = [start_idx, split_idx, node_id]
-            self.random_nodes.append(left_node)
+            node_list.append(left_node)
             # when left node is not leaf node
             if left_node[1] - left_node[0] > 1:
+                if left_node[:2] not in self.spans:
+                    negative_node_id.append(node_id)
                 wait_list.append(left_node)
             # when left node is leaf node
             else:
-                self.random_original_pos.append([node_id, split_idx])
+                random_original_pos.append([node_id, split_idx])
             node_id += 1
 
             # define right child node
             right_node = [split_idx, end_idx, node_id]
-            self.random_nodes.append(right_node)
+            node_list.append(right_node)
             # when right node is not leaf node
             if right_node[1] - right_node[0] > 1:
+                if right_node[:2] not in self.spans:
+                    negative_node_id.append(node_id)
                 wait_list.append(right_node)
             else:
-                self.random_original_pos.append([node_id, end_idx])
+                random_original_pos.append([node_id, end_idx])
             node_id += 1
 
-            self.random_composition_info.append([2, parent_id, node_id - 2, node_id - 1])
+            random_composition_info.append([2, parent_id, node_id - 2, node_id - 1])
+        return len(node_list), random_composition_info, random_original_pos, negative_node_id
 
     def set_word_split(self, tokenizer):
         sentence = " ".join(self.sentence)
@@ -342,6 +354,35 @@ class Tree_List:
         batch_word_split = []
         num_tree = len(self.tree_list)
 
+        # the series of "random" are information about randomly generated tree for
+        # the scoring of span
+        random_num_node = []
+        random_original_pos = []
+        random_composition_info = []
+        random_negative_node_id = []
+        batch_random_num_node = []
+        batch_random_composition_info = []
+        batch_random_original_pos = []
+        batch_random_negative_node_id = []
+        # generate random binary tree for all sentence in training data each epoch
+        for tree in self.tree_list:
+            random_tree_info = tree.generate_random_tree()
+            random_num_node.append(random_tree_info[0])
+            random_composition_info.append(
+                torch.tensor(
+                    random_tree_info[1],
+                    dtype=torch.long,
+                    device=self.device))
+            random_original_pos.append(
+                torch.tensor(
+                    random_tree_info[2],
+                    dtype=torch.long,
+                    device=self.device))
+            random_negative_node_id.append(
+                torch.tensor(
+                    random_tree_info[3],
+                    dtype=torch.long,
+                    device=self.device))
         if BATCH_SIZE is None:
             batch_tree_id_list = list(range(num_tree))
             batch_num_node.append(
@@ -354,6 +395,12 @@ class Tree_List:
                 *batch_tree_id_list)(self.composition_info)))
             batch_word_split.append(list(itemgetter(
                 *batch_tree_id_list)(self.word_split)))
+            batch_random_num_node.append(list(itemgetter(*batch_tree_id_list)(random_num_node)))
+            batch_random_composition_info.append(
+                list(itemgetter(*batch_tree_id_list)(random_composition_info)))
+            batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(random_original_pos)))
+            batch_random_negative_node_id.append(
+                list(itemgetter(*batch_tree_id_list)(random_negative_node_id)))
         else:
             # shuffle the tree_id in tree_list
             shuffled_tree_id = self.make_shuffled_tree_id()
@@ -374,6 +421,13 @@ class Tree_List:
                     *batch_tree_id_list)(self.composition_info)))
                 batch_word_split.append(list(itemgetter(
                     *batch_tree_id_list)(self.word_split)))
+                batch_random_num_node.append(list(itemgetter(*batch_tree_id_list)(random_num_node)))
+                batch_random_composition_info.append(
+                    list(itemgetter(*batch_tree_id_list)(random_composition_info)))
+                batch_original_pos.append(
+                    list(itemgetter(*batch_tree_id_list)(random_original_pos)))
+                batch_random_negative_node_id.append(
+                    list(itemgetter(*batch_tree_id_list)(random_negative_node_id)))
             # the part cannot devided by BATCH_SIZE
             batch_num_node.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.num_node)))
@@ -387,8 +441,16 @@ class Tree_List:
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.composition_info)))
             batch_word_split.append(
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.word_split)))
+            batch_random_num_node.append(
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_num_node)))
+            batch_random_composition_info.append(
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_composition_info)))
+            batch_original_pos.append(
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_original_pos)))
+            batch_random_negative_node_id.append(
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_negative_node_id)))
 
-        for idx in range(len(batch_num_node)):
+        for idx in range(len(batch_composition_info)):
             composition_list = batch_composition_info[idx]
             # set mask for composition info in each batch
             max_num_composition = max([len(i) for i in composition_list])
@@ -402,6 +464,20 @@ class Tree_List:
             batch_composition_info[idx] = torch.stack(
                 [torch.cat((i, j)) for (i, j) in zip(composition_list, dummy_compositin_info)])
 
+        for idx in range(len(batch_random_composition_info)):
+            composition_list = batch_random_composition_info[idx]
+            # set mask for composition info in each batch
+            max_num_composition = max([len(i) for i in composition_list])
+            # make dummy compoisition info to fill blank in batch
+            dummy_compositin_info = [
+                torch.ones(
+                    max_num_composition - len(i),
+                    4,
+                    dtype=torch.long,
+                    device=self.device) * -1 for i in composition_list]
+            batch_random_composition_info[idx] = torch.stack(
+                [torch.cat((i, j)) for (i, j) in zip(composition_list, dummy_compositin_info)])
+
         # return zipped batch information, when training, extract each batch from zip itteration
         return list(zip(
             batch_num_node,
@@ -409,7 +485,11 @@ class Tree_List:
             batch_original_pos,
             batch_composition_info,
             batch_label_list,
-            batch_word_split))
+            batch_word_split,
+            batch_random_num_node,
+            batch_random_composition_info,
+            batch_original_pos,
+            batch_random_negative_node_id))
 
     def set_vector(self, tree_net):
         with tqdm(total=len(self.tree_list)) as pbar:
