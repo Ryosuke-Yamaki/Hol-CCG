@@ -1,4 +1,3 @@
-from torch.nn.functional import softmax, sigmoid
 import torch.nn as nn
 from tqdm import tqdm
 import os
@@ -22,12 +21,14 @@ def circular_correlation(a, b, k=1000):
     return c
 
 
-def single_circular_correlation(a, b):
+def single_circular_correlation(a, b, k=1000):
     a_ = conj(fft(a))
     b_ = fft(b)
     c_ = a_ * b_
     c = ifft(c_).real
-    return normalize(c, dim=-1)
+    if torch.norm(c) > k:
+        c = normalize(c, dim=-1) * k
+    return c
 
 
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
@@ -89,44 +90,40 @@ def include_unk(content_id, unk_content_id):
 
 
 @torch.no_grad()
-def evaluate_tree_list(tree_list, tree_net, k_list=[1, 5]):
+def evaluate_tree_list(tree_list, tree_net):
     if tree_list.embedder == 'bert':
         for tree in tree_list.tree_list:
             tree.set_word_split(tree_net.tokenizer)
     tree_list.set_vector(tree_net)
-    word_classifier = tree_net.word_classifier
-    phrase_classifier = tree_net.phrase_classifier
-    for k in k_list:
-        num_word = 0
-        num_phrase = 0
-        num_correct_word = 0
-        num_correct_phrase = 0
-        with tqdm(total=len(tree_list.tree_list)) as pbar:
-            pbar.set_description("evaluating...")
-            for tree in tree_list.tree_list:
-                for node in tree.node_list:
-                    if node.is_leaf:
-                        output = word_classifier(node.vector)
-                        predict = torch.topk(output, k=k)[1]
-                        num_word += 1
-                        if node.category_id in predict and node.category_id != 0:
-                            num_correct_word += 1
-                    else:
-                        output = phrase_classifier(node.vector)
-                        predict = torch.topk(output, k=k)[1]
-                        num_phrase += 1
-                        if node.category_id in predict and node.category_id != 0:
-                            num_correct_phrase += 1
-                pbar.update(1)
-        total_acc = (num_correct_word + num_correct_phrase) / (num_word + num_phrase)
-        word_acc = num_correct_word / num_word
-        phrase_acc = num_correct_phrase / num_phrase
-        print('-' * 50)
-        print('overall top-{}: {}'.format(k, total_acc))
-        print('word top-{}: {}'.format(k, word_acc))
-        print('phrase top-{}: {}'.format(k, phrase_acc))
-        if len(k_list) == 1:
-            return total_acc, word_acc, phrase_acc
+    word_ff = tree_net.word_ff
+    phrase_ff = tree_net.phrase_ff
+    num_word = 0
+    num_phrase = 0
+    num_correct_word = 0
+    num_correct_phrase = 0
+    with tqdm(total=len(tree_list.tree_list)) as pbar:
+        pbar.set_description("evaluating...")
+        for tree in tree_list.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    output = word_ff(node.vector)
+                    predict = torch.topk(output, k=1)[1]
+                    num_word += 1
+                    if node.category_id in predict and node.category_id != 0:
+                        num_correct_word += 1
+                else:
+                    output = phrase_ff(node.vector)
+                    predict = torch.topk(output, k=1)[1]
+                    num_phrase += 1
+                    if node.category_id in predict and node.category_id != 0:
+                        num_correct_phrase += 1
+            pbar.update(1)
+    word_acc = num_correct_word / num_word
+    phrase_acc = num_correct_phrase / num_phrase
+    print('-' * 50)
+    print('word acc: {}'.format(word_acc))
+    print('phrase acc: {}'.format(phrase_acc))
+    return word_acc, phrase_acc
 
 
 @torch.no_grad()
@@ -149,7 +146,7 @@ def evaluate_batch_list(
         for batch in batch_list:
             word_output, phrase_output, span_output, word_label, phrase_label, span_label = tree_net(
                 batch)
-            span_output = sigmoid(span_output)
+            span_output = torch.sigmoid(span_output)
 
             num_word += word_output.shape[0]
             num_phrase += phrase_output.shape[0]
