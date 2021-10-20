@@ -11,12 +11,14 @@ from torch.fft import fft, ifft
 from torch.nn.functional import normalize, softmax
 
 
-def circular_correlation(a, b):
+def circular_correlation(a, b, k=1000):
     a_ = conj(fft(a))
     b_ = fft(b)
     c_ = a_ * b_
     c = ifft(c_).real
-    return normalize(c, dim=1)
+    idx = torch.norm(c, dim=1) > k
+    c[idx] = normalize(c[idx], dim=1) * k
+    return c
 
 
 def single_circular_correlation(a, b):

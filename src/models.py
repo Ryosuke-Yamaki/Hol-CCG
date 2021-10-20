@@ -743,7 +743,7 @@ class Tree_Net(nn.Module):
 
     def extract_span_vector(self, phrase_vector, random_composed_vector, random_negative_node_id):
         # the label for gold spans
-        positive_label = torch.ones(phrase_vector.shape[0], dtype=torch.long, device=self.device)
+        positive_label = torch.ones(phrase_vector.shape[0], dtype=torch.float, device=self.device)
 
         # the list to contain vectors for negative spans
         negative_span_vector = []
@@ -758,11 +758,11 @@ class Tree_Net(nn.Module):
         negative_span_vector = torch.cat(negative_span_vector)
         negative_label = torch.zeros(
             negative_span_vector.shape[0],
-            dtype=torch.long,
+            dtype=torch.float,
             device=self.device)
 
         span_vector = torch.cat([phrase_vector, negative_span_vector])
-        span_label = torch.cat([positive_label, negative_label])
+        span_label = torch.cat([positive_label, negative_label]).view(-1, 1)
 
         return span_vector, span_label
 
