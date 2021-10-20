@@ -177,11 +177,13 @@ def evaluate_batch_list(
     word_loss = word_loss / len(batch_list)
     phrase_loss = phrase_loss / len(batch_list)
     span_loss = span_loss / len(batch_list)
+    total_loss = word_loss + phrase_loss + span_loss
     word_acc = num_correct_word / num_word
     phrase_acc = num_correct_phrase / num_phrase
     span_acc = num_correct_span / num_span
 
     stat = {
+        "total_loss": total_loss,
         "word_acc": word_acc,
         "phrase_acc": phrase_acc,
         "span_acc": span_acc,
