@@ -224,7 +224,7 @@ class Tree:
                 wait_list.append(left_node)
             # when left node is leaf node
             else:
-                random_original_pos.append([node_id, split_idx])
+                random_original_pos.append([node_id, split_idx - 1])
             node_id += 1
 
             # define right child node
@@ -236,10 +236,11 @@ class Tree:
                     negative_node_id.append(node_id)
                 wait_list.append(right_node)
             else:
-                random_original_pos.append([node_id, end_idx])
+                random_original_pos.append([node_id, end_idx - 1])
             node_id += 1
 
             random_composition_info.append([2, parent_id, node_id - 2, node_id - 1])
+        random_composition_info.reverse()
         return len(node_list), random_composition_info, random_original_pos, negative_node_id
 
     def set_word_split(self, tokenizer):
@@ -398,7 +399,8 @@ class Tree_List:
             batch_random_num_node.append(list(itemgetter(*batch_tree_id_list)(random_num_node)))
             batch_random_composition_info.append(
                 list(itemgetter(*batch_tree_id_list)(random_composition_info)))
-            batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(random_original_pos)))
+            batch_random_original_pos.append(
+                list(itemgetter(*batch_tree_id_list)(random_original_pos)))
             batch_random_negative_node_id.append(
                 list(itemgetter(*batch_tree_id_list)(random_negative_node_id)))
         else:
@@ -424,7 +426,7 @@ class Tree_List:
                 batch_random_num_node.append(list(itemgetter(*batch_tree_id_list)(random_num_node)))
                 batch_random_composition_info.append(
                     list(itemgetter(*batch_tree_id_list)(random_composition_info)))
-                batch_original_pos.append(
+                batch_random_original_pos.append(
                     list(itemgetter(*batch_tree_id_list)(random_original_pos)))
                 batch_random_negative_node_id.append(
                     list(itemgetter(*batch_tree_id_list)(random_negative_node_id)))
@@ -445,7 +447,7 @@ class Tree_List:
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_num_node)))
             batch_random_composition_info.append(
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_composition_info)))
-            batch_original_pos.append(
+            batch_random_original_pos.append(
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_original_pos)))
             batch_random_negative_node_id.append(
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_negative_node_id)))
@@ -488,7 +490,7 @@ class Tree_List:
             batch_word_split,
             batch_random_num_node,
             batch_random_composition_info,
-            batch_original_pos,
+            batch_random_original_pos,
             batch_random_negative_node_id))
 
     def set_vector(self, tree_net):
@@ -746,14 +748,18 @@ class Tree_Net(nn.Module):
         # the list to contain vectors for negative spans
         negative_span_vector = []
         for i in range(random_composed_vector.shape[0]):
-            nagative_span_idx = random_negative_node_id[i]
-            negative_span_vector.append(
-                torch.index_select(
-                    random_composed_vector[i],
-                    0,
-                    nagative_span_idx))
+            negative_span_idx = random_negative_node_id[i]
+            if negative_span_idx.shape[0] > 0:
+                negative_span_vector.append(
+                    torch.index_select(
+                        random_composed_vector[i],
+                        0,
+                        negative_span_idx))
         negative_span_vector = torch.cat(negative_span_vector)
-        negative_label = torch.zeros(negative_span_vector[0], dtype=torch.long, device=self.device)
+        negative_label = torch.zeros(
+            negative_span_vector.shape[0],
+            dtype=torch.long,
+            device=self.device)
 
         span_vector = torch.cat([phrase_vector, negative_span_vector])
         span_label = torch.cat([positive_label, negative_label])
@@ -794,6 +800,7 @@ class Tree_Net(nn.Module):
 
 class FeedForward(nn.Module):
     def __init__(self, input_dim, output_dim, dropout=0.2):
+        super(FeedForward, self).__init__()
         self.linear1 = nn.Linear(input_dim, input_dim)
         self.layer_norm = nn.LayerNorm(input_dim)
         self.relu = nn.ReLU()
