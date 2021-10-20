@@ -538,8 +538,7 @@ class Tree_Net(nn.Module):
             learn_embedder=True,
             use_lstm=True,
             embedding_dim=1024,
-            word_dropout=0.2,
-            phrase_dropout=0.2,
+            ff_dropout=0.2,
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
@@ -551,8 +550,10 @@ class Tree_Net(nn.Module):
         self.hidden_dim = embedding_dim
         self.learn_embedder = learn_embedder
         self.use_lstm = use_lstm
+        # the list which to record the modules to set separated lr
         self.base_modules = []
         self.base_params = []
+
         if self.use_lstm:
             self.bi_lstm = nn.LSTM(
                 input_size=self.embedding_dim,
@@ -566,20 +567,16 @@ class Tree_Net(nn.Module):
             orthogonal_(self.bi_lstm.weight_hh_l0)
             kaiming_uniform_(self.W1.weight)
             kaiming_uniform_(self.W2.weight)
-            self.word_classifier = nn.Linear(self.hidden_dim, self.num_word_cat)
-            self.phrase_classifier = nn.Linear(self.hidden_dim, self.num_phrase_cat)
             self.base_modules.append(self.bi_lstm)
             self.base_modules.append(self.W1)
             self.base_modules.append(self.W2)
-        else:
-            self.word_classifier = nn.Linear(self.embedding_dim, self.num_word_cat)
-            self.phrase_classifier = nn.Linear(self.embedding_dim, self.num_phrase_cat)
-        self.word_dropout = nn.Dropout(p=word_dropout)
-        self.phrase_dropout = nn.Dropout(p=phrase_dropout)
-        xavier_uniform_(self.word_classifier.weight)
-        xavier_uniform_(self.phrase_classifier.weight)
-        self.base_modules.append(self.word_classifier)
-        self.base_modules.append(self.phrase_classifier)
+
+        self.word_ff = FeedForward(self.embedding_dim, self.num_word_cat, dropout=ff_dropout)
+        self.phrase_ff = FeedForward(self.embedding_dim, self.num_phrase_cat, dropout=ff_dropout)
+        self.span_ff = FeedForward(self.embedding_dim, 1, dropout=ff_dropout)
+        self.base_modules.append(self.word_ff)
+        self.base_modules.append(self.phrase_ff)
+        self.base_modules.append(self.span_ff)
         for module in self.base_modules:
             for params in module.parameters():
                 self.base_params.append(params)
@@ -597,23 +594,41 @@ class Tree_Net(nn.Module):
             word_split = batch[5]
         elif self.embedder == 'elmo':
             word_split = None
+        random_num_node = batch[6]
+        random_composition_info = batch[7]
+        random_original_pos = batch[8]
+        random_negative_node_id = batch[9]
+
         if self.learn_embedder:
             packed_sequence = self.embed(sentence, word_split)
+        # when not train word embedder, the computation of gradient is not needed
         else:
             with torch.no_grad():
                 packed_sequence = self.embed(sentence, word_split)
+        # when se LSTM after contextualized word embedding, feed the output into LSTM
         if self.use_lstm:
             bi_lstm_output = self.bi_lstm(packed_sequence)[0]
             encoded_rep, len_unpacked = self.combine_foward_backward_rep(bi_lstm_output)
         else:
             encoded_rep, len_unpacked = self.unpack_bert_output(packed_sequence)
+
+        # compose word vectors and fed them into FFNN
         vector = self.set_leaf_node_vector(num_node, encoded_rep, len_unpacked, original_pos)
         composed_vector = self.compose(vector, composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
             composed_vector, batch_label, original_pos)
-        word_output = self.word_classifier(self.word_dropout(word_vector))
-        phrase_output = self.phrase_classifier(self.phrase_dropout(phrase_vector))
-        return word_output, phrase_output, word_label, phrase_label
+
+        # compose word vectors for randomly generated trees
+        random_vector = self.set_leaf_node_vector(
+            random_num_node, encoded_rep, len_unpacked, random_original_pos)
+        random_composed_vector = self.compose(random_vector, random_composition_info)
+        span_vector, span_label = self.extract_span_vector(
+            phrase_vector, random_composed_vector, random_negative_node_id)
+
+        word_output = self.word_ff(word_vector)
+        phrase_output = self.phrase_ff(phrase_vector)
+        span_output = self.span_ff(span_vector)
+        return word_output, phrase_output, span_output, word_label, phrase_label, span_label
 
     # embedding word vector using bert or elmo
     def embed(self, sentence, word_split=None):
@@ -724,6 +739,27 @@ class Tree_Net(nn.Module):
         phrase_label = torch.squeeze(torch.vstack(phrase_label))
         return word_vector, phrase_vector, word_label, phrase_label
 
+    def extract_span_vector(self, phrase_vector, random_composed_vector, random_negative_node_id):
+        # the label for gold spans
+        positive_label = torch.ones(phrase_vector.shape[0], dtype=torch.long, device=self.device)
+
+        # the list to contain vectors for negative spans
+        negative_span_vector = []
+        for i in range(random_composed_vector.shape[0]):
+            nagative_span_idx = random_negative_node_id[i]
+            negative_span_vector.append(
+                torch.index_select(
+                    random_composed_vector[i],
+                    0,
+                    nagative_span_idx))
+        negative_span_vector = torch.cat(negative_span_vector)
+        negative_label = torch.zeros(negative_span_vector[0], dtype=torch.long, device=self.device)
+
+        span_vector = torch.cat([phrase_vector, negative_span_vector])
+        span_label = torch.cat([positive_label, negative_label])
+
+        return span_vector, span_label
+
     def set_word_split(self, sentence):
         tokenizer = self.tokenizer
         sentence = " ".join(sentence)
@@ -754,3 +790,18 @@ class Tree_Net(nn.Module):
         else:
             encoded_rep, _ = self.unpack_bert_output(packed_sequence)
         return encoded_rep[0]
+
+
+class FeedForward(nn.Module):
+    def __init__(self, input_dim, output_dim, dropout=0.2):
+        self.linear1 = nn.Linear(input_dim, input_dim)
+        self.layer_norm = nn.LayerNorm(input_dim)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(p=dropout)
+        self.linear2 = nn.Linear(input_dim, output_dim)
+        kaiming_uniform_(self.linear1.weight)
+        kaiming_uniform_(self.linear2.weight)
+
+    def forward(self, x):
+        x = self.linear2(self.dropout(self.relu(self.layer_norm(self.linear1(x)))))
+        return x
