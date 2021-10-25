@@ -196,12 +196,12 @@ def evaluate_batch_list(
 
 @torch.no_grad()
 def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
-    if tree_list.embedder == 'bert':
-        for tree in tree_list.tree_list:
-            tree.set_word_split(tree_net.tokenizer)
-    tree_list.set_vector(tree_net)
-    word_classifier = tree_net.word_classifier
-    phrase_classifier = tree_net.phrase_classifier
+    # if tree_list.embedder == 'bert':
+    #     for tree in tree_list.tree_list:
+    #         tree.set_word_split(tree_net.tokenizer)
+    # tree_list.set_vector(tree_net)
+    word_ff = tree_net.word_ff
+    phrase_ff = tree_net.phrase_ff
     num_word = 0
     num_phrase = 0
     num_correct_word = 0
@@ -213,7 +213,7 @@ def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
         for tree in tree_list.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
-                    output = softmax(word_classifier(node.vector))
+                    output = torch.softmax(word_ff(node.vector), dim=-1)
                     max_output = torch.max(output)
                     predict = torch.nonzero(output > max_output * beta).view(-1)
                     predict = predict[:alpha]
@@ -222,7 +222,7 @@ def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
                     if node.category_id in predict and node.category_id != 0:
                         num_correct_word += 1
                 else:
-                    output = softmax(phrase_classifier(node.vector))
+                    output = torch.softmax(phrase_ff(node.vector), dim=-1)
                     max_output = torch.max(output)
                     predict = torch.nonzero(output > max_output * beta).view(-1)
                     num_phrase += 1
@@ -238,6 +238,8 @@ def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
     print('cat per word: {}'.format(num_predicted_word / num_word))
     print('phrase: {}'.format(num_correct_phrase / num_phrase))
     print('cat per phrase: {}'.format(num_predicted_phrase / num_phrase))
+
+    return num_correct_word / num_phrase, num_predicted_word / num_word
 
 
 class History:

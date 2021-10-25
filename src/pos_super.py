@@ -13,16 +13,17 @@ word_category_vocab = load(condition.path_to_word_category_vocab)
 tree_net = torch.load(condition.path_to_model + model, map_location=device)
 tree_net.device = device
 tree_net.eval()
-word_classifier = tree_net.word_classifier
+word_ff = tree_net.word_ff
 pos_tagger = stanza.Pipeline(lang='en', processors='tokenize,mwt,pos')
-softmax = torch.nn.Softmax(dim=-1)
 if dev_test == 'dev':
     path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
 elif dev_test == 'test':
     path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
 with open(path_to_sentence, "r") as f:
     sentence_list = f.readlines()
-beta = 1e-5
+
+beta = 0.0005
+alpha = 50
 
 parser_input = []
 with tqdm(total=len(sentence_list)) as pbar:
@@ -47,14 +48,13 @@ with tqdm(total=len(sentence_list)) as pbar:
                 content = content.replace(r"\/", "/")
             converted_sentence.append(content)
         word_vectors = tree_net.cal_word_vectors(converted_sentence)
-        word_outputs = word_classifier(word_vectors)
-        word_cat_prob = softmax(word_outputs)
+        word_cat_prob = torch.softmax(word_ff(word_vectors), dim=-1)
         predict_cat_id = torch.argsort(word_cat_prob, descending=True)
         max_prob, _ = torch.max(word_cat_prob, dim=1)
         super_tags = []
         for idx in range(word_cat_prob.shape[0]):
             temp = []
-            for cat_id in predict_cat_id[idx]:
+            for cat_id in predict_cat_id[idx, :alpha]:
                 if word_cat_prob[idx, cat_id] > max_prob[idx] * beta:
                     temp.append([word_category_vocab.itos[cat_id],
                                  word_cat_prob[idx, cat_id].item()])
