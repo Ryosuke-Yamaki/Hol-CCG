@@ -35,7 +35,6 @@ max_word_acc = 0.0
 for beta in beta_list:
     for alpha in alpha_list:
         word_acc, cat_per_word = evaluate_beta(dev_tree_list, tree_net, beta=beta, alpha=alpha)
-        print('bata={}, alpha={}'.format(beta, alpha))
     if word_acc > max_word_acc:
         max_word_acc = word_acc
         max_cat_per_word = cat_per_word

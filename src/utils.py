@@ -231,15 +231,13 @@ def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
                         num_correct_phrase += 1
             pbar.update(1)
     print('-' * 50)
-    print('beta={}'.format(beta))
-    print('overall: {}'.format((num_correct_word +
-                                num_correct_phrase) / (num_word + num_phrase)))
+    print('beta={},alpha={}'.format(beta, alpha))
     print('word: {}'.format(num_correct_word / num_word))
     print('cat per word: {}'.format(num_predicted_word / num_word))
     print('phrase: {}'.format(num_correct_phrase / num_phrase))
     print('cat per phrase: {}'.format(num_predicted_phrase / num_phrase))
 
-    return num_correct_word / num_phrase, num_predicted_word / num_word
+    return num_correct_word / num_word, num_predicted_word / num_word
 
 
 class History:
