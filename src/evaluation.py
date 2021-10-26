@@ -12,37 +12,57 @@ set_random_seed(0)
 print('loading tree list...')
 # test_tree_list = load(condition.path_to_test_tree_list)
 # test_tree_list.embedder = 'bert'
-dev_tree_list = load(condition.path_to_dev_tree_list)
-dev_tree_list.embedder = 'bert'
+dev_tree_list_base = load(condition.path_to_dev_tree_list)
+dev_tree_list_base.embedder = 'bert'
+dev_tree_list_hol = load(condition.path_to_dev_tree_list)
+dev_tree_list_hol.embedder = 'bert'
 
-model = "roberta-large_phrase.pth"
-tree_net = torch.load(condition.path_to_model + model,
-                      map_location=device)
-tree_net.device = device
-tree_net.eval()
+base = "roberta-large(3).pth"
+hol = "roberta-large_phrase(3).pth"
+
+tree_net_base = torch.load(condition.path_to_model + base,
+                           map_location=device)
+tree_net_base.device = device
+tree_net_base.eval()
+
+tree_net_hol = torch.load(condition.path_to_model + hol,
+                          map_location=device)
+tree_net_hol.device = device
+tree_net_hol.eval()
 
 with torch.no_grad():
-    if dev_tree_list.embedder == 'bert':
-        for tree in dev_tree_list.tree_list:
-            tree.set_word_split(tree_net.tokenizer)
-    dev_tree_list.set_vector(tree_net)
+    if dev_tree_list_base.embedder == 'bert':
+        for tree in dev_tree_list_base.tree_list:
+            tree.set_word_split(tree_net_base.tokenizer)
+    dev_tree_list_base.set_vector(tree_net_base)
 
-beta_list = [0.0005, 0.00025, 0.0001, 0.00005, 0.000025, 0.00001]
-alpha_list = [32, 64, 128, 256]
+    if dev_tree_list_hol.embedder == 'bert':
+        for tree in dev_tree_list_hol.tree_list:
+            tree.set_word_split(tree_net_hol.tokenizer)
+    dev_tree_list_hol.set_vector(tree_net_hol)
 
-max_word_acc = 0.0
+beta_list = [0.0001]
+alpha_list = [32]
+
 
 for beta in beta_list:
     for alpha in alpha_list:
-        word_acc, cat_per_word = evaluate_beta(dev_tree_list, tree_net, beta=beta, alpha=alpha)
-    if word_acc > max_word_acc:
-        max_word_acc = word_acc
-        max_cat_per_word = cat_per_word
-        max_beta = beta
-        max_alpha = alpha
+        base_word_acc, base_cat_per_word = evaluate_beta(
+            dev_tree_list_base, tree_net_base, beta=beta, alpha=alpha)
+        hol_word_acc, hol_cat_per_word = evaluate_beta(
+            dev_tree_list_hol, tree_net_hol, beta=beta, alpha=alpha)
 
-print('best_param:\nbeta={},alpha={},word={},cat_per_word={}'.format(
-    max_beta, max_alpha, max_word_acc, max_cat_per_word))
+        if hol_word_acc > 0.994 and hol_word_acc > base_word_acc and hol_cat_per_word < base_cat_per_word:
+            print('best_param:\nbeta={},alpha={},word={},cat_per_word={}'.format(
+                beta, alpha, hol_word_acc, hol_cat_per_word))
+#     if word_acc > max_word_acc:
+#         max_word_acc = word_acc
+#         max_cat_per_word = cat_per_word
+#         max_beta = beta
+#         max_alpha = alpha
+
+# print('best_param:\nbeta={},alpha={},word={},cat_per_word={}'.format(
+#     max_beta, max_alpha, max_word_acc, max_cat_per_word))
 
 
 # evaluate_tree_list(dev_tree_list, tree_net)

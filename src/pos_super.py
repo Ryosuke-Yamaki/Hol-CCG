@@ -7,6 +7,8 @@ from tqdm import tqdm
 args = sys.argv
 model = args[1]
 dev_test = args[2]
+# model = "roberta-large_phrase(1).pth"
+# dev_test = 'dev'
 condition = Condition_Setter(set_embedding_type=False)
 device = torch.device("cuda")
 word_category_vocab = load(condition.path_to_word_category_vocab)
@@ -22,8 +24,8 @@ elif dev_test == 'test':
 with open(path_to_sentence, "r") as f:
     sentence_list = f.readlines()
 
-beta = 0.0005
-alpha = 50
+beta = 0.0001
+alpha = 32
 
 parser_input = []
 with tqdm(total=len(sentence_list)) as pbar:
@@ -50,6 +52,8 @@ with tqdm(total=len(sentence_list)) as pbar:
         word_vectors = tree_net.cal_word_vectors(converted_sentence)
         word_cat_prob = torch.softmax(word_ff(word_vectors), dim=-1)
         predict_cat_id = torch.argsort(word_cat_prob, descending=True)
+        # remove '<unk>'
+        predict_cat_id = predict_cat_id[predict_cat_id != 0].view(word_cat_prob.shape[0], -1)
         max_prob, _ = torch.max(word_cat_prob, dim=1)
         super_tags = []
         for idx in range(word_cat_prob.shape[0]):
@@ -59,8 +63,8 @@ with tqdm(total=len(sentence_list)) as pbar:
                     temp.append([word_category_vocab.itos[cat_id],
                                  word_cat_prob[idx, cat_id].item()])
                 else:
-                    super_tags.append(temp)
                     break
+            super_tags.append(temp)
 
         # make the set of pos-tags for each sentence
         temp = pos_tagger(" ".join(sentence)).sentences
