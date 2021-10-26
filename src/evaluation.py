@@ -15,7 +15,7 @@ print('loading tree list...')
 dev_tree_list = load(condition.path_to_dev_tree_list)
 dev_tree_list.embedder = 'bert'
 
-model = "roberta-large_phrase(1).pth"
+model = "roberta-large_phrase.pth"
 tree_net = torch.load(condition.path_to_model + model,
                       map_location=device)
 tree_net.device = device
@@ -27,8 +27,8 @@ with torch.no_grad():
             tree.set_word_split(tree_net.tokenizer)
     dev_tree_list.set_vector(tree_net)
 
-beta_list = [0.05, 0.025, 0.01, 0.005, 0.0025, 0.001, 0.0005, 0.00025, 0.0001]
-alpha_list = [4, 8, 16, 32, 64, 128]
+beta_list = [0.0005, 0.00025, 0.0001, 0.00005, 0.000025, 0.00001]
+alpha_list = [32, 64, 128, 256]
 
 max_word_acc = 0.0
 
