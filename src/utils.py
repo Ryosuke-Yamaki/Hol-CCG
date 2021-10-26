@@ -196,10 +196,10 @@ def evaluate_batch_list(
 
 @torch.no_grad()
 def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
-    if tree_list.embedder == 'bert':
-        for tree in tree_list.tree_list:
-            tree.set_word_split(tree_net.tokenizer)
-    tree_list.set_vector(tree_net)
+    # if tree_list.embedder == 'bert':
+    #     for tree in tree_list.tree_list:
+    #         tree.set_word_split(tree_net.tokenizer)
+    # tree_list.set_vector(tree_net)
     word_ff = tree_net.word_ff
     phrase_ff = tree_net.phrase_ff
     num_word = 0

@@ -21,10 +21,11 @@ tree_net = torch.load(condition.path_to_model + model,
 tree_net.device = device
 tree_net.eval()
 
-# if dev_tree_list.embedder == 'bert':
-#     for tree in dev_tree_list.tree_list:
-#         tree.set_word_split(tree_net.tokenizer)
-# dev_tree_list.set_vector(tree_net)
+with torch.no_grad():
+    if dev_tree_list.embedder == 'bert':
+        for tree in dev_tree_list.tree_list:
+            tree.set_word_split(tree_net.tokenizer)
+    dev_tree_list.set_vector(tree_net)
 
 beta_list = [0.05, 0.025, 0.01, 0.005, 0.0025, 0.001, 0.0005, 0.00025, 0.0001]
 alpha_list = [4, 8, 16, 32, 64, 128]
