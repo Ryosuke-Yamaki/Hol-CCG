@@ -5,7 +5,7 @@ torch.cuda.empty_cache()
 
 condition = Condition_Setter(set_embedding_type=False)
 
-device = torch.device('cpu')
+device = torch.device('cuda')
 
 set_random_seed(0)
 
