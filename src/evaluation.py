@@ -1,7 +1,11 @@
 from utils import evaluate_tree_list, evaluate_batch_list, evaluate_beta, load, set_random_seed, Condition_Setter
 import torch
+import sys
 
-torch.cuda.empty_cache()
+args = sys.argv
+
+# beta = [float(args[1])]
+# alpha = [int(args[2])]
 
 condition = Condition_Setter(set_embedding_type=False)
 
@@ -17,8 +21,8 @@ dev_tree_list_base.embedder = 'bert'
 dev_tree_list_hol = load(condition.path_to_dev_tree_list)
 dev_tree_list_hol.embedder = 'bert'
 
-base = "roberta-large(3).pth"
-hol = "roberta-large_phrase(3).pth"
+base = "roberta-large(5).pth"
+hol = "roberta-large_phrase(5).pth"
 
 tree_net_base = torch.load(condition.path_to_model + base,
                            map_location=device)
@@ -41,9 +45,8 @@ with torch.no_grad():
             tree.set_word_split(tree_net_hol.tokenizer)
     dev_tree_list_hol.set_vector(tree_net_hol)
 
-beta_list = [0.0001]
-alpha_list = [32]
-
+beta_list = [0.001, 0.0075, 0.0005, 0.00025]
+alpha_list = [5, 10, 15, 20, 25]
 
 for beta in beta_list:
     for alpha in alpha_list:
@@ -52,7 +55,7 @@ for beta in beta_list:
         hol_word_acc, hol_cat_per_word = evaluate_beta(
             dev_tree_list_hol, tree_net_hol, beta=beta, alpha=alpha)
 
-        if hol_word_acc > 0.994 and hol_word_acc > base_word_acc and hol_cat_per_word < base_cat_per_word:
+        if hol_word_acc > 0.994 and hol_cat_per_word < 1.7 and hol_word_acc > base_word_acc and hol_cat_per_word < base_cat_per_word:
             print('best_param:\nbeta={},alpha={},word={},cat_per_word={}'.format(
                 beta, alpha, hol_word_acc, hol_cat_per_word))
 #     if word_acc > max_word_acc:

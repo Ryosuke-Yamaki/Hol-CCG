@@ -213,21 +213,24 @@ def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
         for tree in tree_list.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
+                    # probability distribution
                     output = torch.softmax(word_ff(node.vector), dim=-1)
-                    max_output = torch.max(output)
-                    predict = torch.nonzero(output > max_output * beta).view(-1)
-                    predict = predict[:alpha]
+                    predict_prob, predict_idx = torch.sort(output[1:], dim=-1, descending=True)
+                    # add one to index for the removing of zero index of "<UNK>"
+                    predict_idx += 1
+                    predict_idx = predict_idx[predict_prob > beta][:alpha]
                     num_word += 1
-                    num_predicted_word += predict.shape[0]
-                    if node.category_id in predict and node.category_id != 0:
+                    num_predicted_word += predict_idx.shape[0]
+                    if node.category_id in predict_idx and node.category_id != 0:
                         num_correct_word += 1
                 else:
                     output = torch.softmax(phrase_ff(node.vector), dim=-1)
-                    max_output = torch.max(output)
-                    predict = torch.nonzero(output > max_output * beta).view(-1)
+                    predict_prob, predict_idx = torch.sort(output[1:], dim=-1, descending=True)
+                    predict_idx += 1
+                    predict_idx = predict_idx[predict_prob > beta][:alpha]
                     num_phrase += 1
-                    num_predicted_phrase += predict.shape[0]
-                    if node.category_id in predict and node.category_id != 0:
+                    num_predicted_phrase += predict_idx.shape[0]
+                    if node.category_id in predict_idx and node.category_id != 0:
                         num_correct_phrase += 1
             pbar.update(1)
     print('-' * 50)

@@ -24,8 +24,8 @@ elif dev_test == 'test':
 with open(path_to_sentence, "r") as f:
     sentence_list = f.readlines()
 
-beta = 0.0001
-alpha = 32
+beta = 0.0005
+alpha = 10
 
 parser_input = []
 with tqdm(total=len(sentence_list)) as pbar:
@@ -54,12 +54,11 @@ with tqdm(total=len(sentence_list)) as pbar:
         predict_cat_id = torch.argsort(word_cat_prob, descending=True)
         # remove '<unk>'
         predict_cat_id = predict_cat_id[predict_cat_id != 0].view(word_cat_prob.shape[0], -1)
-        max_prob, _ = torch.max(word_cat_prob, dim=1)
         super_tags = []
         for idx in range(word_cat_prob.shape[0]):
             temp = []
             for cat_id in predict_cat_id[idx, :alpha]:
-                if word_cat_prob[idx, cat_id] > max_prob[idx] * beta:
+                if word_cat_prob[idx, cat_id] > beta:
                     temp.append([word_category_vocab.itos[cat_id],
                                  word_cat_prob[idx, cat_id].item()])
                 else:
