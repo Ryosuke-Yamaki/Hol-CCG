@@ -1,13 +1,12 @@
 from utils import load, Condition_Setter
 import torch
-import stanza
 import sys
 from tqdm import tqdm
 
 args = sys.argv
 model = args[1]
 dev_test = args[2]
-# model = "roberta-large_phrase(1).pth"
+# model = "roberta-large_phrase(5).pth"
 # dev_test = 'dev'
 condition = Condition_Setter(set_embedding_type=False)
 device = torch.device("cuda")
@@ -16,21 +15,24 @@ tree_net = torch.load(condition.path_to_model + model, map_location=device)
 tree_net.device = device
 tree_net.eval()
 word_ff = tree_net.word_ff
-pos_tagger = stanza.Pipeline(lang='en', processors='tokenize,mwt,pos')
 if dev_test == 'dev':
     path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
+    path_to_gold_pos = condition.PATH_TO_DIR + "java-candc/data/gold/wsj00.pos"
 elif dev_test == 'test':
     path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
+    path_to_gold_pos = condition.PATH_TO_DIR + "java-candc/data/gold/wsj23.pos"
 with open(path_to_sentence, "r") as f:
     sentence_list = f.readlines()
+with open(path_to_gold_pos, "r") as f:
+    pos_list = f.readlines()[3:]
 
-beta = 0.0005
+beta = 0.001
 alpha = 10
 
 parser_input = []
 with tqdm(total=len(sentence_list)) as pbar:
     pbar.set_description("supertagging")
-    for sentence in sentence_list:
+    for sentence, pos in zip(sentence_list, pos_list):
         sentence = sentence.split()
         # make the set of super-tags
         converted_sentence = []
@@ -65,13 +67,10 @@ with tqdm(total=len(sentence_list)) as pbar:
                     break
             super_tags.append(temp)
 
-        # make the set of pos-tags for each sentence
-        temp = pos_tagger(" ".join(sentence)).sentences
-        tagged_sentences = pos_tagger(" ".join(sentence)).sentences
+        pos = pos.strip().split()
         pos_tags = []
-        for tagged_sentence in tagged_sentences:
-            for word in tagged_sentence.words:
-                pos_tags.append(word.xpos)
+        for info in pos:
+            pos_tags.append(info.split('|')[1])
 
         for word, pos, super in zip(converted_sentence_, pos_tags, super_tags):
             temp = []
