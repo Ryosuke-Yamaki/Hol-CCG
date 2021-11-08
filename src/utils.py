@@ -8,10 +8,10 @@ import numpy as np
 import torch
 from torch import conj
 from torch.fft import fft, ifft
-from torch.nn.functional import normalize, softmax
+from torch.nn.functional import normalize
 
 
-def circular_correlation(a, b, k=1000):
+def circular_correlation(a, b, k=1e+3):
     a_ = conj(fft(a))
     b_ = fft(b)
     c_ = a_ * b_
@@ -21,7 +21,7 @@ def circular_correlation(a, b, k=1000):
     return c
 
 
-def single_circular_correlation(a, b, k=1000):
+def single_circular_correlation(a, b, k=1e+3):
     a_ = conj(fft(a))
     b_ = fft(b)
     c_ = a_ * b_

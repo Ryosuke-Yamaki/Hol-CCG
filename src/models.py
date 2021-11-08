@@ -607,7 +607,7 @@ class Tree_Net(nn.Module):
         else:
             with torch.no_grad():
                 packed_sequence = self.embed(sentence, word_split)
-        # when se LSTM after contextualized word embedding, feed the output into LSTM
+        # after contextualized word embedding, feed the output into LSTM
         if self.use_lstm:
             bi_lstm_output = self.bi_lstm(packed_sequence)[0]
             encoded_rep, len_unpacked = self.combine_foward_backward_rep(bi_lstm_output)
