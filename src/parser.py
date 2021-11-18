@@ -12,7 +12,6 @@ class Parser:
         self.content_vocab = content_vocab
         self.binary_rule = binary_rule
         self.unary_rule = unary_rule
-        self.softmax = torch.nn.Softmax(dim=-1)
 
     @torch.no_grad()
     def tokenize(self, sentence):
@@ -146,64 +145,6 @@ class Parser:
             else:
                 node_list.append((0, n, top_cat))
         return node_list
-
-    @ torch.no_grad()
-    def cal_f1_score(self, pred_node_list, correct_node_list):
-        if len(pred_node_list) != 0:
-            precision = 0.0
-            for node in pred_node_list:
-                if node in correct_node_list:
-                    precision += 1.0
-            precision = precision / len(pred_node_list)
-
-            recall = 0.0
-            for node in correct_node_list:
-                if node in pred_node_list:
-                    recall += 1.0
-            recall = recall / len(correct_node_list)
-            f1 = (2 * precision * recall) / (precision + recall + 1e-10)
-        # when failed parsing
-        else:
-            f1 = 0.0
-            precision = 0.0
-            recall = 0.0
-        return f1, precision, recall
-
-    @ torch.no_grad()
-    def validation(self, test_sentence, test_tree_list, max_length=50):
-        f1 = 0.0
-        precision = 0.0
-        recall = 0.0
-        for sentence, tree in zip(test_sentence, test_tree_list.tree_list):
-            sentence = sentence.rstrip()
-            if len(sentence.split()) <= max_length:
-                print(sentence)
-                correct_node_list = tree.correct_parse()
-                pred_node_list = self.parse(sentence, len(test_tree_list.category_vocab))
-                score = self.cal_f1_score(pred_node_list, correct_node_list)
-                print('f1:{}, precicion:{}, recall:{}'.format(score[0], score[1], score[2]))
-                f1 += score[0]
-                precision += score[1]
-                recall += score[2]
-        self.f1 = f1 / len(test_sentence)
-        self.precision = precision / len(test_sentence)
-        self.recall = recall / len(test_sentence)
-        return self.f1, self.precision, self.recall
-
-    @ torch.no_grad()
-    def export_stat_list(self, path):
-        stat_list = []
-        stat_list.append(str(self.f1))
-        stat_list.append(str(self.precision))
-        stat_list.append(str(self.recall))
-        with open(path, 'a') as f:
-            f.write(', '.join(stat_list) + '\n\n')
-
-    @ torch.no_grad()
-    def print_stat(self):
-        print('f1: {}'.format(self.f1))
-        print('precision: {}'.format(self.precision))
-        print('recall: {}'.format(self.recall))
 
 
 def extract_rule(path_to_grammar, category_vocab):
