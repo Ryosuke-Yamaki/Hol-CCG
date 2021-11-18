@@ -1,38 +1,135 @@
+from utils import load, Condition_Setter
 import time
-import re
 import torch
 from utils import single_circular_correlation
+import time
+
+
+class Cell:
+    def __init__(self, content, category):
+        self.content = content
+        self.category_list = [category]
+
+    def add_category(self, category):
+        self.category_list.append(category)
+
+
+class Category:
+    def __init__(
+            self,
+            cat,
+            cat_id,
+            vector,
+            cat_score,
+            span_score=None,
+            num_child=None,
+            left_child=None,
+            right_child=None):
+        self.cat = cat
+        self.cat_id = cat_id
+        self.vector = vector
+        self.cat_score = cat_score
+        self.span_score = span_score
+        self.num_child = num_child
+        self.left_child = left_child
+        self.right_child = right_child
 
 
 class Parser:
     @torch.no_grad()
-    def __init__(self, tree_net, content_vocab, binary_rule, unary_rule):
-        self.embedding = tree_net.embedding
-        self.linear = tree_net.linear
-        self.content_vocab = content_vocab
+    def __init__(
+            self,
+            tree_net,
+            binary_rule,
+            unary_rule,
+            category_vocab,
+            word_to_whole,
+            whole_to_word):
+        self.tokenizer = tree_net.tokenizer
+        self.encoder = tree_net.model
+        self.word_ff = tree_net.word_ff
+        self.phrase_ff = tree_net.phrase_ff
+        self.span_ff = tree_net.span_ff
         self.binary_rule = binary_rule
         self.unary_rule = unary_rule
+        self.category_vocab = category_vocab
+        self.word_to_whole = word_to_whole
+        self.whole_to_word = whole_to_word
+
+    def initialize_chart(self, sentence, beta=0.075):
+        sentence = sentence.split()
+        converted_sentence = []
+        converted_sentence_ = []
+        for i in range(len(sentence)):
+            content = sentence[i]
+            if content == "-LRB-":
+                content = "("
+            elif content == "-LCB-":
+                content = "{"
+            elif content == "-RRB-":
+                content = ")"
+            elif content == "-RCB-":
+                content = "}"
+            converted_sentence_.append(content)
+            if r"\/" in content:
+                content = content.replace(r"\/", "/")
+            converted_sentence.append(content)
+        tokens = self.tokenizer.tokenize(" ".join(converted_sentence))
+        tokenized_pos = 0
+        word_split = []
+        for original_pos in range(len(converted_sentence)):
+            word = converted_sentence[original_pos]
+            length = 1
+            while True:
+                temp = self.tokenizer.convert_tokens_to_string(
+                    tokens[tokenized_pos:tokenized_pos + length]).replace(" ", "")
+                if word == temp or word.lower() == temp:
+                    word_split.append([tokenized_pos, tokenized_pos + length])
+                    tokenized_pos += length
+                    break
+                else:
+                    length += 1
+
+        input = self.tokenizer(
+            " ".join(converted_sentence),
+            return_tensors='pt').to(self.encoder.device)
+        output = self.encoder(**input).last_hidden_state[0, 1:-1]
+        temp = []
+        for start_idx, end_idx in word_split:
+            temp.append(torch.mean(output[start_idx:end_idx], dim=0))
+        word_vectors = torch.stack(temp)
+        word_scores = self.word_ff(word_vectors)
+        word_prob = torch.softmax(word_scores, dim=-1)
+        word_predict_cats = torch.argsort(word_prob, descending=True)
+        word_predict_cats = word_predict_cats[word_predict_cats != 0].view(word_prob.shape[0], -1)
+
+        chart = {}
+
+        for idx in range(len(converted_sentence)):
+            word = converted_sentence_[idx]
+            vector = word_vectors[idx]
+            score = word_scores[idx]
+            prob = word_prob[idx]
+            top_cat_id = word_predict_cats[idx, 0]
+            top_category = Category(
+                self.category_vocab.itos[self.word_to_whole[top_cat_id]],
+                self.word_to_whole[top_cat_id],
+                vector,
+                score[top_cat_id])
+            chart[(idx, idx + 1)] = Cell(word, top_category)
+
+            for cat_id in word_predict_cats[idx, 1:]:
+                if prob[cat_id] > beta:
+                    category = Category(
+                        self.category_vocab.itos[self.word_to_whole[cat_id]], self.word_to_whole[cat_id], vector, score[cat_id])
+                    chart[(idx, idx + 1)].add_category(category)
+
+        return chart
 
     @torch.no_grad()
-    def tokenize(self, sentence):
-        vector_list = []
-        for word in sentence.split():
-            word = word.lower()
-            word = re.sub(r'\d+', '0', word)
-            word = re.sub(r'\d,\d', '0', word)
-            word_id = torch.tensor(self.content_vocab[word])
-            vector = self.embedding(word_id)
-            vector_list.append(vector / torch.norm(vector))
-        return vector_list
-
-    @torch.no_grad()
-    def parse(self, sentence, num_category, vector_dim=100, mergin=5):
+    def parse(self, sentence):
+        chart = self.initialize_chart(sentence)
         vector_list = self.tokenize(sentence)
-        n = len(vector_list)
-        category_table = [[[] for i in range(n + 1)] for j in range(n + 1)]
-        prob = torch.zeros((n + 1, n + 1, num_category))
-        backpointer = torch.zeros((n + 1, n + 1, num_category, 3), dtype=torch.int)
-        vector = torch.zeros((n + 1, n + 1, num_category, vector_dim))
 
         for i in range(n):
             output = self.softmax(self.linear(vector_list[i]))
@@ -167,3 +264,28 @@ def extract_rule(path_to_grammar, category_vocab):
             child_cat = category_vocab[tokens[4]]
             unary_rule[child_cat].append(parent_cat)
     return binary_rule, unary_rule
+
+
+def main():
+    condition = Condition_Setter(set_embedding_type=False)
+
+    device = torch.device('cpu')
+
+    model = "roberta-large_phrase.pth"
+
+    tree_net = torch.load(model,
+                          map_location=device)
+    tree_net.device = device
+    tree_net.eval()
+
+    category_vocab = load(condition.path_to_whole_category_vocab)
+    word_to_whole = load(condition.path_to_word_to_whole)
+    whole_to_phrase = load(condition.path_to_whole_to_phrase)
+
+    parser = Parser(tree_net, None, None, category_vocab, word_to_whole, whole_to_phrase)
+    sentence = "My sister loves to eat ."
+    parser.parse(sentence)
+
+
+if __name__ == "__main__":
+    main()

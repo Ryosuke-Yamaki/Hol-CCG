@@ -27,13 +27,10 @@ condition = Condition_Setter(set_embedding_type=False)
 
 print('loading tree list...')
 train_tree_list = set_tree_list(condition.path_to_train_data)
-dev_tree_list = set_tree_list(condition.path_to_dev_data)
-test_tree_list = set_tree_list(condition.path_to_test_data)
 
 word_category_counter = Counter()
 phrase_category_counter = Counter()
 whole_category_counter = Counter()
-evalb_counter = Counter()
 
 for tree in train_tree_list:
     for node in tree.node_list:
@@ -41,31 +38,24 @@ for tree in train_tree_list:
             word_category_counter[node.category] += 1
         else:
             phrase_category_counter[node.category] += 1
+        whole_category_counter[node.category] += 1
 
-for tree in dev_tree_list:
-    for node in tree.node_list:
-        evalb_counter[node.category] += 1
-for tree in test_tree_list:
-    for node in tree.node_list:
-        evalb_counter[node.category] += 1
 
 word_category_vocab = Vocab(word_category_counter, specials=['<unk>'])
 phrase_category_vocab = Vocab(phrase_category_counter, specials=['<unk>'])
 whole_category_vocab = Vocab(whole_category_counter, specials=['<unk>'])
-evalb_category_vocab = Vocab(evalb_counter, specials=['<unk>'])
 
 word_to_whole = []
 whole_to_phrase = []
 
 for k, v in word_category_vocab.stoi.items():
-    word_to_whole.append(whole_category_vocab[k] + 1)
+    word_to_whole.append(whole_category_vocab[k])
 
 for k, v in whole_category_vocab.stoi.items():
-    whole_to_phrase.append(phrase_category_vocab[k] + 1)
+    whole_to_phrase.append(phrase_category_vocab[k])
 
 dump(word_category_vocab, condition.path_to_word_category_vocab)
 dump(phrase_category_vocab, condition.path_to_phrase_category_vocab)
 dump(whole_category_vocab, condition.path_to_whole_category_vocab)
-dump(evalb_category_vocab, condition.path_to_evalb_category_vocab)
 dump(word_to_whole, condition.path_to_word_to_whole)
 dump(whole_to_phrase, condition.path_to_whole_to_phrase)
