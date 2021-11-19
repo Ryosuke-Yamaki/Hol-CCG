@@ -28,9 +28,11 @@ class Node:
             self.ready = False
             if self.num_child == 1:
                 self.child_node_id = int(node_info[4])
+                self.head = int(node_info[5])
             else:
                 self.left_child_node_id = int(node_info[4])
                 self.right_child_node_id = int(node_info[5])
+                self.head = int(node_info[6])
 
     def convert_content(self, content):
         if content == "-LRB-":

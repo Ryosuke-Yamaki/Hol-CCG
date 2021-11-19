@@ -102,6 +102,7 @@ class Converter:
                 else:
                     node_info.append(str(node.left_child_node_id))
                     node_info.append(str(node.right_child_node_id))
+                node_info.append(str(node.head))
             node_info_list.append(' '.join(node_info))
             node_info_list.append('\n')
         f = open(path_to_save, 'a')
@@ -121,6 +122,7 @@ class Node:
             self.is_leaf = False
             self.ready = False
             self.category = node_info[1]
+            self.head = int(node_info[2])
             self.num_child = int(node_info[3])
 
     def set_self_id(self, id):
