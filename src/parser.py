@@ -406,7 +406,7 @@ def main():
         label_threshold=0.001,
         span_threshold=0.1)
 
-    with open("/home/yryosuke0519/CCGbank/ccgbank_1_1/ccgbank_1_1/data/RAW/CCGbank.00.raw", 'r') as f:
+    with open("/home/yryosuke0519/CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw", 'r') as f:
         sentence_list = f.readlines()
 
     num_sentence = 0
