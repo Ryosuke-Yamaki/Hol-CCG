@@ -389,6 +389,7 @@ class Condition_Setter:
             "CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar"
         self.path_to_binary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt"
         self.path_to_unary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt"
+        self.path_to_head_info = PATH_TO_DIR + "Hol-CCG/data/parsing/head_info.txt"
 
         # path_for_visualization
         self.path_to_vis_dict = PATH_TO_DIR + \

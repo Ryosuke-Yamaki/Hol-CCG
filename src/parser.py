@@ -17,7 +17,8 @@ class Category:
             span_score=None,
             num_child=None,
             left_child=None,
-            right_child=None):
+            right_child=None,
+            head=None):
         self.cell_id = cell_id
         self.cat = cat
         self.cat_id = cat_id
@@ -28,6 +29,7 @@ class Category:
         self.num_child = num_child
         self.left_child = left_child
         self.right_child = right_child
+        self.head = head
 
 
 class Cell:
@@ -56,6 +58,7 @@ class Parser:
             tree_net,
             binary_rule,
             unary_rule,
+            head_info,
             category_vocab,
             word_to_whole,
             whole_to_phrase,
@@ -69,6 +72,7 @@ class Parser:
         self.span_ff = tree_net.span_ff.to('cpu')
         self.binary_rule = binary_rule
         self.unary_rule = unary_rule
+        self.head_info = head_info
         self.category_vocab = category_vocab
         self.word_to_whole = word_to_whole
         self.whole_to_phrase = whole_to_phrase
@@ -184,7 +188,8 @@ class Parser:
                                         label_score=label_score,
                                         span_score=span_score,
                                         num_child=1,
-                                        left_child=child_cat)
+                                        left_child=child_cat,
+                                        head=0)
                                     new_cat_id = chart[(idx, idx + 1)].add_category(
                                         parent_category)
                                     if new_cat_id is None:
@@ -227,6 +232,8 @@ class Parser:
                                         label_prob = phrase_probs[self.whole_to_phrase[parent_cat_id]]
                                         if label_prob > self.label_threshold:
                                             total_score = label_score + span_score + left_cat.total_score + right_cat.total_score
+                                            head = self.head_info[(
+                                                left_cat.cat_id, right_cat.cat_id, parent_cat_id)]
                                             parent_category = Category(
                                                 (left, right),
                                                 cat,
@@ -237,7 +244,8 @@ class Parser:
                                                 span_score=span_score,
                                                 num_child=2,
                                                 left_child=left_cat,
-                                                right_child=right_cat)
+                                                right_child=right_cat,
+                                                head=head)
                                             chart[(left, right)].add_category(parent_category)
 
                 waiting_cat_id = list(chart[(left, right)].best_category_id.values())
@@ -271,7 +279,8 @@ class Parser:
                                             label_score=label_score,
                                             span_score=span_score,
                                             num_child=1,
-                                            left_child=child_cat)
+                                            left_child=child_cat,
+                                            head=0)
                                         new_cat_id = chart[(left, right)].add_category(
                                             parent_category)
                                         if new_cat_id is None:
@@ -328,7 +337,7 @@ class Parser:
         return node_list
 
 
-def extract_rule(path_to_grammar, category_vocab):
+def extract_rule(path_to_grammar, head_info, category_vocab):
     binary_rule = {}
     unary_rule = {}
 
@@ -353,7 +362,14 @@ def extract_rule(path_to_grammar, category_vocab):
                 unary_rule[child_cat].append(parent_cat)
             else:
                 unary_rule[child_cat] = [parent_cat]
-    return binary_rule, unary_rule
+    head_info_temp = head_info
+    head_info = {}
+    for k, v in head_info_temp.items():
+        left_cat_id = category_vocab[k[0]]
+        right_cat_id = category_vocab[k[1]]
+        parent_cat_id = category_vocab[k[2]]
+        head_info[(left_cat_id, right_cat_id, parent_cat_id)] = v
+    return binary_rule, unary_rule, head_info
 
 
 def main():
@@ -374,12 +390,15 @@ def main():
     category_vocab = load(condition.path_to_whole_category_vocab)
     word_to_whole = load(condition.path_to_word_to_whole)
     whole_to_phrase = load(condition.path_to_whole_to_phrase)
+    head_info = load(condition.path_to_head_info)
 
-    binary_rule, unary_rule = extract_rule(condition.path_to_grammar, category_vocab)
+    binary_rule, unary_rule, head_info = extract_rule(
+        condition.path_to_grammar, head_info, category_vocab)
     parser = Parser(
         tree_net,
         binary_rule,
         unary_rule,
+        head_info,
         category_vocab,
         word_to_whole,
         whole_to_phrase,
@@ -387,7 +406,7 @@ def main():
         label_threshold=0.001,
         span_threshold=0.1)
 
-    with open("/home/yryosuke0519/CCGbank/ccgbank_1_1/ccgbank_1_1/data/RAW/CCGbank.00.raw", 'r') as f:
+    with open(condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw", 'r') as f:
         sentence_list = f.readlines()
 
     num_sentence = 0
@@ -407,7 +426,6 @@ def main():
         if num_sentence % 100 == 0:
             print("*********** coverage = {}({}/{})***********\n".format(num_success_sentence /
                                                                          num_sentence, num_success_sentence, num_sentence))
-    a = 0
 
 
 if __name__ == "__main__":
