@@ -6,6 +6,12 @@ from tqdm import tqdm
 args = sys.argv
 model = args[1]
 dev_test = args[2]
+beta = float(args[3])
+alpha = args[4]
+if alpha == "None":
+    alpha = None
+else:
+    alpha = int(alpha)
 # model = "roberta-large_phrase(5).pth"
 # dev_test = 'dev'
 condition = Condition_Setter(set_embedding_type=False)
@@ -17,22 +23,20 @@ tree_net.eval()
 word_ff = tree_net.word_ff
 if dev_test == 'dev':
     path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
-    path_to_gold_pos = condition.PATH_TO_DIR + "java-candc/data/gold/wsj00.pos"
+    path_to_auto_pos = condition.PATH_TO_DIR + "java-candc/data/auto-pos/wsj00.auto_pos"
 elif dev_test == 'test':
     path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
-    path_to_gold_pos = condition.PATH_TO_DIR + "java-candc/data/gold/wsj23.pos"
+    path_to_auto_pos = condition.PATH_TO_DIR + "java-candc/data/auto-pos/wsj23.auto_pos"
+
 with open(path_to_sentence, "r") as f:
     sentence_list = f.readlines()
-with open(path_to_gold_pos, "r") as f:
-    pos_list = f.readlines()[3:]
-
-beta = 0.001
-alpha = 10
+with open(path_to_auto_pos, "r") as f:
+    auto_pos_list = f.readlines()
 
 parser_input = []
 with tqdm(total=len(sentence_list)) as pbar:
     pbar.set_description("supertagging")
-    for sentence, pos in zip(sentence_list, pos_list):
+    for sentence, pos in zip(sentence_list, auto_pos_list):
         sentence = sentence.split()
         # make the set of super-tags
         converted_sentence = []
@@ -58,8 +62,10 @@ with tqdm(total=len(sentence_list)) as pbar:
         predict_cat_id = predict_cat_id[predict_cat_id != 0].view(word_cat_prob.shape[0], -1)
         super_tags = []
         for idx in range(word_cat_prob.shape[0]):
-            temp = []
-            for cat_id in predict_cat_id[idx, :alpha]:
+            # add top probability category
+            temp = [[word_category_vocab.itos[predict_cat_id[idx, 0]],
+                     word_cat_prob[idx, predict_cat_id[idx, 0]].item()]]
+            for cat_id in predict_cat_id[idx, 1:alpha]:
                 if word_cat_prob[idx, cat_id] > beta:
                     temp.append([word_category_vocab.itos[cat_id],
                                  word_cat_prob[idx, cat_id].item()])

@@ -21,8 +21,8 @@ dev_tree_list_base.embedder = 'bert'
 dev_tree_list_hol = load(condition.path_to_dev_tree_list)
 dev_tree_list_hol.embedder = 'bert'
 
-base = "roberta-large(5).pth"
-hol = "roberta-large_phrase(5).pth"
+base = "roberta-large(a).pth"
+hol = "roberta-large_phrase(c).pth"
 
 tree_net_base = torch.load(condition.path_to_model + base,
                            map_location=device)
@@ -45,19 +45,22 @@ with torch.no_grad():
             tree.set_word_split(tree_net_hol.tokenizer)
     dev_tree_list_hol.set_vector(tree_net_hol)
 
-beta_list = [0.001, 0.0075, 0.0005, 0.00025]
-alpha_list = [5, 10, 15, 20, 25]
+beta_list = [0.00075, 0.0005, 0.00025]
+alpha_list = [5, 10, 15]
 
-for beta in beta_list:
-    for alpha in alpha_list:
-        base_word_acc, base_cat_per_word = evaluate_beta(
-            dev_tree_list_base, tree_net_base, beta=beta, alpha=alpha)
-        hol_word_acc, hol_cat_per_word = evaluate_beta(
-            dev_tree_list_hol, tree_net_hol, beta=beta, alpha=alpha)
+# for beta in beta_list:
+#     for alpha in alpha_list:
+for data in [[0.075, None], [0.05, None], [0.01, None]]:
+    beta = data[0]
+    alpha = data[1]
+    base_word_acc, base_cat_per_word = evaluate_beta(
+        dev_tree_list_base, tree_net_base, beta=beta, alpha=alpha)
+    hol_word_acc, hol_cat_per_word = evaluate_beta(
+        dev_tree_list_hol, tree_net_hol, beta=beta, alpha=alpha)
 
-        if hol_word_acc > 0.994 and hol_cat_per_word < 1.7 and hol_word_acc > base_word_acc and hol_cat_per_word < base_cat_per_word:
-            print('best_param:\nbeta={},alpha={},word={},cat_per_word={}'.format(
-                beta, alpha, hol_word_acc, hol_cat_per_word))
+    if hol_word_acc > 0.994 and hol_cat_per_word < 1.7 and hol_word_acc > base_word_acc and hol_cat_per_word < base_cat_per_word:
+        print('best_param:\nbeta={},alpha={},word={},cat_per_word={}'.format(
+            beta, alpha, hol_word_acc, hol_cat_per_word))
 #     if word_acc > max_word_acc:
 #         max_word_acc = word_acc
 #         max_cat_per_word = cat_per_word
