@@ -1,8 +1,8 @@
+import numpy as np
 from utils import load, Condition_Setter
 import time
 import torch
 from utils import single_circular_correlation
-import time
 
 
 class Category:
@@ -77,7 +77,6 @@ class Parser:
         self.span_threshold = span_threshold
 
     def initialize_chart(self, sentence):
-        start = time.time()
         sentence = sentence.split()
         converted_sentence = []
         converted_sentence_ = []
@@ -110,8 +109,6 @@ class Parser:
                     break
                 else:
                     length += 1
-        print('set word split:{}'.format(time.time() - start))
-        start = time.time()
         input = self.tokenizer(
             " ".join(converted_sentence),
             return_tensors='pt').to(self.encoder.device)
@@ -120,8 +117,6 @@ class Parser:
         for start_idx, end_idx in word_split:
             temp.append(torch.mean(output[start_idx:end_idx], dim=0))
         word_vectors = torch.stack(temp)
-        print('encoding:{}'.format(time.time() - start))
-        start = time.time()
         word_scores = self.word_ff(word_vectors)
         word_prob = torch.softmax(word_scores, dim=-1)
         word_predict_cats = torch.argsort(word_prob, descending=True)
@@ -196,14 +191,11 @@ class Parser:
                                         continue
                                     else:
                                         waiting_cat_id.append(new_cat_id)
-        print('initialize chart:{}'.format(time.time() - start))
         return chart
 
     @torch.no_grad()
     def parse(self, sentence):
-        start = time.time()
         chart = self.initialize_chart(sentence)
-        print(time.time() - start)
         n = len(chart)
         for length in range(2, n + 1):
             for left in range(n - length + 1):
@@ -286,11 +278,6 @@ class Parser:
                                             continue
                                         else:
                                             waiting_cat_id.append(new_cat_id)
-        print(time.time() - start)
-        total_cat = 0
-        for cell in chart.values():
-            total_cat += len(cell.category_list)
-        print(total_cat)
         return chart
 
     # remove the candidate of low probability for beam search
@@ -372,9 +359,12 @@ def extract_rule(path_to_grammar, category_vocab):
 def main():
     condition = Condition_Setter(set_embedding_type=False)
 
-    device = torch.device('cuda')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
 
-    model = "roberta-large_phrase(a).pth"
+    model = "roberta-large_phrase(1).pth"
 
     tree_net = torch.load(condition.path_to_model + model,
                           map_location=device)
@@ -396,9 +386,27 @@ def main():
         stag_threshold=0.075,
         label_threshold=0.001,
         span_threshold=0.1)
-    sentence0 = "My sister loves to eat ."
-    sentence1 = "Pierre Vinken , 61 years old , will join the board as a nonexecutive director Nov. 29 ."
-    chart = parser.parse(sentence1)
+
+    with open("/home/yryosuke0519/CCGbank/ccgbank_1_1/ccgbank_1_1/data/RAW/CCGbank.00.raw", 'r') as f:
+        sentence_list = f.readlines()
+
+    num_sentence = 0
+    num_success_sentence = 0
+    for sentence in sentence_list:
+        num_sentence += 1
+        sentence = sentence.rstrip()
+        print(num_sentence, sentence)
+        start = time.time()
+        chart = parser.parse(sentence)
+        print('time to parse:{}'.format(time.time() - start))
+        if len(chart[(0, len(sentence.split()))].category_list) != 0:
+            num_success_sentence += 1
+            print('success\n')
+        else:
+            print('faile\n')
+        if num_sentence % 100 == 0:
+            print("*********** coverage = {}({}/{})***********\n".format(num_success_sentence /
+                                                                         num_sentence, num_success_sentence, num_sentence))
     a = 0
 
 
