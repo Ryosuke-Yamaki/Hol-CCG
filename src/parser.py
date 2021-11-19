@@ -155,6 +155,8 @@ class Parser:
                                         score[cat_id],
                                         score[cat_id])
                     chart[(idx, idx + 1)].add_category(category)
+                else:
+                    break
 
             waiting_cat_id = list(chart[(idx, idx + 1)].best_category_id.values())
             while True:
