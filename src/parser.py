@@ -51,7 +51,6 @@ class Cell:
 
 
 class Parser:
-    @torch.no_grad()
     def __init__(
             self,
             tree_net,
@@ -65,9 +64,9 @@ class Parser:
             span_threshold):
         self.tokenizer = tree_net.tokenizer
         self.encoder = tree_net.model
-        self.word_ff = tree_net.word_ff
-        self.phrase_ff = tree_net.phrase_ff
-        self.span_ff = tree_net.span_ff
+        self.word_ff = tree_net.word_ff.to('cpu')
+        self.phrase_ff = tree_net.phrase_ff.to('cpu')
+        self.span_ff = tree_net.span_ff.to('cpu')
         self.binary_rule = binary_rule
         self.unary_rule = unary_rule
         self.category_vocab = category_vocab
@@ -78,6 +77,7 @@ class Parser:
         self.span_threshold = span_threshold
 
     def initialize_chart(self, sentence):
+        start = time.time()
         sentence = sentence.split()
         converted_sentence = []
         converted_sentence_ = []
@@ -110,15 +110,18 @@ class Parser:
                     break
                 else:
                     length += 1
-
+        print('set word split:{}'.format(time.time() - start))
+        start = time.time()
         input = self.tokenizer(
             " ".join(converted_sentence),
             return_tensors='pt').to(self.encoder.device)
-        output = self.encoder(**input).last_hidden_state[0, 1:-1]
+        output = self.encoder(**input).last_hidden_state[0, 1:-1].to('cpu')
         temp = []
         for start_idx, end_idx in word_split:
             temp.append(torch.mean(output[start_idx:end_idx], dim=0))
         word_vectors = torch.stack(temp)
+        print('encoding:{}'.format(time.time() - start))
+        start = time.time()
         word_scores = self.word_ff(word_vectors)
         word_prob = torch.softmax(word_scores, dim=-1)
         word_predict_cats = torch.argsort(word_prob, descending=True)
@@ -149,6 +152,7 @@ class Parser:
                                         self.category_vocab.itos[self.word_to_whole[cat_id]],
                                         self.word_to_whole[cat_id],
                                         vector,
+                                        score[cat_id],
                                         score[cat_id])
                     chart[(idx, idx + 1)].add_category(category)
 
@@ -190,6 +194,7 @@ class Parser:
                                         continue
                                     else:
                                         waiting_cat_id.append(new_cat_id)
+        print('initialize chart:{}'.format(time.time() - start))
         return chart
 
     @torch.no_grad()
@@ -365,11 +370,11 @@ def extract_rule(path_to_grammar, category_vocab):
 def main():
     condition = Condition_Setter(set_embedding_type=False)
 
-    device = torch.device('cpu')
+    device = torch.device('cuda')
 
-    model = "roberta-large_phrase.pth"
+    model = "roberta-large_phrase(a).pth"
 
-    tree_net = torch.load(model,
+    tree_net = torch.load(condition.path_to_model + model,
                           map_location=device)
     tree_net.device = device
     tree_net.eval()
