@@ -437,49 +437,37 @@ def main():
         label_threshold=0.001,
         span_threshold=0.1)
 
-    with open(condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw", 'r') as f:
+    with open(condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw", 'r') as f:
         sentence_list = f.readlines()
 
-    num_sentence = 0
+    sentence_id = 0
     num_success_sentence = 0
-    total_time = 0
+    total_parse_time = 0
+    total_decode_time = 0
+
     for sentence in sentence_list:
-        num_sentence += 1
+        sentence_id += 1
         sentence = sentence.rstrip()
-        print(num_sentence, sentence)
+        print('ID={} PARSER=TEST NUMPARSE=1'.format(sentence_id))
         start = time.time()
         chart = parser.parse(sentence)
-        print('time to parse:{}'.format(time.time() - start))
+        time_to_parse = time.time() - start
+        total_parse_time += time_to_parse
+
         start = time.time()
         auto = parser.decode(chart)
-        print('time to decode:{}'.format(time.time() - start))
+        time_to_decode = time.time() - start
+        total_decode_time += time_to_decode
+
         print(auto)
 
         if auto is not None:
-            num_l = 0
-            num_r = 0
-            num_tl = 0
-            num_tr = 0
-            for c in auto:
-                if c == '(':
-                    num_l += 1
-                elif c == ')':
-                    num_r += 1
-                elif c == '<':
-                    num_tl += 1
-                elif c == '>':
-                    num_tr += 1
-            if num_l != num_r or num_tl != num_tr:
-                print('Error')
-        if len(chart[(0, len(sentence.split()))].category_list) != 0:
             num_success_sentence += 1
-            print('success\n')
         else:
-            print('faile\n')
-        if num_sentence % 100 == 0:
-            print("*********** coverage = {}({}/{})***********\n".format(num_success_sentence /
-                                                                         num_sentence, num_success_sentence, num_sentence))
-    print("average parse time:{}".format(total_time / len(sentence_list)))
+            break
+            # print('faile\n')
+    # print("average parse time:{}".format(total_parse_time / len(sentence_list)))
+    # print("average decode time:{}".format(total_decode_time / len(sentence_list)))
 
 
 if __name__ == "__main__":
