@@ -1,3 +1,4 @@
+from os import wait
 import numpy as np
 from utils import load, Condition_Setter
 import time
@@ -18,7 +19,9 @@ class Category:
             num_child=None,
             left_child=None,
             right_child=None,
-            head=None):
+            head=None,
+            is_leaf=False,
+            word=None):
         self.cell_id = cell_id
         self.cat = cat
         self.cat_id = cat_id
@@ -30,6 +33,8 @@ class Category:
         self.left_child = left_child
         self.right_child = right_child
         self.head = head
+        self.is_leaf = is_leaf
+        self.word = word
 
 
 class Cell:
@@ -83,7 +88,6 @@ class Parser:
     def initialize_chart(self, sentence):
         sentence = sentence.split()
         converted_sentence = []
-        converted_sentence_ = []
         for i in range(len(sentence)):
             content = sentence[i]
             if content == "-LRB-":
@@ -94,7 +98,6 @@ class Parser:
                 content = ")"
             elif content == "-RCB-":
                 content = "}"
-            converted_sentence_.append(content)
             if r"\/" in content:
                 content = content.replace(r"\/", "/")
             converted_sentence.append(content)
@@ -129,7 +132,7 @@ class Parser:
         chart = {}
 
         for idx in range(len(converted_sentence)):
-            word = converted_sentence_[idx]
+            word = sentence[idx]
             vector = word_vectors[idx]
             score = word_scores[idx]
             prob = word_prob[idx]
@@ -140,7 +143,9 @@ class Parser:
                 self.word_to_whole[top_cat_id],
                 vector,
                 total_score=score[top_cat_id],
-                label_score=score[top_cat_id])
+                label_score=score[top_cat_id],
+                is_leaf=True,
+                word=word)
             chart[(idx, idx + 1)] = Cell(word)
             chart[(idx, idx + 1)].add_category(top_category)
 
@@ -152,7 +157,9 @@ class Parser:
                                         self.word_to_whole[cat_id],
                                         vector,
                                         score[cat_id],
-                                        score[cat_id])
+                                        score[cat_id],
+                                        is_leaf=True,
+                                        word=word)
                     chart[(idx, idx + 1)].add_category(category)
                 else:
                     break
@@ -289,52 +296,76 @@ class Parser:
                                             waiting_cat_id.append(new_cat_id)
         return chart
 
-    # remove the candidate of low probability for beam search
-    @ torch.no_grad()
-    def cut_off(self, category_table, prob, i, j, width=5):
-        if len(category_table[i][j]) > width:
-            top_5_cat = torch.topk(prob[i][j], k=width)[1]
-            category_table[i][j] = list(top_5_cat)
-        return category_table
+    def decode(self, chart):
 
-    @ torch.no_grad()
-    def reconstruct_tree(self, category_table, backpointer, n):
-        waiting_node_list = []
-        node_list = []
-        # when parsing was completed
-        if category_table[0][n] != []:
-            top_cat = category_table[0][n][0].item()
-            if torch.any(backpointer[(0, n, top_cat)]):
-                waiting_node_list.append((0, n, top_cat))
-                while waiting_node_list != []:
-                    node_info = waiting_node_list.pop()
-                    node_list.append(node_info)
-                    start_idx = node_info[0]
-                    end_idx = node_info[1]
-                    cat = node_info[2]
-                    child_cat_info = backpointer[(start_idx, end_idx, cat)]
-                    divide_idx = child_cat_info[0].item()
-                    left_child_cat = child_cat_info[1].item()
-                    right_child_cat = child_cat_info[2].item()
-                    # when one child
-                    if divide_idx == 0:
-                        child_info = (start_idx, end_idx, left_child_cat)
-                        # when the node is not leaf
-                        if torch.any(backpointer[child_info]):
-                            waiting_node_list.append(child_info)
-                    # when two children
-                    else:
-                        left_child_info = (start_idx, divide_idx, left_child_cat)
-                        right_child_info = (divide_idx, end_idx, right_child_cat)
-                        # when the node is not leaf
-                        if torch.any(backpointer[left_child_info]):
-                            waiting_node_list.append(left_child_info)
-                        # when the node is not leaf
-                        if torch.any(backpointer[right_child_info]):
-                            waiting_node_list.append(right_child_info)
-            else:
-                node_list.append((0, n, top_cat))
-        return node_list
+        def next(waiting_cats):
+            cat = waiting_cats.pop(0)
+            if cat.is_leaf:
+                cat.auto.append('(<L')
+                cat.auto.append(cat.cat)
+                cat.auto.append('POS')
+                cat.auto.append('POS')
+                cat.auto.append(cat.word)
+                cat.auto.append(cat.cat + '>)')
+            elif cat.num_child == 1:
+                child_cat = cat.left_child
+                child_cat.auto = []
+                cat.auto.append('(<T')
+                cat.auto.append(cat.cat)
+                cat.auto.append('0')
+                cat.auto.append('1>')
+                cat.auto.append(child_cat.auto)
+                cat.auto.append(')')
+                waiting_cats.append(child_cat)
+            elif cat.num_child == 2:
+                left_child_cat = cat.left_child
+                right_child_cat = cat.right_child
+                left_child_cat.auto = []
+                right_child_cat.auto = []
+                cat.auto.append('(<T')
+                cat.auto.append(cat.cat)
+                cat.auto.append(str(cat.head))
+                cat.auto.append('2>')
+                cat.auto.append(left_child_cat.auto)
+                cat.auto.append(right_child_cat.auto)
+                cat.auto.append(')')
+                waiting_cats.append(left_child_cat)
+                waiting_cats.append(right_child_cat)
+            return waiting_cats
+
+        def flatten(auto):
+            for i in auto:
+                if isinstance(i, list):
+                    yield from flatten(i)
+                else:
+                    yield i
+
+        root_cell = list(chart.values())[-1]
+        # when fail to parse
+        if len(root_cell.best_category_id) == 0:
+            # self.skimmer(chart)
+            return None
+        # when success to parse
+        else:
+            max_score = -1e+6
+            for cat_id in root_cell.best_category_id.values():
+                cat = root_cell.category_list[cat_id]
+                if cat.total_score > max_score:
+                    max_score = cat.total_score
+                    root_cat = cat
+            root_cat.auto = []
+            waiting_cats = [root_cat]
+            while True:
+                if len(waiting_cats) == 0:
+                    break
+                else:
+                    waiting_cats = next(waiting_cats)
+
+        auto = ' '.join(list(flatten(root_cat.auto)))
+        return auto
+
+    def skimmer(self, chart):
+        return chart
 
 
 def extract_rule(path_to_grammar, head_info, category_vocab):
@@ -418,9 +449,28 @@ def main():
         print(num_sentence, sentence)
         start = time.time()
         chart = parser.parse(sentence)
-        parse_time = time.time() - start
-        total_time += parse_time
-        print('time to parse:{}'.format(parse_time))
+        print('time to parse:{}'.format(time.time() - start))
+        start = time.time()
+        auto = parser.decode(chart)
+        print('time to decode:{}'.format(time.time() - start))
+        print(auto)
+
+        if auto is not None:
+            num_l = 0
+            num_r = 0
+            num_tl = 0
+            num_tr = 0
+            for c in auto:
+                if c == '(':
+                    num_l += 1
+                elif c == ')':
+                    num_r += 1
+                elif c == '<':
+                    num_tl += 1
+                elif c == '>':
+                    num_tr += 1
+            if num_l != num_r or num_tl != num_tr:
+                print('Error')
         if len(chart[(0, len(sentence.split()))].category_list) != 0:
             num_success_sentence += 1
             print('success\n')
