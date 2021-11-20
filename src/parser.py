@@ -380,7 +380,7 @@ def main():
     else:
         device = torch.device('cpu')
 
-    model = "roberta-large_phrase(1).pth"
+    model = "roberta-large_phrase(a).pth"
 
     tree_net = torch.load(condition.path_to_model + model,
                           map_location=device)
@@ -406,18 +406,21 @@ def main():
         label_threshold=0.001,
         span_threshold=0.1)
 
-    with open(condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw", 'r') as f:
+    with open(condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw", 'r') as f:
         sentence_list = f.readlines()
 
     num_sentence = 0
     num_success_sentence = 0
+    total_time = 0
     for sentence in sentence_list:
         num_sentence += 1
         sentence = sentence.rstrip()
         print(num_sentence, sentence)
         start = time.time()
         chart = parser.parse(sentence)
-        print('time to parse:{}'.format(time.time() - start))
+        parse_time = time.time() - start
+        total_time += parse_time
+        print('time to parse:{}'.format(parse_time))
         if len(chart[(0, len(sentence.split()))].category_list) != 0:
             num_success_sentence += 1
             print('success\n')
@@ -426,6 +429,7 @@ def main():
         if num_sentence % 100 == 0:
             print("*********** coverage = {}({}/{})***********\n".format(num_success_sentence /
                                                                          num_sentence, num_success_sentence, num_sentence))
+    print("average parse time:{}".format(total_time / len(sentence_list)))
 
 
 if __name__ == "__main__":
