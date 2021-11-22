@@ -255,7 +255,9 @@ class Tree:
             length = 1
             while True:
                 temp = tokenizer.convert_tokens_to_string(
-                    tokens[tokenized_pos:tokenized_pos + length]).replace(" ", "")
+                    tokens[tokenized_pos:tokenized_pos + length])
+                temp = temp.replace(" ", "")
+                temp = temp.replace("\"", "``")
                 if word == temp or word.lower() == temp:
                     word_split.append([tokenized_pos, tokenized_pos + length])
                     tokenized_pos += length
@@ -315,7 +317,7 @@ class Tree_List:
         self.word_split = []
         for tree in self.tree_list:
             self.num_node.append(len(tree.node_list))
-            if self.embedder == 'bert':
+            if self.embedder == 'transformer':
                 self.sentence_list.append(" ".join(tree.sentence))
             elif self.embedder == 'elmo':
                 self.sentence_list.append(tree.sentence)
@@ -333,7 +335,7 @@ class Tree_List:
                     tree.composition_info,
                     dtype=torch.long,
                     device=self.device))
-            if self.embedder == 'bert':
+            if self.embedder == 'transformer':
                 self.word_split.append(tree.set_word_split(tokenizer))
             else:
                 self.word_split.append([])
@@ -499,7 +501,7 @@ class Tree_List:
         with tqdm(total=len(self.tree_list)) as pbar:
             pbar.set_description("setting vector...")
             for tree in self.tree_list:
-                if self.embedder == 'bert':
+                if self.embedder == 'transformer':
                     sentence = [" ".join(tree.sentence)]
                     word_split = [tree.word_split]
                 else:
@@ -594,7 +596,7 @@ class Tree_Net(nn.Module):
         original_pos = batch[2]
         composition_info = batch[3]
         batch_label = batch[4]
-        if self.embedder == 'bert':
+        if self.embedder == 'transformer':
             word_split = batch[5]
         elif self.embedder == 'elmo':
             word_split = None
@@ -636,7 +638,7 @@ class Tree_Net(nn.Module):
 
     # embedding word vector using bert or elmo
     def embed(self, sentence, word_split=None):
-        if self.embedder == 'bert':
+        if self.embedder == 'transformer':
             input = self.tokenizer(
                 sentence,
                 padding=True,
@@ -779,7 +781,9 @@ class Tree_Net(nn.Module):
             length = 1
             while True:
                 temp = tokenizer.convert_tokens_to_string(
-                    tokens[tokenized_pos:tokenized_pos + length]).replace(" ", "")
+                    tokens[tokenized_pos:tokenized_pos + length])
+                temp = temp.replace(" ", "")
+                temp = temp.replace("\"", "``")
                 if word == temp or word.lower() == temp:
                     word_split.append([tokenized_pos, tokenized_pos + length])
                     tokenized_pos += length

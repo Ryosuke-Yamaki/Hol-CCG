@@ -15,11 +15,11 @@ set_random_seed(0)
 
 print('loading tree list...')
 # test_tree_list = load(condition.path_to_test_tree_list)
-# test_tree_list.embedder = 'bert'
+# test_tree_list.embedder = 'transformer'
 dev_tree_list_base = load(condition.path_to_dev_tree_list)
-dev_tree_list_base.embedder = 'bert'
+dev_tree_list_base.embedder = 'transformer'
 dev_tree_list_hol = load(condition.path_to_dev_tree_list)
-dev_tree_list_hol.embedder = 'bert'
+dev_tree_list_hol.embedder = 'transformer'
 
 base = "roberta-large(a).pth"
 hol = "roberta-large_phrase(c).pth"
@@ -35,12 +35,12 @@ tree_net_hol.device = device
 tree_net_hol.eval()
 
 with torch.no_grad():
-    if dev_tree_list_base.embedder == 'bert':
+    if dev_tree_list_base.embedder == 'transformer':
         for tree in dev_tree_list_base.tree_list:
             tree.set_word_split(tree_net_base.tokenizer)
     dev_tree_list_base.set_vector(tree_net_base)
 
-    if dev_tree_list_hol.embedder == 'bert':
+    if dev_tree_list_hol.embedder == 'transformer':
         for tree in dev_tree_list_hol.tree_list:
             tree.set_word_split(tree_net_hol.tokenizer)
     dev_tree_list_hol.set_vector(tree_net_hol)
