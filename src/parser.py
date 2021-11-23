@@ -318,7 +318,6 @@ class Parser:
         auto_scopes = []
         for span_id in found_span_id:
             auto = self.decode(chart[span_id])
-            print(auto)
             autos.append(auto)
             auto_scopes.append(span_id)
 
@@ -403,8 +402,8 @@ class Parser:
 def main():
     condition = Condition_Setter(set_embedding_type=False)
 
-    args = sys.argv
-    # args = ['', 'roberta-large_phrase(b).pth', 'dev', '0.075', '0.01', '0.01', '10']
+    # args = sys.argv
+    args = ['', 'roberta-large_phrase(b).pth', 'dev', '0.075', '0.01', '0.01', '10']
 
     model = args[1]
     dev_test = args[2]
