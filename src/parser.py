@@ -283,85 +283,135 @@ class Parser:
                                                 waiting_cat_id.append(new_cat_id)
         return chart
 
-    def decode(self, chart):
-        if chart:
-            def next(waiting_cats):
-                cat = waiting_cats.pop(0)
-                if cat.is_leaf:
-                    cat.auto.append('(<L')
-                    cat.auto.append(cat.cat)
-                    cat.auto.append('POS')
-                    cat.auto.append('POS')
-                    cat.auto.append(cat.word)
-                    cat.auto.append(cat.cat + '>)')
-                elif cat.num_child == 1:
-                    child_cat = cat.left_child
-                    child_cat.auto = []
-                    cat.auto.append('(<T')
-                    cat.auto.append(cat.cat)
-                    cat.auto.append('0')
-                    cat.auto.append('1>')
-                    cat.auto.append(child_cat.auto)
-                    cat.auto.append(')')
-                    waiting_cats.append(child_cat)
-                elif cat.num_child == 2:
-                    left_child_cat = cat.left_child
-                    right_child_cat = cat.right_child
-                    left_child_cat.auto = []
-                    right_child_cat.auto = []
-                    cat.auto.append('(<T')
-                    cat.auto.append(cat.cat)
-                    cat.auto.append(str(cat.head))
-                    cat.auto.append('2>')
-                    cat.auto.append(left_child_cat.auto)
-                    cat.auto.append(right_child_cat.auto)
-                    cat.auto.append(')')
-                    waiting_cats.append(left_child_cat)
-                    waiting_cats.append(right_child_cat)
-                return waiting_cats
-
-            def flatten(auto):
-                for i in auto:
-                    if isinstance(i, list):
-                        yield from flatten(i)
-                    else:
-                        yield i
-
-            root_cell = list(chart.values())[-1]
-            # when fail to parse
-            if len(root_cell.best_category_id) == 0:
-                return "(<L N POS POS fail N>)"
-            # when success to parse
-            else:
-                max_score = -1e+6
-                for cat_id in root_cell.best_category_id.values():
-                    cat = root_cell.category_list[cat_id]
-                    if cat.total_score > max_score:
-                        max_score = cat.total_score
-                        root_cat = cat
-                root_cat.auto = []
-                waiting_cats = [root_cat]
-                while True:
-                    if len(waiting_cats) == 0:
-                        break
-                    else:
-                        waiting_cats = next(waiting_cats)
-
-            auto = ' '.join(list(flatten(root_cat.auto)))
-            return auto
+    def skimmer(self, chart):
+        len_sentence = list(chart.keys())[-1][1]
+        found_span_id = []
+        if len_sentence == 1:
+            found_span_id.append((0, 1))
         else:
-            return "(<L N POS POS fail N>)"
+            cell_id_list = list(chart.keys())
+            scope_list = [(0, len_sentence)]
+            while scope_list != []:
+                scope = scope_list.pop(0)
+                for cell_id in cell_id_list:
+                    if scope[0] <= cell_id[0] and cell_id[1] <= scope[1]:
+                        cell = chart[cell_id]
+                        max_span_length = 0
+                        if len(cell.best_category_id) != 0:
+                            span_length = cell_id[1] - cell_id[0]
+                            if span_length > max_span_length:
+                                max_span_length = span_length
+                                max_span_id = cell_id
+                found_span_id.append(max_span_id)
+                cell_id_list.remove(max_span_id)
+                left_scope = (scope[0], max_span_id[0])
+                right_scope = (max_span_id[1], scope[1])
+                if left_scope[1] - left_scope[0] > 1:
+                    scope_list.append(left_scope)
+                elif left_scope[1] - left_scope[0] == 1:
+                    found_span_id.append(left_scope)
+                if right_scope[1] - right_scope[0] > 1:
+                    scope_list.append(right_scope)
+                elif right_scope[1] - right_scope[0] == 1:
+                    found_span_id.append(right_scope)
+        autos = []
+        auto_scopes = []
+        for span_id in found_span_id:
+            auto = self.decode(chart[span_id])
+            print(auto)
+            autos.append(auto)
+            auto_scopes.append(span_id)
+
+        sorted_autos = []
+        sorted_auto_scopes = []
+        target = 0
+        while True:
+            for i in range(len(auto_scopes)):
+                scope = auto_scopes[i]
+                start = scope[0]
+                end = scope[1]
+                if start == target:
+                    sorted_autos.append(autos[i])
+                    sorted_auto_scopes.append(auto_scopes[i])
+                    target = end
+                    break
+            if target == len_sentence:
+                break
+        return sorted_autos, sorted_auto_scopes
+
+    def decode(self, root_cell):
+        def next(waiting_cats):
+            cat = waiting_cats.pop(0)
+            if cat.is_leaf:
+                cat.auto.append('(<L')
+                cat.auto.append(cat.cat)
+                cat.auto.append('POS')
+                cat.auto.append('POS')
+                cat.auto.append(cat.word)
+                cat.auto.append(cat.cat + '>)')
+            elif cat.num_child == 1:
+                child_cat = cat.left_child
+                child_cat.auto = []
+                cat.auto.append('(<T')
+                cat.auto.append(cat.cat)
+                cat.auto.append('0')
+                cat.auto.append('1>')
+                cat.auto.append(child_cat.auto)
+                cat.auto.append(')')
+                waiting_cats.append(child_cat)
+            elif cat.num_child == 2:
+                left_child_cat = cat.left_child
+                right_child_cat = cat.right_child
+                left_child_cat.auto = []
+                right_child_cat.auto = []
+                cat.auto.append('(<T')
+                cat.auto.append(cat.cat)
+                cat.auto.append(str(cat.head))
+                cat.auto.append('2>')
+                cat.auto.append(left_child_cat.auto)
+                cat.auto.append(right_child_cat.auto)
+                cat.auto.append(')')
+                waiting_cats.append(left_child_cat)
+                waiting_cats.append(right_child_cat)
+            return waiting_cats
+
+        def flatten(auto):
+            for i in auto:
+                if isinstance(i, list):
+                    yield from flatten(i)
+                else:
+                    yield i
+
+        max_score = -1e+6
+        for cat_id in root_cell.best_category_id.values():
+            cat = root_cell.category_list[cat_id]
+            if cat.total_score > max_score:
+                max_score = cat.total_score
+                root_cat = cat
+        root_cat.auto = []
+        waiting_cats = [root_cat]
+        while True:
+            if len(waiting_cats) == 0:
+                break
+            else:
+                waiting_cats = next(waiting_cats)
+
+        auto = ' '.join(list(flatten(root_cat.auto)))
+        return auto
 
 
 def main():
     condition = Condition_Setter(set_embedding_type=False)
 
-    model = sys.argv[1]
-    dev_test = sys.argv[2]
-    stag_threhold = float(sys.argv[3])
-    label_threshold = float(sys.argv[4])
-    span_threshold = float(sys.argv[5])
-    min_freq = int(sys.argv[6])
+    args = sys.argv
+    # args = ['', 'roberta-large_phrase(b).pth', 'dev', '0.075', '0.01', '0.01', '10']
+
+    model = args[1]
+    dev_test = args[2]
+    stag_threhold = float(args[3])
+    label_threshold = float(args[4])
+    span_threshold = float(args[5])
+    min_freq = int(args[6])
 
     if dev_test == 'dev':
         path_to_sentence_list = "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
@@ -401,18 +451,30 @@ def main():
     for sentence in sentence_list:
         sentence_id += 1
         sentence = sentence.rstrip()
-        print('ID={} PARSER=TEST NUMPARSE=1'.format(sentence_id))
         # start = time.time()
         # sentence = "I am a man"
         chart = parser.parse(sentence)
+        root_cell = list(chart.values())[-1]
+        if len(root_cell.best_category_id) == 0:
+            autos, scope_list = parser.skimmer(chart)
+            n = 0
+            for auto, scope in zip(autos, scope_list):
+                print(
+                    'ID={}.{} PARSER=TEST APPLY_SKIMMER=True SCOPE=({},{})'.format(
+                        sentence_id, n, scope[0], scope[1]))
+                print(auto)
+                n += 1
+
+        else:
+            auto = parser.decode(root_cell)
+            print('ID={} PARSER=TEST APPLY_SKIMMER=FALSE'.format(sentence_id))
+            print(auto)
         # time_to_parse = time.time() - start
         # total_parse_time += time_to_parse
 
         # start = time.time()
-        auto = parser.decode(chart)
         # time_to_decode = time.time() - start
         # total_decode_time += time_to_decode
-        print(auto)
     # print("average parse time:{}".format(total_parse_time / len(sentence_list)))
     # print("average decode time:{}".format(total_decode_time / len(sentence_list)))
 
