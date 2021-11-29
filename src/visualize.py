@@ -1,3 +1,4 @@
+import numpy as np
 from utils import load, dump, set_random_seed, Condition_Setter
 from sklearn.decomposition import PCA
 from collections import Counter
@@ -5,205 +6,59 @@ import torch
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
+condition = Condition_Setter(set_embedding_type=False)
 
-def get_n_np_s_category_id(category_vocab):
-    N = []
-    NP = []
-    S = []
-    for k, v in category_vocab.stoi.items():
-        if 'NP' in k and ('/' not in k and '\\' not in k):
-            NP.append(v)
-        elif 'N' in k and ('/' not in k and '\\' not in k):
-            N.append(v)
-        elif 'S' in k and ('/' not in k and '\\' not in k):
-            S.append(v)
-    return N, NP, S
-
-
-def check_include(counter, category_list):
-    for category_id in category_list:
-        if category_id in counter:
-            return True
-    return False
-
-
-def prepare_vector_list(tree_list):
-    vector_list = []
-    content_to_idx = {}
-    idx_dict = {}
-    idx = 0
-    for tree in tree_list.tree_list:
-        for node in tree.node_list:
-            if tuple(node.content_id) not in content_to_idx:
-                content_to_idx[tuple(node.content_id)] = idx
-                vector_list.append(node.vector.detach().numpy()[0])
-                category_counter = Counter()
-                category_counter[node.category_id] += 1
-                idx_dict[idx] = {'content': node.content_id, 'category_counter': category_counter}
-                idx += 1
-            else:
-                idx_dict[content_to_idx[tuple(node.content_id)]
-                         ]['category_counter'][node.category_id] += 1
-    N, NP, S = get_n_np_s_category_id(tree_list.category_vocab)
-    vis_dict = {'N': [], 'NP': [], 'S': [], 'Word': [], 'Phrase': []}
-    color_list = []
-
-    for k, v in idx_dict.items():
-        idx = k
-        category_counter = v['category_counter']
-        if check_include(category_counter, N):
-            vis_dict['N'].append(idx)
-            color_list.append('tab:blue')
-        elif check_include(category_counter, NP):
-            vis_dict['NP'].append(idx)
-            color_list.append('tab:orange')
-        elif check_include(category_counter, S):
-            vis_dict['S'].append(idx)
-            color_list.append('tab:green')
-        elif len(v['content']) == 1:
-            vis_dict['Word'].append(idx)
-            color_list.append('tab:red')
-        else:
-            vis_dict['Phrase'].append(idx)
-            color_list.append('tab:purple')
-    return vector_list, idx_dict, vis_dict, color_list
-
-
-def interactive_visualize(
-        visualize_dim,
-        embedded,
-        idx_dict,
-        color_list,
-        content_vocab,
-        category_vocab):
-    def update_annot(ind):
-        pos = sc.get_offsets()[ind["ind"][0]]
-        annot.xy = pos
-        content_id = idx_dict[ind["ind"][0]]['content']
-        text = []
-        for id in content_id:
-            text.append(content_vocab.itos[id])
-        text = ' '.join(text)
-        for id in list(idx_dict[ind["ind"][0]]['category_counter'].keys()):
-            text += ('\n' + category_vocab.itos[id])
-        annot.set_text(text)
-        annot.get_bbox_patch().set_facecolor('white')
-
-    def hover(event):
-        vis = annot.get_visible()
-        if event.inaxes == ax:
-            cont, ind = sc.contains(event)
-            if cont:
-                update_annot(ind)
-                annot.set_visible(True)
-                fig.canvas.draw_idle()
-            else:
-                if vis:
-                    annot.set_visible(False)
-                    fig.canvas.draw_idle()
-
-    fig = plt.figure(figsize=(10, 10))
-    if visualize_dim == 2:
-        ax = fig.add_subplot()
-        sc = ax.scatter(embedded[:, 0], embedded[:, 1], c=color_list, s=3)
-    elif visualize_dim == 3:
-        ax = fig.add_subplot(projection='3d')
-        sc = ax.scatter(embedded[:, 0], embedded[:, 1], embedded[:, 2], c=color_list, s=3)
-    annot = ax.annotate("", xy=(0, 0), xytext=(20, 20), textcoords="offset points",
-                        bbox=dict(boxstyle="round", fc="w"),
-                        arrowprops=dict(arrowstyle="->"))
-    annot.set_visible(False)
-    fig.canvas.mpl_connect("motion_notify_event", hover)
-    return fig
-
-
-condition = Condition_Setter()
-method = int(input('t-SNE(0) or PCA(1): '))
-if method not in [0, 1]:
-    print('Error: method type')
-    exit()
-visualize_dim = int(input('2d(2) or 3d(3): '))
-if visualize_dim not in [2, 3]:
-    print('Error: visualize dim')
-    exit()
-calculate = int(input('new calculation(0) or load(1): '))
-if calculate not in [0, 1]:
-    print('Error: new calculation or load')
-    exit()
-
-device = torch.device('cpu')
-
-set_random_seed(0)
-
-print('loading tree list...')
-test_tree_list = load(condition.path_to_test_tree_list)
-
-if calculate == 0:
-    if condition.embedding_type == "random":
-        tree_net = torch.load(condition.path_to_model, map_location=torch.device('cpu'))
-    else:
-        tree_net = torch.load(
-            condition.path_to_model_with_regression,
-            map_location=torch.device('cpu'))
-    tree_net.eval()
-    embedding = tree_net.embedding
-
-    test_tree_list.set_vector(embedding)
-
-    vector_list, idx_dict, vis_dict, color_list = prepare_vector_list(test_tree_list)
-
-    if method == 0:
-        method = TSNE(n_components=visualize_dim)
-        path_to_visualize_weight = condition.path_to_visualize_weight + \
-            "_{}d_t-SNE.pickle".format(visualize_dim)
-        path_to_map = condition.path_to_map + "_{}d_t-SNE.pdf".format(visualize_dim)
-        print("t-SNE working.....")
-    else:
-        method = PCA(n_components=visualize_dim)
-        path_to_visualize_weight = condition.path_to_visualize_weight + \
-            "_{}d_PCA.pickle".format(visualize_dim)
-        path_to_map = condition.path_to_map + "_{}d_PCA.pdf".format(visualize_dim)
-        print("PCA working.....")
-
-    embedded = method.fit_transform(vector_list)
-    dump(embedded, path_to_visualize_weight)
-    dump(vis_dict, condition.path_to_vis_dict)
-    dump(idx_dict, condition.path_to_idx_dict)
-    dump(color_list, condition.path_to_color_list)
-    if method == 1:
-        print("experined variance ratio = ", method.explained_variance_ratio_)
-
+if torch.cuda.is_available():
+    device = torch.device('cuda')
 else:
-    if method == 0:
-        path_to_visualize_weight = condition.path_to_visualize_weight + \
-            "_{}d_t-SNE.pickle".format(visualize_dim)
-        path_to_map = condition.path_to_map + "_{}d_t-SNE.pdf".format(visualize_dim)
-    else:
-        path_to_visualize_weight = condition.path_to_visualize_weight + \
-            "_{}d_PCA.pickle".format(visualize_dim)
-        path_to_map = condition.path_to_map + "_{}d_PCA.pdf".format(visualize_dim)
-    embedded = load(path_to_visualize_weight)
-    vis_dict = load(condition.path_to_vis_dict)
-    idx_dict = load(condition.path_to_idx_dict)
-    color_list = load(condition.path_to_color_list)
+    device = torch.device('cpu')
 
-fig0 = plt.figure(figsize=(10, 10))
-if visualize_dim == 2:
-    ax = fig0.add_subplot()
-    for k, v in vis_dict.items():
-        ax.scatter(embedded[v][:, 0], embedded[v][:, 1], s=1, label=k)
-elif visualize_dim == 3:
-    ax = fig0.add_subplot(projection='3d')
-    for k, v in vis_dict.items():
-        ax.scatter(embedded[v][:, 0], embedded[v][:, 1], embedded[v][:, 2], s=1, label=k)
-ax.legend(fontsize='large')
-fig0.savefig(path_to_map)
+model = 'roberta-large_phrase(b).pth'
+embedder = 'transformer'
+n_dot = 10000
+dev_tree_list = load(condition.path_to_dev_tree_list)
+# dev_tree_list.tree_list = dev_tree_list.tree_list[:100]
+tree_net = torch.load(condition.path_to_model + model,
+                      map_location=device)
+tree_net.device = device
+tree_net.embedder = embedder
+tree_net.eval()
 
-fig1 = interactive_visualize(
-    visualize_dim,
-    embedded,
-    idx_dict,
-    color_list,
-    test_tree_list.content_vocab,
-    test_tree_list.category_vocab)
+dev_tree_list.tokenizer = tree_net.tokenizer
+dev_tree_list.embedder = embedder
+
+
+dev_tree_list.set_info_for_training(tokenizer=tree_net.tokenizer)
+with torch.no_grad():
+    dev_tree_list.set_vector(tree_net)
+
+vector_list = []
+node_type_list = []
+node_cat_list = []
+for tree in dev_tree_list.tree_list:
+    for node in tree.node_list:
+        vector_list.append(node.vector.to(torch.device('cpu')).detach().numpy())
+        node_cat_list.append(node.category)
+        if node.is_leaf:
+            node_type_list.append(0)
+        else:
+            if 'S' in node.category and '/' not in node.category and '\\' not in node.category:
+                node_type_list.append(2)
+            else:
+                node_type_list.append(1)
+
+vector_list = np.array(vector_list)
+node_type_list = np.array(node_type_list)[:n_dot]
+pca = PCA(n_components=3)
+compressed_vector = pca.fit_transform(vector_list)[:n_dot]
+word_vector = compressed_vector[node_type_list == 0]
+phrase_vector = compressed_vector[node_type_list == 1]
+sentence_vector = compressed_vector[node_type_list == 2]
+
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+ax.scatter(word_vector[:, 0], word_vector[:, 1], word_vector[:, 2], c='r', s=1)
+ax.scatter(phrase_vector[:, 0], phrase_vector[:, 1], phrase_vector[:, 2], c='b', s=1)
+ax.scatter(sentence_vector[:, 0], sentence_vector[:, 1], sentence_vector[:, 2], c='g', s=1)
+fig.savefig('/home/yamaki-ryosuke/Hol-CCG/result/fig/map/' + model.replace('.pth', '.pdf'))
 plt.show()
