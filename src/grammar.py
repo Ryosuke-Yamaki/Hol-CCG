@@ -67,7 +67,7 @@ class Combinator:
                 left = rule[4]
                 right = rule[5]
                 composed_parent, _ = self.apply_binary(left, right)
-                if parent in composed_parent or freq > min_freq:
+                if parent in composed_parent or freq >= min_freq:
                     if (left, right) in self.binary_rule:
                         self.binary_rule[(left, right)].append(parent)
                     else:
@@ -77,7 +77,7 @@ class Combinator:
                 parent = rule[2]
                 child = rule[4]
                 composed_parent, _ = self.apply_unary(child)
-                if parent in composed_parent or freq > min_freq:
+                if parent in composed_parent or freq >= min_freq:
                     if child in self.unary_rule:
                         self.unary_rule[child].append(parent)
                     else:

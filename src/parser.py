@@ -1,6 +1,4 @@
 import sys
-from os import wait
-import numpy as np
 from utils import load, Condition_Setter
 import time
 import torch
@@ -14,9 +12,9 @@ class Category:
             cell_id,
             cat,
             vector,
-            total_score,
-            label_score,
-            span_score=None,
+            total_ll,
+            label_ll,
+            span_ll=None,
             num_child=None,
             left_child=None,
             right_child=None,
@@ -26,9 +24,9 @@ class Category:
         self.cell_id = cell_id
         self.cat = cat
         self.vector = vector
-        self.total_score = total_score
-        self.label_score = label_score
-        self.span_score = span_score
+        self.total_ll = total_ll
+        self.label_ll = label_ll
+        self.span_ll = span_ll
         self.num_child = num_child
         self.left_child = left_child
         self.right_child = right_child
@@ -47,8 +45,8 @@ class Cell:
         # when category already exist in the cell
         if category.cat in self.best_category_id:
             best_category = self.category_list[self.best_category_id[category.cat]]
-            # only when the new category has higher score than existing one, replace it
-            if category.total_score > best_category.total_score:
+            # only when the new category has higher probability than existing one, replace it
+            if category.total_ll > best_category.total_ll:
                 self.best_category_id[category.cat] = len(self.category_list)
                 self.category_list.append(category)
         else:
@@ -66,7 +64,8 @@ class Parser:
             phrase_category_vocab,
             stag_threshold,
             label_threshold,
-            span_threshold):
+            span_threshold,
+            max_parse_time=60):
         self.tokenizer = tree_net.tokenizer
         self.encoder = tree_net.model
         self.word_ff = tree_net.word_ff.to('cpu')
@@ -78,6 +77,7 @@ class Parser:
         self.stag_threshold = stag_threshold
         self.label_threshold = label_threshold
         self.span_threshold = span_threshold
+        self.max_parse_time = max_parse_time
 
     def initialize_chart(self, sentence):
         sentence = sentence.split()
@@ -118,38 +118,37 @@ class Parser:
         for start_idx, end_idx in word_split:
             temp.append(torch.mean(output[start_idx:end_idx], dim=0))
         word_vectors = torch.stack(temp)
-        word_scores = self.word_ff(word_vectors)
-        word_prob = torch.softmax(word_scores, dim=-1)
-        word_predict_cats = torch.argsort(word_prob, descending=True)
-        word_predict_cats = word_predict_cats[word_predict_cats != 0].view(word_prob.shape[0], -1)
+        word_probs_list = torch.softmax(self.word_ff(word_vectors), dim=-1)
+        word_predict_cats = torch.argsort(word_probs_list, descending=True)
+        word_predict_cats = word_predict_cats[word_predict_cats != 0].view(
+            word_probs_list.shape[0], -1)
 
         chart = {}
 
         for idx in range(len(converted_sentence)):
             word = sentence[idx]
             vector = word_vectors[idx]
-            score = word_scores[idx]
-            prob = word_prob[idx]
+            word_probs = word_probs_list[idx]
             top_cat_id = word_predict_cats[idx, 0]
             top_category = Category(
                 (idx, idx + 1),
                 self.word_category_vocab.itos[top_cat_id],
                 vector,
-                total_score=score[top_cat_id],
-                label_score=score[top_cat_id],
+                total_ll=torch.log(word_probs[top_cat_id]),
+                label_ll=torch.log(word_probs[top_cat_id]),
                 is_leaf=True,
                 word=word)
             chart[(idx, idx + 1)] = Cell(word)
             chart[(idx, idx + 1)].add_category(top_category)
 
             for cat_id in word_predict_cats[idx, 1:]:
-                if prob[cat_id] > self.stag_threshold:
+                if word_probs[cat_id] > self.stag_threshold:
                     category = Category((idx,
                                          idx + 1),
                                         self.word_category_vocab.itos[cat_id],
                                         vector,
-                                        score[cat_id],
-                                        score[cat_id],
+                                        total_ll=torch.log(word_probs[cat_id]),
+                                        label_ll=torch.log(word_probs[cat_id]),
                                         is_leaf=True,
                                         word=word)
                     chart[(idx, idx + 1)].add_category(category)
@@ -167,23 +166,22 @@ class Parser:
                     if possible_cats is None:
                         continue
                     else:
-                        span_score = self.span_ff(child_cat.vector)
-                        span_prob = torch.sigmoid(span_score)
+                        span_prob = torch.sigmoid(self.span_ff(child_cat.vector))
                         if span_prob > self.span_threshold:
-                            phrase_scores = self.phrase_ff(child_cat.vector)
-                            phrase_probs = torch.softmax(phrase_scores, dim=-1)
+                            span_ll = torch.log(span_prob)
+                            phrase_probs = torch.softmax(self.phrase_ff(child_cat.vector), dim=-1)
                             for parent_cat in possible_cats:
-                                label_score = phrase_scores[self.phrase_category_vocab[parent_cat]]
                                 label_prob = phrase_probs[self.phrase_category_vocab[parent_cat]]
                                 if label_prob > self.label_threshold:
-                                    total_score = label_score + span_score + child_cat.total_score
+                                    label_ll = torch.log(label_prob)
+                                    total_ll = label_ll + span_ll + child_cat.total_ll
                                     parent_category = Category(
                                         (idx, idx + 1),
                                         parent_cat,
                                         child_cat.vector,
-                                        total_score=total_score,
-                                        label_score=label_score,
-                                        span_score=span_score,
+                                        total_ll=total_ll,
+                                        label_ll=label_ll,
+                                        span_ll=span_ll,
                                         num_child=1,
                                         left_child=child_cat,
                                         head=0)
@@ -197,15 +195,15 @@ class Parser:
 
     @torch.no_grad()
     def parse(self, sentence):
-        if len(sentence.split()) > 250:
-            return False
-        else:
-            chart = self.initialize_chart(sentence)
-            n = len(chart)
-            for length in range(2, n + 1):
-                for left in range(n - length + 1):
-                    right = left + length
-                    chart[(left, right)] = Cell(' '.join(sentence.split()[left:right]))
+        start = time.time()
+        chart = self.initialize_chart(sentence)
+        n = len(chart)
+        for length in range(2, n + 1):
+            for left in range(n - length + 1):
+                right = left + length
+                chart[(left, right)] = Cell(' '.join(sentence.split()[left:right]))
+                # when time is not over
+                if time.time() - start < self.max_parse_time:
                     for split in range(left + 1, right):
                         for left_cat_id in chart[(left, split)].best_category_id.values():
                             left_cat = chart[(left, split)].category_list[left_cat_id]
@@ -219,30 +217,31 @@ class Parser:
                                 else:
                                     composed_vector = single_circular_correlation(
                                         left_cat.vector, right_cat.vector)
-                                    span_score = self.span_ff(composed_vector)
-                                    span_prob = torch.sigmoid(span_score)
+                                    span_prob = torch.sigmoid(self.span_ff(composed_vector))
                                     if span_prob > self.span_threshold:
-                                        phrase_scores = self.phrase_ff(composed_vector)
-                                        phrase_probs = torch.softmax(phrase_scores, dim=-1)
+                                        span_ll = torch.log(span_prob)
+                                        phrase_probs = torch.softmax(
+                                            self.phrase_ff(composed_vector), dim=-1)
                                         for parent_cat in possible_cats:
-                                            label_score = phrase_scores[self.phrase_category_vocab[parent_cat]]
                                             label_prob = phrase_probs[self.phrase_category_vocab[parent_cat]]
                                             if label_prob > self.label_threshold:
-                                                total_score = label_score + span_score + left_cat.total_score + right_cat.total_score
+                                                label_ll = torch.log(label_prob)
+                                                total_ll = label_ll + span_ll + left_cat.total_ll + right_cat.total_ll
                                                 head = self.combinator.head_info[(
                                                     left_cat.cat, right_cat.cat, parent_cat)]
                                                 parent_category = Category(
                                                     (left, right),
                                                     parent_cat,
                                                     composed_vector,
-                                                    total_score=total_score,
-                                                    label_score=label_score,
-                                                    span_score=span_score,
+                                                    total_ll=total_ll,
+                                                    label_ll=label_ll,
+                                                    span_ll=span_ll,
                                                     num_child=2,
                                                     left_child=left_cat,
                                                     right_child=right_cat,
                                                     head=head)
-                                                chart[(left, right)].add_category(parent_category)
+                                                chart[(left, right)].add_category(
+                                                    parent_category)
 
                     waiting_cat_id = list(chart[(left, right)].best_category_id.values())
                     while True:
@@ -255,23 +254,23 @@ class Parser:
                             if possible_cats is None:
                                 continue
                             else:
-                                span_score = self.span_ff(child_cat.vector)
-                                span_prob = torch.sigmoid(span_score)
+                                span_prob = torch.sigmoid(self.span_ff(child_cat.vector))
                                 if span_prob > self.span_threshold:
-                                    phrase_scores = self.phrase_ff(child_cat.vector)
-                                    phrase_probs = torch.softmax(phrase_scores, dim=-1)
+                                    span_ll = torch.log(span_prob)
+                                    phrase_probs = torch.softmax(
+                                        self.phrase_ff(child_cat.vector), dim=-1)
                                     for parent_cat in possible_cats:
-                                        label_score = phrase_scores[self.phrase_category_vocab[parent_cat]]
                                         label_prob = phrase_probs[self.phrase_category_vocab[parent_cat]]
                                         if label_prob > self.label_threshold:
-                                            total_score = label_score + span_score + child_cat.total_score
+                                            label_ll = torch.log(label_prob)
+                                            total_ll = label_ll + span_ll + child_cat.total_ll
                                             parent_category = Category(
                                                 (left, right),
                                                 parent_cat,
                                                 child_cat.vector,
-                                                total_score=total_score,
-                                                label_score=label_score,
-                                                span_score=span_score,
+                                                total_ll=total_ll,
+                                                label_ll=label_ll,
+                                                span_ll=span_ll,
                                                 num_child=1,
                                                 left_child=child_cat,
                                                 head=0)
@@ -381,11 +380,9 @@ class Parser:
                 else:
                     yield i
 
-        max_score = -1e+6
-        for cat_id in root_cell.best_category_id.values():
-            cat = root_cell.category_list[cat_id]
-            if cat.total_score > max_score:
-                max_score = cat.total_score
+        root_cat = root_cell.category_list[0]
+        for cat in root_cell.category_list[1:]:
+            if cat.total_ll > root_cat.total_ll:
                 root_cat = cat
         root_cat.auto = []
         waiting_cats = [root_cat]
@@ -402,8 +399,8 @@ class Parser:
 def main():
     condition = Condition_Setter(set_embedding_type=False)
 
-    # args = sys.argv
-    args = ['', 'roberta-large_phrase(b).pth', 'dev', '0.075', '0.01', '0.01', '10']
+    args = sys.argv
+    # args = ['', 'roberta-large_phrase(b).pth', 'dev', '0.075', '0.01', '0.01', '10']
 
     model = args[1]
     dev_test = args[2]
