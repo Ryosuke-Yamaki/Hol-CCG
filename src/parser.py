@@ -1,4 +1,7 @@
 import sys
+from urllib import parse
+
+from numpy.lib.function_base import average
 from utils import load, Condition_Setter
 import time
 import torch
@@ -68,9 +71,9 @@ class Parser:
             max_parse_time=60):
         self.tokenizer = tree_net.tokenizer
         self.encoder = tree_net.model
-        self.word_ff = tree_net.word_ff.to('cpu')
-        self.phrase_ff = tree_net.phrase_ff.to('cpu')
-        self.span_ff = tree_net.span_ff.to('cpu')
+        self.word_ff = tree_net.word_ff
+        self.phrase_ff = tree_net.phrase_ff
+        self.span_ff = tree_net.span_ff
         self.combinator = combinator
         self.word_category_vocab = word_category_vocab
         self.phrase_category_vocab = phrase_category_vocab
@@ -113,7 +116,7 @@ class Parser:
         input = self.tokenizer(
             " ".join(converted_sentence),
             return_tensors='pt').to(self.encoder.device)
-        output = self.encoder(**input).last_hidden_state[0, 1:-1].to('cpu')
+        output = self.encoder(**input).last_hidden_state[0, 1:-1]
         temp = []
         for start_idx, end_idx in word_split:
             temp.append(torch.mean(output[start_idx:end_idx], dim=0))
@@ -442,13 +445,9 @@ def main():
         sentence_list = f.readlines()
 
     sentence_id = 0
-    # total_parse_time = 0
-    # total_decode_time = 0
     for sentence in sentence_list:
         sentence_id += 1
         sentence = sentence.rstrip()
-        # start = time.time()
-        # sentence = "I am a man"
         chart = parser.parse(sentence)
         root_cell = list(chart.values())[-1]
         if len(root_cell.best_category_id) == 0:
@@ -460,19 +459,10 @@ def main():
                         sentence_id, n, scope[0], scope[1]))
                 print(auto)
                 n += 1
-
         else:
             auto = parser.decode(root_cell)
             print('ID={} PARSER=TEST APPLY_SKIMMER=FALSE'.format(sentence_id))
             print(auto)
-        # time_to_parse = time.time() - start
-        # total_parse_time += time_to_parse
-
-        # start = time.time()
-        # time_to_decode = time.time() - start
-        # total_decode_time += time_to_decode
-    # print("average parse time:{}".format(total_parse_time / len(sentence_list)))
-    # print("average decode time:{}".format(total_decode_time / len(sentence_list)))
 
 
 if __name__ == "__main__":
