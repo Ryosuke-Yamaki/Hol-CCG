@@ -1,12 +1,12 @@
 import sys
-from urllib import parse
-
+from concurrent.futures import ThreadPoolExecutor
 from numpy.lib.function_base import average
 from utils import load, Condition_Setter
 import time
 import torch
 from utils import single_circular_correlation
 from grammar import Combinator
+from concurrent.futures import ProcessPoolExecutor
 
 
 class Category:
@@ -403,7 +403,7 @@ def main():
     condition = Condition_Setter(set_embedding_type=False)
 
     args = sys.argv
-    # args = ['', 'roberta-large_phrase(b).pth', 'dev', '0.075', '0.01', '0.01', '10']
+    args = ['', 'roberta-large_phrase(b).pth', 'dev', '0.001', '0.01', '0.05', '10']
 
     model = args[1]
     dev_test = args[2]
