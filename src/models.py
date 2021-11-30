@@ -308,7 +308,6 @@ class Tree_List:
             tree.set_node_composition_info()
             tree.set_original_position_of_leaf_node()
 
-    @torch.no_grad()
     def set_info_for_training(self, tokenizer=None):
         self.num_node = []
         self.sentence_list = []
