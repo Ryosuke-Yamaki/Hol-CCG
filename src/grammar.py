@@ -61,27 +61,42 @@ class Combinator:
             rules = f.readlines()
         for rule in rules:
             rule = rule.split()
+            # for binary rule
             if len(rule) == 6:
                 freq = int(rule[0])
                 parent = rule[2]
                 left = rule[4]
                 right = rule[5]
-                composed_parent, _ = self.apply_binary(left, right)
-                if parent in composed_parent or freq >= min_freq:
+                composed_parents, types = self.apply_binary(left, right)
+                # for the basic combinatory rules
+                if parent in composed_parents:
+                    type = types[composed_parents.index(parent)]
                     if (left, right) in self.binary_rule:
-                        self.binary_rule[(left, right)].append(parent)
+                        self.binary_rule[(left, right)].append([parent, type])
                     else:
-                        self.binary_rule[(left, right)] = [parent]
+                        self.binary_rule[(left, right)] = [[parent, type]]
+                elif freq >= min_freq:
+                    if (left, right) in self.binary_rule:
+                        self.binary_rule[(left, right)].append([parent, 'other'])
+                    else:
+                        self.binary_rule[(left, right)] = [[parent, 'other']]
+            # for unary rule
             elif len(rule) == 5:
                 freq = int(rule[0])
                 parent = rule[2]
                 child = rule[4]
-                composed_parent, _ = self.apply_unary(child)
-                if parent in composed_parent or freq >= min_freq:
+                composed_parent, types = self.apply_unary(child)
+                if parent in composed_parent:
+                    type = types[composed_parent.index(parent)]
                     if child in self.unary_rule:
-                        self.unary_rule[child].append(parent)
+                        self.unary_rule[child].append([parent, type])
                     else:
-                        self.unary_rule[child] = [parent]
+                        self.unary_rule[child] = [[parent, type]]
+                elif freq >= min_freq:
+                    if child in self.unary_rule:
+                        self.unary_rule[child].append([parent, 'other'])
+                    else:
+                        self.unary_rule[child] = [[parent, 'other']]
 
     def apply_binary(self, left, right):
         left = self.get_cat_info(left)
@@ -146,6 +161,7 @@ class Combinator:
             type = ['conj']
             if right['cat'] == 'N':
                 parent.append(right['cat'])
+                type.append('conj')
 
         elif left['cat'] in [',', ':', ';', 'LRB']:
             # apply punctuation rules
@@ -158,7 +174,7 @@ class Combinator:
                     # apply binary type changing
                     if right['cat'] == 'NP':
                         parent.append('(S\\NP)\\(S\\NP)')
-                        type.append('binary_change')
+                        type.append('btc')
                     # apply coordination
                     if right['cat'] in self.coord_cats['left_,']:
                         parent.append(right['cat'] + '\\' + right['cat'])
@@ -184,13 +200,13 @@ class Combinator:
                     # apply binary type changing
                     if left['cat'] == "NP":
                         parent.append("S/S")
-                        type.append('binary_change')
+                        type.append('btc')
                     elif left['cat'] == "S[dcl]/S[dcl]":
                         parent.extend(["S/S", "(S\\NP)\\(S\\NP)", "(S\\NP)/(S\\NP)"])
-                        type.extend('binary_change')
+                        type.extend(['btc', 'btc', 'btc'])
                     elif left['cat'] == "S[dcl]/S[dcl]":
                         parent.extend(["S\\S", "S/S"])
-                        type.extend('binary_change')
+                        type.extend(['btc', 'btc'])
             else:
                 parent = []
                 type = []
@@ -228,7 +244,7 @@ class Combinator:
         # apply type-changing
         if child['cat'] in self.u_type_change:
             parent.extend(self.u_type_change[child['cat']])
-            parent.extend(["tc" for i in range(len(child['cat']))])
+            type.extend(["utc" for i in range(len(self.u_type_change[child['cat']]))])
         return parent, type
 
     def get_cat_info(self, cat):

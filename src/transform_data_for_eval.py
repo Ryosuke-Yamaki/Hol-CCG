@@ -1,7 +1,8 @@
 import sys
 
 
-def add_tag_info(auto, tag_info):
+def extract_tags(auto):
+    tags = []
     auto = auto.split()
     for i in range(len(auto)):
         token = auto[i]
@@ -17,120 +18,112 @@ def add_tag_info(auto, tag_info):
                 word = ')'
             pos = auto[i + 2]
             cat = auto[i + 1]
-            tag_info.append('|'.join([word, pos, cat]))
-    return tag_info
+            tags.append('|'.join([word, pos, cat]))
+    return ' '.join(tags)
 
 
-def add_deps_info(deps, start_idx, temp_deps):
-    deps = deps.split()
-    info = deps[0].split('_')
-    info[1] = str(int(info[1]) + start_idx)
-    deps[0] = '_'.join(info)
-    info = deps[3].split('_')
-    info[1] = str(int(info[1]) + start_idx)
-    deps[3] = '_'.join(info)
-    deps = ' '.join(deps) + '\n'
-    temp_deps.append(deps)
-    return temp_deps
+def extract_deps(deps_list, start=None):
+    extracted_deps = []
+    while True:
+        deps = deps_list.pop(0)
+        if deps == '\n':
+            if len(extracted_deps) > 0:
+                if extracted_deps[-1].startswith('<c>'):
+                    extracted_deps.pop(-1)
+                if start is not None:
+                    fix_deps_idx(extracted_deps, start)
+            return extracted_deps
+        else:
+            extracted_deps.append(deps)
+
+
+def fix_deps_idx(extracted_deps, start):
+    for i in range(len(extracted_deps)):
+        deps = extracted_deps[i].split()
+        info = deps[0].split('_')
+        info[1] = str(int(info[1]) + start)
+        deps[0] = '_'.join(info)
+        info = deps[3].split('_')
+        info[1] = str(int(info[1]) + start)
+        deps[3] = '_'.join(info)
+        deps = ' '.join(deps) + '\n'
+        extracted_deps[i] = deps
+
 
 args = sys.argv
-
-
 # args = [
 #     '',
-#     "/home/yamaki-ryosuke/span_parsing/CCGBANK_DEPS/roberta-large_phrase(b)_dev_0.075_0.01_0.01_10.ccgbank_deps",
-#     "/home/yamaki-ryosuke/span_parsing/AUTO/roberta-large_phrase(b)_dev_0.075_0.01_0.01_10.auto"]
-path_to_ccgbank_deps = args[1]
-path_to_autos = args[2]
+#     "/home/yamaki-ryosuke/span_parsing/AUTO/roberta-large_phrase_span_3_dev_0.1_0.0_0.1_5.auto",
+#     "/home/yamaki-ryosuke/span_parsing/CCGBANK_DEPS/roberta-large_phrase_span_3_dev_0.1_0.0_0.1_5.ccgbank_deps",
+#     "/home/yamaki-ryosuke/span_parsing/FAILURE/roberta-large_phrase_span_3_failure.out",
+#     "/home/yamaki-ryosuke/candc-1.00/errors.log"]
 
+path_to_autos = args[1]
+path_to_ccgbank_deps = args[2]
+path_to_failure_deps = args[3]
+path_to_error_log = args[4]
+path_to_completed_ccgbank_deps = path_to_ccgbank_deps.replace(
+    ".ccgbank_deps", ".completed_ccgbank_deps")
 
-with open(path_to_ccgbank_deps, 'r') as f:
-    ccgbank_deps = f.readlines()
 with open(path_to_autos, 'r') as f:
     autos = f.readlines()
+with open(path_to_ccgbank_deps, 'r') as f:
+    ccgbank_deps = f.readlines()
+with open(path_to_failure_deps, 'r') as f:
+    failure_deps = f.readlines()
+with open(path_to_error_log, 'r') as f:
+    error_log = f.readlines()
 
-transformed = ccgbank_deps[:3]
+transformed_deps = ccgbank_deps[:3]
 ccgbank_deps = ccgbank_deps[3:]
+failure_deps = failure_deps[2:]
+count = 0
+for line in failure_deps:
+    if line.startswith('<c>'):
+        count += 1
 
-deps_idx = 0
-sentence_id = 0
-
-for auto_idx in range(len(autos)):
-    auto = autos[auto_idx]
-    if auto.startswith('ID'):
-        previous_sentence_id = sentence_id
-        parse_info = auto.split()
-        sentence_id = int(parse_info[0].split('.')[0].split('=')[1])
-        apply_skimmer = parse_info[2]
-        if 'True' in apply_skimmer:
-            apply_skimmer = True
-            scope = [int(i) for i in parse_info[3].split('=')[1][1:-1].split(',')]
-            next_parse_info = autos[auto_idx + 2].split()
-            next_sentence_id = int(next_parse_info[0].split('.')[0].split('=')[1])
-            next_apply_skimmer = next_parse_info[2]
-            if 'True' in next_apply_skimmer:
-                next_apply_skimmer = True
-            else:
-                next_apply_skimmer = False
-        else:
-            apply_skimmer = False
-
+auto_info = []
+auto_content = []
+for line in autos:
+    if line.startswith('ID='):
+        auto_info.append(line)
     else:
-        # when move to next sentence
-        if previous_sentence_id != sentence_id:
-            if not apply_skimmer:
-                temp_deps = []
-                deps = ccgbank_deps[deps_idx]
-                while deps != '\n':
-                    temp_deps.append(deps)
-                    deps_idx += 1
-                    deps = ccgbank_deps[deps_idx]
-                tag_info = ['<c>']
-                tag_info = add_tag_info(auto, tag_info)
-                # when there is no deps
-                if temp_deps == []:
-                    transformed.append('\n')
-                else:
-                    transformed.extend(temp_deps)
-                    transformed.append(' '.join(tag_info) + '\n')
-                    transformed.append('\n')
-                deps_idx += 1
-            # when apply skimmer
-            else:
-                temp_deps = []
-                deps = ccgbank_deps[deps_idx]
-                while deps != '\n':
-                    temp_deps = add_deps_info(deps, scope[0], temp_deps)
-                    deps_idx += 1
-                    deps = ccgbank_deps[deps_idx]
-                tag_info = ['<c>']
-                tag_info = add_tag_info(auto, tag_info)
-                if not next_apply_skimmer:
-                    if temp_deps == []:
-                        transformed.append('\n')
-                    else:
-                        transformed.extend(temp_deps)
-                        transformed.append(' '.join(tag_info) + '\n')
-                        transformed.append('\n')
-                deps_idx += 1
-        # when add another deps information to the same sentence
-        else:
-            deps = ccgbank_deps[deps_idx]
-            while deps != '\n':
-                temp_deps = add_deps_info(deps, scope[0], temp_deps)
-                deps_idx += 1
-                deps = ccgbank_deps[deps_idx]
-            tag_info = add_tag_info(auto, tag_info)
-            if sentence_id != next_sentence_id or not next_apply_skimmer:
-                if temp_deps == []:
-                    transformed.append('\n')
-                else:
-                    transformed.extend(temp_deps)
-                    transformed.append(' '.join(tag_info) + '\n')
-                    transformed.append('\n')
-            deps_idx += 1
-    auto_idx += 1
+        auto_content.append(line)
 
+extracted_tags = []
+extracted_deps = []
+for info, auto, log in zip(auto_info, auto_content, error_log):
+    if len(info.split()) > 3:
+        scope = info.split()[3].split('=')[1][1:-1].split(',')
+        start = int(scope[0])
+    else:
+        start = None
+    if 'parse successful' in log:
+        extracted_deps.append(extract_deps(ccgbank_deps, start))
+    else:
+        extract_deps(ccgbank_deps, start)
+        extracted_deps.append(extract_deps(failure_deps, start))
+    extracted_tags.append(extract_tags(auto))
 
-with open(path_to_ccgbank_deps, 'w') as f:
-    f.writelines(transformed)
+previous_sentence_id = 1
+deps = extracted_deps[0]
+tags = extracted_tags[0]
+for idx in range(1, len(auto_info)):
+    info = auto_info[idx]
+    sentence_id = int(info.split()[0].split('=')[1].split('.')[0])
+    if sentence_id != previous_sentence_id:
+        transformed_deps.extend(deps)
+        transformed_deps.append('<c> ' + tags + '\n')
+        transformed_deps.append('\n')
+        deps = extracted_deps[idx]
+        tags = extracted_tags[idx]
+    else:
+        deps.extend(extracted_deps[idx])
+        tags += ' ' + extracted_tags[idx]
+    previous_sentence_id = sentence_id
+transformed_deps.extend(deps)
+transformed_deps.append('<c> ' + tags + '\n')
+transformed_deps.append('\n')
+
+with open(path_to_completed_ccgbank_deps, 'w') as f:
+    f.writelines(transformed_deps)
