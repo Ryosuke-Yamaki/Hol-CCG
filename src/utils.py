@@ -16,8 +16,8 @@ def circular_correlation(a, b, k=1e+3):
     b_ = fft(b)
     c_ = a_ * b_
     c = ifft(c_).real
-    idx = torch.norm(c, dim=1) > k
-    c[idx] = normalize(c[idx], dim=1) * k
+    # idx = torch.norm(c, dim=1) > k
+    # c[idx] = normalize(c[idx], dim=1) * k
     return c
 
 
@@ -26,8 +26,8 @@ def single_circular_correlation(a, b, k=1e+3):
     b_ = fft(b)
     c_ = a_ * b_
     c = ifft(c_).real
-    if torch.norm(c) > k:
-        c = normalize(c, dim=-1) * k
+    # if torch.norm(c) > k:
+    #     c = normalize(c, dim=-1) * k
     return c
 
 
@@ -36,8 +36,8 @@ def circular_convolution(a, b, k=1e+3):
     b_ = fft(b)
     c_ = a_ * b_
     c = ifft(c_).real
-    idx = torch.norm(c, dim=1) > k
-    c[idx] = normalize(c[idx], dim=1) * k
+    # idx = torch.norm(c, dim=1) > k
+    # c[idx] = normalize(c[idx], dim=1) * k
     return c
 
 
@@ -46,8 +46,8 @@ def single_circular_convolution(a, b, k=1e+3):
     b_ = fft(b)
     c_ = a_ * b_
     c = ifft(c_).real
-    if torch.norm(c) > k:
-        c = normalize(c, dim=-1) * k
+    # if torch.norm(c) > k:
+    #     c = normalize(c, dim=-1) * k
     return c
 
 
