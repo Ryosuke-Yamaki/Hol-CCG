@@ -31,6 +31,37 @@ def single_circular_correlation(a, b, k=1e+3):
     return c
 
 
+def circular_convolution(a, b, k=1e+3):
+    a_ = fft(a)
+    b_ = fft(b)
+    c_ = a_ * b_
+    c = ifft(c_).real
+    idx = torch.norm(c, dim=1) > k
+    c[idx] = normalize(c[idx], dim=1) * k
+    return c
+
+
+def single_circular_convolution(a, b, k=1e+3):
+    a_ = fft(a)
+    b_ = fft(b)
+    c_ = a_ * b_
+    c = ifft(c_).real
+    if torch.norm(c) > k:
+        c = normalize(c, dim=-1) * k
+    return c
+
+
+def normalize(v):
+    original_shape = v.shape
+    v = v.view(-1, v.shape[-1])
+    mean = torch.mean(v, dim=-1).view(-1, 1)
+    std = torch.std(v, dim=-1).view(-1, 1)
+    dim = v.shape[-1]
+    v = (v - mean) / (std * np.sqrt(dim))
+    v = v.view(original_shape)
+    return v
+
+
 def load_weight_matrix(PATH_TO_WEIGHT_MATRIX):
     with open(PATH_TO_WEIGHT_MATRIX, 'r') as f:
         reader = csv.reader(f)
