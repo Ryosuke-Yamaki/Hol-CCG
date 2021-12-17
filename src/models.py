@@ -1,9 +1,8 @@
 import random
-from torch.nn.init import xavier_uniform_, kaiming_uniform_, orthogonal_
+from torch.nn.init import kaiming_uniform_
 from tqdm import tqdm
 import numpy as np
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, pad_sequence
-from allennlp.modules.elmo import batch_to_ids
+from torch.nn.utils.rnn import pad_sequence
 import torch
 import torch.nn as nn
 from operator import itemgetter
@@ -317,10 +316,7 @@ class Tree_List:
         self.word_split = []
         for tree in self.tree_list:
             self.num_node.append(len(tree.node_list))
-            if self.embedder == 'transformer':
-                self.sentence_list.append(" ".join(tree.sentence))
-            elif self.embedder == 'elmo':
-                self.sentence_list.append(tree.sentence)
+            self.sentence_list.append(" ".join(tree.sentence))
             label_list = []
             for node in tree.node_list:
                 label_list.append([node.category_id])
@@ -335,10 +331,7 @@ class Tree_List:
                     tree.composition_info,
                     dtype=torch.long,
                     device=self.device))
-            if self.embedder == 'transformer':
-                self.word_split.append(tree.set_word_split(tokenizer))
-            else:
-                self.word_split.append([])
+            self.word_split.append(tree.set_word_split(tokenizer))
         self.sorted_tree_id = np.argsort(self.num_node)
 
     def make_shuffled_tree_id(self):
@@ -483,9 +476,8 @@ class Tree_List:
                     device=self.device) * -1 for i in composition_list]
             batch_random_composition_info[idx] = torch.stack(
                 [torch.cat((i, j)) for (i, j) in zip(composition_list, dummy_compositin_info)])
-
         # return zipped batch information, when training, extract each batch from zip itteration
-        return list(zip(
+        batch_list = list(zip(
             batch_num_node,
             batch_sentence_list,
             batch_original_pos,
@@ -496,25 +488,17 @@ class Tree_List:
             batch_random_composition_info,
             batch_random_original_pos,
             batch_random_negative_node_id))
+        np.random.shuffle(batch_list)
+        return batch_list
 
     def set_vector(self, tree_net):
         with tqdm(total=len(self.tree_list)) as pbar:
             pbar.set_description("setting vector...")
             for tree in self.tree_list:
-                if self.embedder == 'transformer':
-                    sentence = [" ".join(tree.sentence)]
-                    word_split = [tree.word_split]
-                else:
-                    sentence = [tree.sentence]
-                    word_split = None
-                packed_sequence = tree_net.embed(sentence, word_split=word_split)
-                if tree_net.use_lstm:
-                    bi_lstm_output = tree_net.bi_lstm(packed_sequence)[0]
-                    transformed_rep, _ = tree_net.combine_foward_backward_rep(bi_lstm_output)
-                else:
-                    transformed_rep, _ = tree_net.unpack_bert_output(packed_sequence)
+                sentence = [" ".join(tree.sentence)]
+                word_split = [tree.word_split]
+                vector_list = tree_net.embed(sentence, word_split=word_split)
                 for pos in tree.original_pos:
-                    vector_list = transformed_rep[0]
                     node_id = pos[0]
                     original_pos = pos[1]
                     node = tree.node_list[node_id]
@@ -538,11 +522,9 @@ class Tree_Net(nn.Module):
             self,
             num_word_cat,
             num_phrase_cat,
-            embedder,
             model,
             tokenizer=None,
             learn_embedder=True,
-            use_lstm=True,
             embedding_dim=1024,
             model_dim=300,
             ff_dropout=0.2,
@@ -550,33 +532,14 @@ class Tree_Net(nn.Module):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
         self.num_phrase_cat = num_phrase_cat
-        self.embedder = embedder
         self.model = model
         self.tokenizer = tokenizer
         self.embedding_dim = embedding_dim
         self.model_dim = model_dim
         self.learn_embedder = learn_embedder
-        self.use_lstm = use_lstm
         # the list which to record the modules to set separated lr
         self.base_modules = []
         self.base_params = []
-
-        if self.use_lstm:
-            self.bi_lstm = nn.LSTM(
-                input_size=self.embedding_dim,
-                hidden_size=self.model_dim,
-                batch_first=True,
-                bidirectional=True)
-            self.W1 = nn.Linear(self.model_dim, self.model_dim, bias=False)
-            self.W2 = nn.Linear(self.model_dim, self.model_dim, bias=False)
-            self.relu = nn.LeakyReLU()
-            orthogonal_(self.bi_lstm.weight_ih_l0)
-            orthogonal_(self.bi_lstm.weight_hh_l0)
-            kaiming_uniform_(self.W1.weight)
-            kaiming_uniform_(self.W2.weight)
-            self.base_modules.append(self.bi_lstm)
-            self.base_modules.append(self.W1)
-            self.base_modules.append(self.W2)
 
         self.transform_word_rep = FeedForward(
             self.embedding_dim, self.embedding_dim, self.model_dim)
@@ -608,34 +571,25 @@ class Tree_Net(nn.Module):
         original_pos = batch[2]
         composition_info = batch[3]
         batch_label = batch[4]
-        if self.embedder == 'transformer':
-            word_split = batch[5]
-        elif self.embedder == 'elmo':
-            word_split = None
+        word_split = batch[5]
         random_num_node = batch[6]
         random_composition_info = batch[7]
         random_original_pos = batch[8]
         random_negative_node_id = batch[9]
 
         if self.learn_embedder:
-            packed_sequence = self.embed(sentence, word_split)
+            vector_list, lengths = self.embed(sentence, word_split)
         # when not train word embedder, the computation of gradient is not needed
         else:
             with torch.no_grad():
-                packed_sequence = self.embed(sentence, word_split)
-        # after contextualized word embedding, feed the output into LSTM
-        if self.use_lstm:
-            bi_lstm_output = self.bi_lstm(packed_sequence)[0]
-            encoded_rep, len_unpacked = self.combine_foward_backward_rep(bi_lstm_output)
-        else:
-            encoded_rep, len_unpacked = self.unpack_bert_output(packed_sequence)
+                vector_list, lengths = self.embed(sentence, word_split)
 
         # compose word vectors and fed them into FFNN
         original_vector = self.set_leaf_node_vector(
-            num_node, encoded_rep, len_unpacked, original_pos)
+            num_node, vector_list, lengths, original_pos)
         # compose word vectors for randomly generated trees
         random_vector = self.set_leaf_node_vector(
-            random_num_node, encoded_rep, len_unpacked, random_original_pos)
+            random_num_node, vector_list, lengths, random_original_pos)
         original_vector_shape = original_vector.shape
         random_vector_shape = random_vector.shape
         original_vector = original_vector.view(-1, self.embedding_dim)
@@ -645,7 +599,6 @@ class Tree_Net(nn.Module):
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
         random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
-        norm = torch.norm(original_vector, dim=-1)
         composed_vector = self.compose(original_vector, composition_info)
         random_composed_vector = self.compose(random_vector, random_composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
@@ -658,61 +611,38 @@ class Tree_Net(nn.Module):
         span_output = self.span_ff(span_vector)
         return word_output, phrase_output, span_output, word_label, phrase_label, span_label
 
-    # embedding word vector using bert or elmo
-    def embed(self, sentence, word_split=None):
-        if self.embedder == 'transformer':
-            input = self.tokenizer(
-                sentence,
-                padding=True,
-                return_tensors='pt').to(self.device)
-            output = self.model(**input).last_hidden_state[:, 1:-1]
-            rep = []
-            lengths = []
-            for vector, info in zip(output, word_split):
-                temp = []
-                for start_idx, end_idx in info:
-                    temp.append(torch.mean(vector[start_idx:end_idx], dim=0))
-                rep.append(torch.stack(temp))
-                lengths.append(len(temp))
-            rep = pad_sequence(rep, batch_first=True)
-            lengths = torch.tensor(lengths, device=torch.device('cpu'))
+    # embedding word vector
+    def embed(self, sentence, word_split):
+        input = self.tokenizer(
+            sentence,
+            padding=True,
+            return_tensors='pt').to(self.device)
+        output = self.model(**input).last_hidden_state[:, 1:-1]
+        vector_list = []
+        lengths = []
+        for vector, info in zip(output, word_split):
+            temp = []
+            for start_idx, end_idx in info:
+                temp.append(torch.mean(vector[start_idx:end_idx], dim=0))
+            vector_list.append(torch.stack(temp))
+            lengths.append(len(temp))
+        vector_list = pad_sequence(vector_list, batch_first=True)
+        lengths = torch.tensor(lengths, device=torch.device('cpu'))
+        return vector_list, lengths
 
-        elif self.embedder == 'elmo':
-            input = batch_to_ids(sentence).to(self.device)
-            output = self.model(input)
-            rep = output['elmo_representations'][0]
-            mask = output['mask'].to(torch.device('cpu'))
-            lengths = torch.count_nonzero(mask, dim=1)
-        packed_sequence = pack_padded_sequence(
-            rep, lengths=lengths, batch_first=True, enforce_sorted=False)
-        return packed_sequence
-
-    # combine the output of bidirectional LSTM, the output of foward and backward LSTM
-    def combine_foward_backward_rep(self, packed_sequence):
-        seq_unapcked, len_unpacked = pad_packed_sequence(packed_sequence, batch_first=True)
-        forward_rep = seq_unapcked[:, :, :self.model_dim]
-        backward_rep = seq_unapcked[:, :, self.model_dim:]
-        combined_rep = self.relu(self.W1(forward_rep) + self.W2(backward_rep))
-        return combined_rep, len_unpacked
-
-    # unpack packed bert representation
-    def unpack_bert_output(self, packed_sequence):
-        bert_rep, len_unpacked = pad_packed_sequence(packed_sequence, batch_first=True)
-        return bert_rep, len_unpacked
-
-    def set_leaf_node_vector(self, num_node, combined_rep, len_unpacked, original_pos):
-        vector = torch.zeros(
+    def set_leaf_node_vector(self, num_node, vector_list, lengths, original_pos):
+        leaf_node_vector = torch.zeros(
             (len(num_node),
              torch.tensor(max(num_node)),
              self.embedding_dim), device=self.device)
         for idx in range(len(num_node)):
-            batch_id = torch.tensor([idx for _ in range(len_unpacked[idx])])
+            batch_id = torch.tensor([idx for _ in range(lengths[idx])])
             # target_id is node.self_id
             target_id = torch.squeeze(original_pos[idx][:, 0])
             # source_id is node.original_pos
             source_id = torch.squeeze(original_pos[idx][:, 1])
-            vector[(batch_id, target_id)] = combined_rep[(batch_id, source_id)]
-        return vector
+            leaf_node_vector[(batch_id, target_id)] = vector_list[(batch_id, source_id)]
+        return leaf_node_vector
 
     def compose(self, vector, composition_info):
         # itteration of composition
@@ -814,16 +744,6 @@ class Tree_Net(nn.Module):
                     length += 1
         self.word_split = word_split
         return word_split
-
-    def cal_word_vectors(self, sentence):
-        word_split = self.set_word_split(sentence)
-        packed_sequence = self.embed([" ".join(sentence)], [word_split])
-        if self.use_lstm:
-            bi_lstm_output = self.bi_lstm(packed_sequence)[0]
-            encoded_rep, _ = self.combine_foward_backward_rep(bi_lstm_output)
-        else:
-            encoded_rep, _ = self.unpack_bert_output(packed_sequence)
-        return encoded_rep[0]
 
 
 class FeedForward(nn.Module):

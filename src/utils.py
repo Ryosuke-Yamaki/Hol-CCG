@@ -113,9 +113,8 @@ def include_unk(content_id, unk_content_id):
 
 @torch.no_grad()
 def evaluate_tree_list(tree_list, tree_net):
-    if tree_list.embedder == 'transformer':
-        for tree in tree_list.tree_list:
-            tree.set_word_split(tree_net.tokenizer)
+    for tree in tree_list.tree_list:
+        tree.set_word_split(tree_net.tokenizer)
     tree_list.set_vector(tree_net)
     word_ff = tree_net.word_ff
     phrase_ff = tree_net.phrase_ff

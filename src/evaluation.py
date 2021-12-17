@@ -15,11 +15,8 @@ set_random_seed(0)
 
 print('loading tree list...')
 # test_tree_list = load(condition.path_to_test_tree_list)
-# test_tree_list.embedder = 'transformer'
 dev_tree_list_base = load(condition.path_to_dev_tree_list)
-dev_tree_list_base.embedder = 'transformer'
 dev_tree_list_hol = load(condition.path_to_dev_tree_list)
-dev_tree_list_hol.embedder = 'transformer'
 
 base = "roberta-large(a).pth"
 hol = "roberta-large_phrase(c).pth"
