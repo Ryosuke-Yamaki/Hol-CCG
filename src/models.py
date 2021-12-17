@@ -7,7 +7,7 @@ from allennlp.modules.elmo import batch_to_ids
 import torch
 import torch.nn as nn
 from operator import itemgetter
-from utils import circular_correlation, single_circular_correlation
+from utils import circular_correlation, single_circular_correlation, standardize
 
 
 class Node:
@@ -544,6 +544,7 @@ class Tree_Net(nn.Module):
             learn_embedder=True,
             use_lstm=True,
             embedding_dim=1024,
+            model_dim=300,
             ff_dropout=0.2,
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
@@ -553,7 +554,7 @@ class Tree_Net(nn.Module):
         self.model = model
         self.tokenizer = tokenizer
         self.embedding_dim = embedding_dim
-        self.hidden_dim = embedding_dim
+        self.model_dim = model_dim
         self.learn_embedder = learn_embedder
         self.use_lstm = use_lstm
         # the list which to record the modules to set separated lr
@@ -563,11 +564,11 @@ class Tree_Net(nn.Module):
         if self.use_lstm:
             self.bi_lstm = nn.LSTM(
                 input_size=self.embedding_dim,
-                hidden_size=self.hidden_dim,
+                hidden_size=self.model_dim,
                 batch_first=True,
                 bidirectional=True)
-            self.W1 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
-            self.W2 = nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
+            self.W1 = nn.Linear(self.model_dim, self.model_dim, bias=False)
+            self.W2 = nn.Linear(self.model_dim, self.model_dim, bias=False)
             self.relu = nn.LeakyReLU()
             orthogonal_(self.bi_lstm.weight_ih_l0)
             orthogonal_(self.bi_lstm.weight_hh_l0)
@@ -577,9 +578,20 @@ class Tree_Net(nn.Module):
             self.base_modules.append(self.W1)
             self.base_modules.append(self.W2)
 
-        self.word_ff = FeedForward(self.embedding_dim, self.num_word_cat, dropout=ff_dropout)
-        self.phrase_ff = FeedForward(self.embedding_dim, self.num_phrase_cat, dropout=ff_dropout)
-        self.span_ff = FeedForward(self.embedding_dim, 1, dropout=ff_dropout)
+        self.transform_word_rep = FeedForward(
+            self.embedding_dim, self.embedding_dim, self.model_dim)
+        self.word_ff = FeedForward(
+            self.model_dim,
+            self.model_dim,
+            self.num_word_cat,
+            dropout=ff_dropout)
+        self.phrase_ff = FeedForward(
+            self.model_dim,
+            self.model_dim,
+            self.num_phrase_cat,
+            dropout=ff_dropout)
+        self.span_ff = FeedForward(self.model_dim, self.model_dim, 1, dropout=ff_dropout)
+        self.base_modules.append(self.transform_word_rep)
         self.base_modules.append(self.word_ff)
         self.base_modules.append(self.phrase_ff)
         self.base_modules.append(self.span_ff)
@@ -619,15 +631,25 @@ class Tree_Net(nn.Module):
             encoded_rep, len_unpacked = self.unpack_bert_output(packed_sequence)
 
         # compose word vectors and fed them into FFNN
-        vector = self.set_leaf_node_vector(num_node, encoded_rep, len_unpacked, original_pos)
-        composed_vector = self.compose(vector, composition_info)
-        word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
-            composed_vector, batch_label, original_pos)
-
+        original_vector = self.set_leaf_node_vector(
+            num_node, encoded_rep, len_unpacked, original_pos)
         # compose word vectors for randomly generated trees
         random_vector = self.set_leaf_node_vector(
             random_num_node, encoded_rep, len_unpacked, random_original_pos)
+        original_vector_shape = original_vector.shape
+        random_vector_shape = random_vector.shape
+        original_vector = original_vector.view(-1, self.embedding_dim)
+        random_vector = random_vector.view(-1, self.embedding_dim)
+        vector = torch.cat((original_vector, random_vector))
+        vector = standardize(self.transform_word_rep(vector))
+        original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
+                                 :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
+        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
+        norm = torch.norm(original_vector, dim=-1)
+        composed_vector = self.compose(original_vector, composition_info)
         random_composed_vector = self.compose(random_vector, random_composition_info)
+        word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
+            composed_vector, batch_label, original_pos)
         span_vector, span_label = self.extract_span_vector(
             phrase_vector, random_composed_vector, random_negative_node_id)
 
@@ -668,8 +690,8 @@ class Tree_Net(nn.Module):
     # combine the output of bidirectional LSTM, the output of foward and backward LSTM
     def combine_foward_backward_rep(self, packed_sequence):
         seq_unapcked, len_unpacked = pad_packed_sequence(packed_sequence, batch_first=True)
-        forward_rep = seq_unapcked[:, :, :self.hidden_dim]
-        backward_rep = seq_unapcked[:, :, self.hidden_dim:]
+        forward_rep = seq_unapcked[:, :, :self.model_dim]
+        backward_rep = seq_unapcked[:, :, self.model_dim:]
         combined_rep = self.relu(self.W1(forward_rep) + self.W2(backward_rep))
         return combined_rep, len_unpacked
 
@@ -682,7 +704,7 @@ class Tree_Net(nn.Module):
         vector = torch.zeros(
             (len(num_node),
              torch.tensor(max(num_node)),
-             self.hidden_dim), device=self.device)
+             self.embedding_dim), device=self.device)
         for idx in range(len(num_node)):
             batch_id = torch.tensor([idx for _ in range(len_unpacked[idx])])
             # target_id is node.self_id
@@ -805,13 +827,13 @@ class Tree_Net(nn.Module):
 
 
 class FeedForward(nn.Module):
-    def __init__(self, input_dim, output_dim, dropout=0.2):
+    def __init__(self, input_dim, hidden_dim, output_dim, dropout=0.2):
         super(FeedForward, self).__init__()
-        self.linear1 = nn.Linear(input_dim, input_dim)
-        self.layer_norm = nn.LayerNorm(input_dim)
+        self.linear1 = nn.Linear(input_dim, hidden_dim)
+        self.layer_norm = nn.LayerNorm(hidden_dim)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=dropout)
-        self.linear2 = nn.Linear(input_dim, output_dim)
+        self.linear2 = nn.Linear(hidden_dim, output_dim)
         kaiming_uniform_(self.linear1.weight)
         kaiming_uniform_(self.linear2.weight)
 
