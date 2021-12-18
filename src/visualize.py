@@ -1,10 +1,8 @@
 import numpy as np
-from utils import load, dump, set_random_seed, Condition_Setter
+from utils import load, Condition_Setter
 from sklearn.decomposition import PCA
-from collections import Counter
 import torch
 import matplotlib.pyplot as plt
-from sklearn.manifold import TSNE
 
 condition = Condition_Setter(set_embedding_type=False)
 
@@ -13,22 +11,18 @@ if torch.cuda.is_available():
 else:
     device = torch.device('cpu')
 
-model = 'roberta-large_phrase(b).pth'
-embedder = 'transformer'
-n_dot = 10000
+model = 'roberta-large_phrase_span.pth'
+n_dot = 5000
 dev_tree_list = load(condition.path_to_dev_tree_list)
 # dev_tree_list.tree_list = dev_tree_list.tree_list[:100]
 tree_net = torch.load(condition.path_to_model + model,
                       map_location=device)
 tree_net.device = device
-tree_net.embedder = embedder
 tree_net.eval()
 
 dev_tree_list.tokenizer = tree_net.tokenizer
-dev_tree_list.embedder = embedder
-
-
 dev_tree_list.set_info_for_training(tokenizer=tree_net.tokenizer)
+
 with torch.no_grad():
     dev_tree_list.set_vector(tree_net)
 
@@ -60,5 +54,5 @@ ax = fig.add_subplot(projection='3d')
 ax.scatter(word_vector[:, 0], word_vector[:, 1], word_vector[:, 2], c='r', s=1)
 ax.scatter(phrase_vector[:, 0], phrase_vector[:, 1], phrase_vector[:, 2], c='b', s=1)
 ax.scatter(sentence_vector[:, 0], sentence_vector[:, 1], sentence_vector[:, 2], c='g', s=1)
-fig.savefig('/home/yamaki-ryosuke/Hol-CCG/result/fig/map/' + model.replace('.pth', '.pdf'))
+fig.savefig(condition.PATH_TO_DIR + 'Hol-CCG/result/fig/map/' + model.replace('.pth', '.pdf'))
 plt.show()

@@ -497,7 +497,8 @@ class Tree_List:
             for tree in self.tree_list:
                 sentence = [" ".join(tree.sentence)]
                 word_split = [tree.word_split]
-                vector_list = tree_net.embed(sentence, word_split=word_split)
+                vector_list, _ = tree_net.embed(sentence, word_split=word_split)
+                vector_list = standardize(tree_net.transform_word_rep(vector_list[0]))
                 for pos in tree.original_pos:
                     node_id = pos[0]
                     original_pos = pos[1]
