@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 from operator import itemgetter
 from utils import circular_correlation, single_circular_correlation, standardize
+from collections import OrderedDict
+from torch.nn.functional import normalize
 
 
 class Node:
@@ -498,7 +500,8 @@ class Tree_List:
                 sentence = [" ".join(tree.sentence)]
                 word_split = [tree.word_split]
                 vector_list, _ = tree_net.embed(sentence, word_split=word_split)
-                vector_list = standardize(tree_net.transform_word_rep(vector_list[0]))
+                # vector_list = standardize(tree_net.transform_word_rep(vector_list[0]))
+                vector_list = normalize(tree_net.transform_word_rep(vector_list[0]), dim=-1)
                 for pos in tree.original_pos:
                     node_id = pos[0]
                     original_pos = pos[1]
@@ -525,9 +528,9 @@ class Tree_Net(nn.Module):
             num_phrase_cat,
             model,
             tokenizer=None,
-            learn_embedder=True,
+            train_embedder=True,
             embedding_dim=1024,
-            model_dim=300,
+            model_dim=1024,
             ff_dropout=0.2,
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
@@ -537,13 +540,17 @@ class Tree_Net(nn.Module):
         self.tokenizer = tokenizer
         self.embedding_dim = embedding_dim
         self.model_dim = model_dim
-        self.learn_embedder = learn_embedder
+        self.train_embedder = train_embedder
         # the list which to record the modules to set separated lr
         self.base_modules = []
         self.base_params = []
 
-        self.transform_word_rep = FeedForward(
-            self.embedding_dim, self.embedding_dim, self.model_dim)
+        self.transform_word_rep = nn.Sequential(OrderedDict([
+            ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
+            ('relu', nn.LeakyReLU()),
+            ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
+        kaiming_uniform_(self.transform_word_rep.linear1.weight)
+        kaiming_uniform_(self.transform_word_rep.linear2.weight)
         self.word_ff = FeedForward(
             self.model_dim,
             self.model_dim,
@@ -578,7 +585,7 @@ class Tree_Net(nn.Module):
         random_original_pos = batch[8]
         random_negative_node_id = batch[9]
 
-        if self.learn_embedder:
+        if self.train_embedder:
             vector_list, lengths = self.embed(sentence, word_split)
         # when not train word embedder, the computation of gradient is not needed
         else:
@@ -596,7 +603,8 @@ class Tree_Net(nn.Module):
         original_vector = original_vector.view(-1, self.embedding_dim)
         random_vector = random_vector.view(-1, self.embedding_dim)
         vector = torch.cat((original_vector, random_vector))
-        vector = standardize(self.transform_word_rep(vector))
+        # vector = standardize(self.transform_word_rep(vector))
+        vector = normalize(self.transform_word_rep(vector), dim=-1)
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
         random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
@@ -752,7 +760,7 @@ class FeedForward(nn.Module):
         super(FeedForward, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_dim)
         self.layer_norm = nn.LayerNorm(hidden_dim)
-        self.relu = nn.ReLU()
+        self.relu = nn.LeakyReLU()
         self.dropout = nn.Dropout(p=dropout)
         self.linear2 = nn.Linear(hidden_dim, output_dim)
         kaiming_uniform_(self.linear1.weight)
