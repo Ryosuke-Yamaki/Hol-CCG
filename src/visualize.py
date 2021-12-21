@@ -11,10 +11,9 @@ if torch.cuda.is_available():
 else:
     device = torch.device('cpu')
 
-model = 'roberta-large_phrase_span.pth'
-n_dot = 5000
+model = 'roberta-large_phrase_span_2021-12-18_15_02_32.pth'
+n_dot = None
 dev_tree_list = load(condition.path_to_dev_tree_list)
-# dev_tree_list.tree_list = dev_tree_list.tree_list[:100]
 tree_net = torch.load(condition.path_to_model + model,
                       map_location=device)
 tree_net.device = device

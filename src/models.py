@@ -1,4 +1,5 @@
 import random
+from torch.nn.functional import normalize
 from torch.nn.init import kaiming_uniform_
 from tqdm import tqdm
 import numpy as np
@@ -498,7 +499,8 @@ class Tree_List:
                 sentence = [" ".join(tree.sentence)]
                 word_split = [tree.word_split]
                 vector_list, _ = tree_net.embed(sentence, word_split=word_split)
-                vector_list = standardize(tree_net.transform_word_rep(vector_list[0]))
+                # vector_list = standardize(tree_net.transform_word_rep(vector_list[0]))
+                vector_list = normalize(tree_net.transform_word_rep(vector_list[0]), dim=-1)
                 for pos in tree.original_pos:
                     node_id = pos[0]
                     original_pos = pos[1]

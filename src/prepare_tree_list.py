@@ -1,12 +1,15 @@
 from utils import dump, load
 from utils import Condition_Setter
 from models import Tree_List
+from torchtext.vocab import Vocab
 
 condition = Condition_Setter(set_embedding_type=False)
 
 word_category_vocab = load(condition.path_to_word_category_vocab)
 phrase_category_vocab = load(
-    condition.path_to_phrase_category_vocab,)
+    condition.path_to_phrase_category_vocab)
+
+phrase_category_vocab = Vocab(phrase_category_vocab.freqs, min_freq=20, specials=['<unk>'])
 
 print('loading tree list...')
 train_tree_list = Tree_List(
