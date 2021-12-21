@@ -1,3 +1,4 @@
+from torch.functional import norm
 import torch.nn as nn
 from tqdm import tqdm
 import os
@@ -26,6 +27,7 @@ def single_circular_correlation(a, b):
     c_ = a_ * b_
     # c = standardize(ifft(c_).real)
     c = normalize(ifft(c_).real, dim=-1)
+    # c = ifft(c_).real
     return c
 
 
@@ -33,7 +35,6 @@ def circular_convolution(a, b):
     a_ = fft(a)
     b_ = fft(b)
     c_ = a_ * b_
-    # c = standardize(ifft(c_).real)
     c = normalize(ifft(c_).real, dim=-1)
     return c
 
@@ -44,6 +45,7 @@ def single_circular_convolution(a, b):
     c_ = a_ * b_
     # c = standardize(ifft(c_).real)
     c = normalize(ifft(c_).real, dim=-1)
+    # c = ifft(c_).real
     return c
 
 

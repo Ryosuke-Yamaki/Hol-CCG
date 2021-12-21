@@ -1,4 +1,5 @@
 import random
+from torch.nn.functional import normalize
 from torch.nn.init import kaiming_uniform_
 from tqdm import tqdm
 import numpy as np
