@@ -1,3 +1,5 @@
+from torchtext.vocab import Vocab
+from collections import Counter
 import random
 from torch.nn.functional import normalize
 from torch.nn.init import kaiming_uniform_
@@ -23,6 +25,7 @@ class Node:
             content = node_info[2]
             self.content = [self.convert_content(content)]
             self.category = node_info[3]
+            self.pos = node_info[4]
             self.ready = True
         else:
             self.category = node_info[2]
@@ -274,14 +277,27 @@ class Tree_List:
     def __init__(
             self,
             PATH_TO_DATA,
-            word_category_vocab,
-            phrase_category_vocab,
+            type,
+            word_category_vocab=None,
+            phrase_category_vocab=None,
+            pos_vocab=None,
+            head_info=None,
+            min_word_category=0,
+            min_phrase_category=0,
             device=torch.device('cpu')):
-        self.word_category_vocab = word_category_vocab
-        self.phrase_category_vocab = phrase_category_vocab
+        self.type = type
         self.device = device
+        self.min_word_category = min_word_category
+        self.min_phrase_category = min_phrase_category
         self.set_tree_list(PATH_TO_DATA)
-        self.set_category_id(self.word_category_vocab, self.phrase_category_vocab)
+        if type == 'train':
+            self.set_vocab_head()
+        else:
+            self.word_category_vocab = word_category_vocab
+            self.phrase_category_vocab = phrase_category_vocab
+            self.pos_vocab = pos_vocab
+            self.head_info = head_info
+        self.set_category_id()
 
     def set_tree_list(self, PATH_TO_DATA):
         self.tree_list = []
@@ -300,7 +316,46 @@ class Tree_List:
                 node_list = []
                 tree_id += 1
 
-    def set_category_id(self, word_category_vocab, phrase_category_vocab):
+    def set_vocab_head(self):
+        word_category_counter = Counter()
+        phrase_category_counter = Counter()
+        pos_counter = Counter()
+        head_info_temp = {}
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    word_category_counter[node.category] += 1
+                    pos_counter[node.pos] += 1
+                else:
+                    if node.num_child == 2:
+                        left_child = tree.node_list[node.left_child_node_id]
+                        right_child = tree.node_list[node.right_child_node_id]
+                        rule = (left_child.category, right_child.category, node.category)
+                        if rule not in head_info_temp:
+                            head_info_temp[rule] = [0, 0]
+                        head_info_temp[rule][node.head] += 1
+                    phrase_category_counter[node.category] += 1
+        self.word_category_vocab = Vocab(
+            word_category_counter,
+            min_freq=self.min_word_category,
+            specials=['<unk>'])
+        self.phrase_category_vocab = Vocab(
+            phrase_category_counter,
+            min_freq=self.min_phrase_category,
+            specials=['<unk>'])
+        self.pos_vocab = Vocab(pos_counter, min_freq=0, specials=[])
+        self.head_info = {}
+        for k, v in head_info_temp.items():
+            # when left head is majority
+            if v[0] >= v[1]:
+                self.head_info[k] = 0
+            # when right head is majority
+            else:
+                self.head_info[k] = 1
+
+    def set_category_id(self):
+        word_category_vocab = self.word_category_vocab
+        phrase_category_vocab = self.phrase_category_vocab
         for tree in self.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
