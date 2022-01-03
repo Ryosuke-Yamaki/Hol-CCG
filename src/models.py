@@ -343,7 +343,7 @@ class Tree_List:
             phrase_category_counter,
             min_freq=self.min_phrase_category,
             specials=['<unk>'])
-        self.pos_vocab = Vocab(pos_counter, min_freq=0, specials=[])
+        self.pos_vocab = Vocab(pos_counter, min_freq=0, specials=['<pad>'])
         self.head_info = {}
         for k, v in head_info_temp.items():
             # when left head is majority
