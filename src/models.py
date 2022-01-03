@@ -356,10 +356,12 @@ class Tree_List:
     def set_category_id(self):
         word_category_vocab = self.word_category_vocab
         phrase_category_vocab = self.phrase_category_vocab
+        pos_vocab = self.pos_vocab
         for tree in self.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
                     node.category_id = word_category_vocab[node.category]
+                    node.pos_id = pos_vocab[node.pos]
                 else:
                     node.category_id = phrase_category_vocab[node.category]
             tree.set_node_composition_info()

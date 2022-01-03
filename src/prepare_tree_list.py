@@ -173,6 +173,7 @@ open(path_to_test, 'w')
 f = open(path_to_file_table, 'r')
 path_to_data = f.readlines()
 i = 0
+print('converting auto file...')
 for path in path_to_data:
     if '.auto' in path:
         idx = int(path[-10:-6])
@@ -191,11 +192,10 @@ for path in path_to_data:
                 num_node = sentence.count('<')
                 converter.convert(sentence)
                 converter.save_node_info(path_to_save)
-            print('{},{}'.format(idx, path_to_save))
     else:
         break
 
-print('loading tree list...')
+print('setting tree list...')
 train_tree_list = Tree_List(
     condition.path_to_train_data, type='train')
 word_category_vocab = train_tree_list.word_category_vocab
