@@ -9,7 +9,7 @@ from torch.nn.utils.rnn import pad_sequence
 import torch
 import torch.nn as nn
 from operator import itemgetter
-from utils import circular_correlation, single_circular_correlation, standardize
+from utils import circular_correlation, single_circular_correlation
 from collections import OrderedDict
 from torch.nn.functional import normalize
 
@@ -86,12 +86,12 @@ class Tree:
         self.sentence = self.node_list[-1].content
 
     def set_original_position_of_leaf_node(self):
-        self.original_pos = []
+        self.original_position = []
         self.spans = []
         node = self.node_list[-1]
         if node.is_leaf:
-            node.original_pos = 0
-            self.original_pos.append([node.self_id, node.original_pos])
+            node.original_position = 0
+            self.original_position.append([node.self_id, node.original_position])
         else:
             node.start_idx = 0
             node.end_idx = len(node.content)
@@ -103,8 +103,9 @@ class Tree:
                 child_node.start_idx = parent_node.start_idx
                 child_node.end_idx = parent_node.end_idx
                 if child_node.is_leaf:
-                    child_node.original_pos = child_node.start_idx
-                    self.original_pos.append([child_node.self_id, child_node.original_pos])
+                    child_node.original_position = child_node.start_idx
+                    self.original_position.append(
+                        [child_node.self_id, child_node.original_position])
             else:
                 parent_node = self.node_list[info[1]]
                 self.spans.append([parent_node.start_idx, parent_node.end_idx])
@@ -115,83 +116,18 @@ class Tree:
                 right_child_node.start_idx = left_child_node.end_idx
                 right_child_node.end_idx = parent_node.end_idx
                 if left_child_node.is_leaf:
-                    left_child_node.original_pos = left_child_node.start_idx
-                    self.original_pos.append(
-                        [left_child_node.self_id, left_child_node.original_pos])
+                    left_child_node.original_position = left_child_node.start_idx
+                    self.original_position.append(
+                        [left_child_node.self_id, left_child_node.original_position])
                 if right_child_node.is_leaf:
-                    right_child_node.original_pos = right_child_node.start_idx
-                    self.original_pos.append(
-                        [right_child_node.self_id, right_child_node.original_pos])
-
-    def correct_parse(self, whole_category_vocab):
-        correct_node_list = []
-        top_node = self.node_list[-1]
-        top_node.start_idx = 0
-        top_node.end_idx = len(top_node.content)
-        if not top_node.is_leaf:
-            # for unk category
-            if whole_category_vocab[top_node.category] == 0:
-                correct_node_list.append((1, len(top_node.content) + 1, -1))
-            else:
-                correct_node_list.append(
-                    (1, len(top_node.content) + 1, whole_category_vocab[top_node.category] + 1))
-        for info in reversed(self.composition_info):
-            num_child = info[0]
-            if num_child == 1:
-                parent_node = self.node_list[info[1]]
-                child_node = self.node_list[info[2]]
-                child_node.start_idx = parent_node.start_idx
-                child_node.end_idx = parent_node.end_idx
-                if not child_node.is_leaf:
-                    # for unk category
-                    if whole_category_vocab[child_node.category] == 0:
-                        correct_node_list.append(
-                            (child_node.start_idx + 1,
-                             child_node.end_idx + 1,
-                             -1))
-                    else:
-                        correct_node_list.append(
-                            (child_node.start_idx + 1,
-                             child_node.end_idx + 1,
-                             whole_category_vocab[child_node.category] + 1))
-            else:
-                parent_node = self.node_list[info[1]]
-                left_child_node = self.node_list[info[2]]
-                right_child_node = self.node_list[info[3]]
-                left_child_node.start_idx = parent_node.start_idx
-                left_child_node.end_idx = parent_node.start_idx + len(left_child_node.content)
-                right_child_node.start_idx = left_child_node.end_idx
-                right_child_node.end_idx = parent_node.end_idx
-                if not left_child_node.is_leaf:
-                    # for unk category
-                    if whole_category_vocab[left_child_node.category] == 0:
-                        correct_node_list.append(
-                            (left_child_node.start_idx + 1,
-                             left_child_node.end_idx + 1,
-                             -1))
-                    else:
-                        correct_node_list.append(
-                            (left_child_node.start_idx + 1,
-                             left_child_node.end_idx + 1,
-                             whole_category_vocab[left_child_node.category] + 1))
-                if not right_child_node.is_leaf:
-                    # for unk category
-                    if whole_category_vocab[right_child_node.category] == 0:
-                        correct_node_list.append(
-                            (right_child_node.start_idx + 1,
-                             right_child_node.end_idx + 1,
-                             -1))
-                    else:
-                        correct_node_list.append(
-                            (right_child_node.start_idx + 1,
-                             right_child_node.end_idx + 1,
-                             whole_category_vocab[right_child_node.category] + 1))
-        return correct_node_list
+                    right_child_node.original_position = right_child_node.start_idx
+                    self.original_position.append(
+                        [right_child_node.self_id, right_child_node.original_position])
 
     # generate the random binary tree in order to obtain negative training sample for span scoring
     def generate_random_tree(self):
         random_composition_info = []
-        random_original_pos = []
+        random_original_position = []
         # list of span's id which do not exist in gold tree
         negative_node_id = []
 
@@ -205,7 +141,7 @@ class Tree:
             wait_list = [node]
         else:
             wait_list = []
-            random_original_pos = [[0, 0]]
+            random_original_position = [[0, 0]]
 
         node_id += 1
 
@@ -231,7 +167,7 @@ class Tree:
                 wait_list.append(left_node)
             # when left node is leaf node
             else:
-                random_original_pos.append([node_id, split_idx - 1])
+                random_original_position.append([node_id, split_idx - 1])
             node_id += 1
 
             # define right child node
@@ -243,20 +179,20 @@ class Tree:
                     negative_node_id.append(node_id)
                 wait_list.append(right_node)
             else:
-                random_original_pos.append([node_id, end_idx - 1])
+                random_original_position.append([node_id, end_idx - 1])
             node_id += 1
 
             random_composition_info.append([2, parent_id, node_id - 2, node_id - 1])
         random_composition_info.reverse()
-        return len(node_list), random_composition_info, random_original_pos, negative_node_id
+        return len(node_list), random_composition_info, random_original_position, negative_node_id
 
     def set_word_split(self, tokenizer):
         sentence = " ".join(self.sentence)
         tokens = tokenizer.tokenize(sentence)
         tokenized_pos = 0
         word_split = []
-        for original_pos in range(len(self.sentence)):
-            word = self.sentence[original_pos]
+        for original_position in range(len(self.sentence)):
+            word = self.sentence[original_position]
             length = 1
             while True:
                 temp = tokenizer.convert_tokens_to_string(
@@ -280,7 +216,7 @@ class Tree_List:
             type,
             word_category_vocab=None,
             phrase_category_vocab=None,
-            pos_vocab=None,
+            pos_tag_vocab=None,
             head_info=None,
             min_word_category=0,
             min_phrase_category=0,
@@ -291,11 +227,11 @@ class Tree_List:
         self.min_phrase_category = min_phrase_category
         self.set_tree_list(PATH_TO_DATA)
         if type == 'train':
-            self.set_vocab_head()
+            self.set_vocab_and_head()
         else:
             self.word_category_vocab = word_category_vocab
             self.phrase_category_vocab = phrase_category_vocab
-            self.pos_vocab = pos_vocab
+            self.pos_tag_vocab = pos_tag_vocab
             self.head_info = head_info
         self.set_category_id()
 
@@ -316,7 +252,7 @@ class Tree_List:
                 node_list = []
                 tree_id += 1
 
-    def set_vocab_head(self):
+    def set_vocab_and_head(self):
         word_category_counter = Counter()
         phrase_category_counter = Counter()
         pos_counter = Counter()
@@ -343,7 +279,7 @@ class Tree_List:
             phrase_category_counter,
             min_freq=self.min_phrase_category,
             specials=['<unk>'])
-        self.pos_vocab = Vocab(pos_counter, min_freq=0, specials=['<pad>'])
+        self.pos_tag_vocab = Vocab(pos_counter, min_freq=0, specials=['<pad>'])
         self.head_info = {}
         for k, v in head_info_temp.items():
             # when left head is majority
@@ -356,12 +292,12 @@ class Tree_List:
     def set_category_id(self):
         word_category_vocab = self.word_category_vocab
         phrase_category_vocab = self.phrase_category_vocab
-        pos_vocab = self.pos_vocab
+        pos_tag_vocab = self.pos_tag_vocab
         for tree in self.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
                     node.category_id = word_category_vocab[node.category]
-                    node.pos_id = pos_vocab[node.pos]
+                    node.pos_id = pos_tag_vocab[node.pos]
                 else:
                     node.category_id = phrase_category_vocab[node.category]
             tree.set_node_composition_info()
@@ -371,19 +307,24 @@ class Tree_List:
         self.num_node = []
         self.sentence_list = []
         self.label_list = []
-        self.original_pos = []
+        self.pos_list = []
+        self.original_position = []
         self.composition_info = []
         self.word_split = []
         for tree in self.tree_list:
             self.num_node.append(len(tree.node_list))
             self.sentence_list.append(" ".join(tree.sentence))
             label_list = []
+            pos_list = []
             for node in tree.node_list:
+                if node.is_leaf:
+                    pos_list.append(node.pos_id)
                 label_list.append([node.category_id])
             self.label_list.append(label_list)
-            self.original_pos.append(
+            self.pos_list.append(torch.tensor(pos_list, dtype=torch.long, device=self.device))
+            self.original_position.append(
                 torch.tensor(
-                    tree.original_pos,
+                    tree.original_position,
                     dtype=torch.long,
                     device=self.device))
             self.composition_info.append(
@@ -396,7 +337,7 @@ class Tree_List:
 
     def make_shuffled_tree_id(self):
         shuffled_tree_id = []
-        splitted = np.array_split(self.sorted_tree_id, 50)
+        splitted = np.array_split(self.sorted_tree_id, 4)
         for id_list in splitted:
             np.random.shuffle(id_list)
             shuffled_tree_id.append(id_list)
@@ -407,7 +348,8 @@ class Tree_List:
         batch_num_node = []
         batch_sentence_list = []
         batch_label_list = []
-        batch_original_pos = []
+        batch_pos_list = []
+        batch_original_position = []
         batch_composition_info = []
         batch_word_split = []
         num_tree = len(self.tree_list)
@@ -415,7 +357,7 @@ class Tree_List:
         # the series of "random" are information about randomly generated tree for
         # the scoring of span
         random_num_node = []
-        random_original_pos = []
+        random_original_position = []
         random_composition_info = []
         random_negative_node_id = []
         batch_random_num_node = []
@@ -431,7 +373,7 @@ class Tree_List:
                     random_tree_info[1],
                     dtype=torch.long,
                     device=self.device))
-            random_original_pos.append(
+            random_original_position.append(
                 torch.tensor(
                     random_tree_info[2],
                     dtype=torch.long,
@@ -448,7 +390,20 @@ class Tree_List:
             batch_sentence_list.append(list(itemgetter(*batch_tree_id_list)(self.sentence_list)))
             batch_label_list.append(list(itemgetter(
                 *batch_tree_id_list)(self.label_list)))
-            batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(self.original_pos)))
+            batch_pos_list.append(
+                pad_sequence(
+                    list(
+                        itemgetter(
+                            *
+                            batch_tree_id_list)(
+                            self.pos_list)),
+                    batch_first=True))
+            batch_original_position.append(
+                list(
+                    itemgetter(
+                        *
+                        batch_tree_id_list)(
+                        self.original_position)))
             batch_composition_info.append(list(itemgetter(
                 *batch_tree_id_list)(self.composition_info)))
             batch_word_split.append(list(itemgetter(
@@ -457,7 +412,7 @@ class Tree_List:
             batch_random_composition_info.append(
                 list(itemgetter(*batch_tree_id_list)(random_composition_info)))
             batch_random_original_pos.append(
-                list(itemgetter(*batch_tree_id_list)(random_original_pos)))
+                list(itemgetter(*batch_tree_id_list)(random_original_position)))
             batch_random_negative_node_id.append(
                 list(itemgetter(*batch_tree_id_list)(random_negative_node_id)))
         else:
@@ -475,7 +430,17 @@ class Tree_List:
                             self.sentence_list)))
                 batch_label_list.append(list(itemgetter(
                     *batch_tree_id_list)(self.label_list)))
-                batch_original_pos.append(list(itemgetter(*batch_tree_id_list)(self.original_pos)))
+                batch_pos_list.append(pad_sequence(list(
+                    itemgetter(
+                        *batch_tree_id_list)(
+                        self.pos_list)),
+                    batch_first=True))
+                batch_original_position.append(
+                    list(
+                        itemgetter(
+                            *
+                            batch_tree_id_list)(
+                            self.original_position)))
                 batch_composition_info.append(list(itemgetter(
                     *batch_tree_id_list)(self.composition_info)))
                 batch_word_split.append(list(itemgetter(
@@ -484,7 +449,7 @@ class Tree_List:
                 batch_random_composition_info.append(
                     list(itemgetter(*batch_tree_id_list)(random_composition_info)))
                 batch_random_original_pos.append(
-                    list(itemgetter(*batch_tree_id_list)(random_original_pos)))
+                    list(itemgetter(*batch_tree_id_list)(random_original_position)))
                 batch_random_negative_node_id.append(
                     list(itemgetter(*batch_tree_id_list)(random_negative_node_id)))
             # the part cannot devided by BATCH_SIZE
@@ -494,8 +459,10 @@ class Tree_List:
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.sentence_list)))
             batch_label_list.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.label_list)))
-            batch_original_pos.append(
-                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.original_pos)))
+            batch_pos_list.append(pad_sequence(list(itemgetter(
+                *shuffled_tree_id[idx + BATCH_SIZE:])(self.pos_list)), batch_first=True))
+            batch_original_position.append(
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.original_position)))
             batch_composition_info.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.composition_info)))
             batch_word_split.append(
@@ -505,7 +472,7 @@ class Tree_List:
             batch_random_composition_info.append(
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_composition_info)))
             batch_random_original_pos.append(
-                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_original_pos)))
+                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_original_position)))
             batch_random_negative_node_id.append(
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_negative_node_id)))
 
@@ -540,9 +507,10 @@ class Tree_List:
         batch_list = list(zip(
             batch_num_node,
             batch_sentence_list,
-            batch_original_pos,
+            batch_original_position,
             batch_composition_info,
             batch_label_list,
+            batch_pos_list,
             batch_word_split,
             batch_random_num_node,
             batch_random_composition_info,
@@ -557,14 +525,14 @@ class Tree_List:
             for tree in self.tree_list:
                 sentence = [" ".join(tree.sentence)]
                 word_split = [tree.word_split]
-                vector_list, _ = tree_net.embed(sentence, word_split=word_split)
+                vector_list, _ = tree_net.encode(sentence, word_split=word_split)
                 # vector_list = standardize(tree_net.transform_word_rep(vector_list[0]))
                 vector_list = normalize(tree_net.transform_word_rep(vector_list[0]), dim=-1)
-                for pos in tree.original_pos:
+                for pos in tree.original_position:
                     node_id = pos[0]
-                    original_pos = pos[1]
+                    original_position = pos[1]
                     node = tree.node_list[node_id]
-                    node.vector = torch.squeeze(vector_list[original_pos])
+                    node.vector = torch.squeeze(vector_list[original_position])
                 for composition_info in tree.composition_info:
                     num_child = composition_info[0]
                     parent_node = tree.node_list[composition_info[1]]
@@ -584,6 +552,7 @@ class Tree_Net(nn.Module):
             self,
             num_word_cat,
             num_phrase_cat,
+            num_pos_tag,
             model,
             tokenizer=None,
             train_embedder=True,
@@ -594,21 +563,32 @@ class Tree_Net(nn.Module):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
         self.num_phrase_cat = num_phrase_cat
+        self.num_pos_tag = num_pos_tag
         self.model = model
         self.tokenizer = tokenizer
         self.embedding_dim = embedding_dim
         self.model_dim = model_dim
         self.train_embedder = train_embedder
-        # the list which to record the modules to set separated lr
+        # the list which to record the modules to set separated learning rate
         self.base_modules = []
         self.base_params = []
 
-        self.transform_word_rep = nn.Sequential(OrderedDict([
+        self.pos_encoder = nn.Embedding(
+            num_embeddings=self.num_pos_tag,
+            embedding_dim=embedding_dim,
+            padding_idx=0)
+        self.word_rep_transform = nn.Sequential(OrderedDict([
             ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
             ('relu', nn.LeakyReLU()),
             ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
-        kaiming_uniform_(self.transform_word_rep.linear1.weight)
-        kaiming_uniform_(self.transform_word_rep.linear2.weight)
+        self.pos_rep_transform = nn.Sequential(OrderedDict([
+            ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
+            ('relu', nn.LeakyReLU()),
+            ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
+        kaiming_uniform_(self.word_rep_transform.linear1.weight)
+        kaiming_uniform_(self.word_rep_transform.linear2.weight)
+        kaiming_uniform_(self.pos_rep_transform.linear1.weight)
+        kaiming_uniform_(self.pos_rep_transform.linear2.weight)
         self.word_ff = FeedForward(
             self.model_dim,
             self.model_dim,
@@ -620,7 +600,8 @@ class Tree_Net(nn.Module):
             self.num_phrase_cat,
             dropout=ff_dropout)
         self.span_ff = FeedForward(self.model_dim, self.model_dim, 1, dropout=ff_dropout)
-        self.base_modules.append(self.transform_word_rep)
+        self.base_modules.append(self.word_rep_transform)
+        self.base_modules.append(self.pos_rep_transform)
         self.base_modules.append(self.word_ff)
         self.base_modules.append(self.phrase_ff)
         self.base_modules.append(self.span_ff)
@@ -634,42 +615,43 @@ class Tree_Net(nn.Module):
     def forward(self, batch):
         num_node = batch[0]
         sentence = batch[1]
-        original_pos = batch[2]
+        original_position = batch[2]
         composition_info = batch[3]
         batch_label = batch[4]
-        word_split = batch[5]
-        random_num_node = batch[6]
-        random_composition_info = batch[7]
-        random_original_pos = batch[8]
-        random_negative_node_id = batch[9]
+        pos = batch[5]
+        word_split = batch[6]
+        random_num_node = batch[7]
+        random_composition_info = batch[8]
+        random_original_position = batch[9]
+        random_negative_node_id = batch[10]
 
         if self.train_embedder:
-            vector_list, lengths = self.embed(sentence, word_split)
+            vector_list, lengths = self.encode(sentence, word_split, pos)
         # when not train word embedder, the computation of gradient is not needed
         else:
             with torch.no_grad():
-                vector_list, lengths = self.embed(sentence, word_split)
+                vector_list, lengths = self.encode(sentence, word_split, pos)
 
         # compose word vectors and fed them into FFNN
         original_vector = self.set_leaf_node_vector(
-            num_node, vector_list, lengths, original_pos)
+            num_node, vector_list, lengths, original_position)
         # compose word vectors for randomly generated trees
         random_vector = self.set_leaf_node_vector(
-            random_num_node, vector_list, lengths, random_original_pos)
+            random_num_node, vector_list, lengths, random_original_position)
         original_vector_shape = original_vector.shape
         random_vector_shape = random_vector.shape
         original_vector = original_vector.view(-1, self.embedding_dim)
         random_vector = random_vector.view(-1, self.embedding_dim)
         vector = torch.cat((original_vector, random_vector))
         # vector = standardize(self.transform_word_rep(vector))
-        vector = normalize(self.transform_word_rep(vector), dim=-1)
+        vector = normalize(vector, dim=-1)
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
         random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
         composed_vector = self.compose(original_vector, composition_info)
         random_composed_vector = self.compose(random_vector, random_composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
-            composed_vector, batch_label, original_pos)
+            composed_vector, batch_label, original_position)
         span_vector, span_label = self.extract_span_vector(
             phrase_vector, random_composed_vector, random_negative_node_id)
 
@@ -679,25 +661,29 @@ class Tree_Net(nn.Module):
         return word_output, phrase_output, span_output, word_label, phrase_label, span_label
 
     # embedding word vector
-    def embed(self, sentence, word_split):
+    def encode(self, sentence, word_split, pos):
         input = self.tokenizer(
             sentence,
             padding=True,
             return_tensors='pt').to(self.device)
-        output = self.model(**input).last_hidden_state[:, 1:-1]
-        vector_list = []
+        word_vector = self.model(**input).last_hidden_state[:, 1:-1]
+        pos_vector_list = self.pos_encoder(pos)
+        word_vector_list = []
         lengths = []
-        for vector, info in zip(output, word_split):
+        for vector, info in zip(word_vector, word_split):
             temp = []
             for start_idx, end_idx in info:
                 temp.append(torch.mean(vector[start_idx:end_idx], dim=0))
-            vector_list.append(torch.stack(temp))
+            word_vector_list.append(torch.stack(temp))
             lengths.append(len(temp))
-        vector_list = pad_sequence(vector_list, batch_first=True)
+        word_vector_list = pad_sequence(word_vector_list, batch_first=True)
+        word_rep = self.word_rep_transform(word_vector_list)
+        pos_rep = self.pos_rep_transform(pos_vector_list)
+        rep = word_rep + pos_rep
         lengths = torch.tensor(lengths, device=torch.device('cpu'))
-        return vector_list, lengths
+        return rep, lengths
 
-    def set_leaf_node_vector(self, num_node, vector_list, lengths, original_pos):
+    def set_leaf_node_vector(self, num_node, vector_list, lengths, original_position):
         leaf_node_vector = torch.zeros(
             (len(num_node),
              torch.tensor(max(num_node)),
@@ -705,9 +691,9 @@ class Tree_Net(nn.Module):
         for idx in range(len(num_node)):
             batch_id = torch.tensor([idx for _ in range(lengths[idx])])
             # target_id is node.self_id
-            target_id = torch.squeeze(original_pos[idx][:, 0])
-            # source_id is node.original_pos
-            source_id = torch.squeeze(original_pos[idx][:, 1])
+            target_id = torch.squeeze(original_position[idx][:, 0])
+            # source_id is node.original_position
+            source_id = torch.squeeze(original_position[idx][:, 1])
             leaf_node_vector[(batch_id, target_id)] = vector_list[(batch_id, source_id)]
         return leaf_node_vector
 
@@ -737,14 +723,14 @@ class Tree_Net(nn.Module):
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
 
-    def devide_word_phrase(self, vector, batch_label, original_pos):
+    def devide_word_phrase(self, vector, batch_label, original_position):
         word_vector = []
         phrase_vector = []
         word_label = []
         phrase_label = []
         for i in range(vector.shape[0]):
             word_idx = torch.zeros(len(batch_label[i]), dtype=torch.bool, device=self.device)
-            word_idx[original_pos[i][:, 0]] = True
+            word_idx[original_position[i][:, 0]] = True
             phrase_idx = torch.logical_not(word_idx)
             word_vector.append(vector[i, :len(batch_label[i])][word_idx])
             phrase_vector.append(vector[i, :len(batch_label[i])][phrase_idx])
@@ -795,8 +781,8 @@ class Tree_Net(nn.Module):
         tokens = tokenizer.tokenize(sentence)
         tokenized_pos = 0
         word_split = []
-        for original_pos in range(len(sentence.split())):
-            word = sentence.split()[original_pos]
+        for original_position in range(len(sentence.split())):
+            word = sentence.split()[original_position]
             length = 1
             while True:
                 temp = tokenizer.convert_tokens_to_string(

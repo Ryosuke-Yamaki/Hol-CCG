@@ -100,8 +100,8 @@ class Parser:
         tokens = self.tokenizer.tokenize(" ".join(converted_sentence))
         tokenized_pos = 0
         word_split = []
-        for original_pos in range(len(converted_sentence)):
-            word = converted_sentence[original_pos]
+        for original_position in range(len(converted_sentence)):
+            word = converted_sentence[original_position]
             length = 1
             while True:
                 temp = self.tokenizer.convert_tokens_to_string(

@@ -403,8 +403,8 @@ class Condition_Setter:
             "Hol-CCG/data/vocab/word_category_vocab.pickle"
         self.path_to_phrase_category_vocab = PATH_TO_DIR + \
             "Hol-CCG/data/vocab/phrase_category_vocab.pickle"
-        self.path_to_pos_vocab = PATH_TO_DIR + \
-            "Hol-CCG/data/vocab/pos_vocab.pickle"
+        self.path_to_pos_tag_vocab = PATH_TO_DIR + \
+            "Hol-CCG/data/vocab/pos_tag_vocab.pickle"
 
         # path_to_rule
         self.path_to_grammar = PATH_TO_DIR + \
