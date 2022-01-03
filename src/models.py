@@ -573,22 +573,23 @@ class Tree_Net(nn.Module):
         self.base_modules = []
         self.base_params = []
 
-        self.pos_encoder = nn.Embedding(
-            num_embeddings=self.num_pos_tag,
-            embedding_dim=embedding_dim,
-            padding_idx=0)
         self.word_rep_transform = nn.Sequential(OrderedDict([
-            ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
-            ('relu', nn.LeakyReLU()),
-            ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
-        self.pos_rep_transform = nn.Sequential(OrderedDict([
             ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
             ('relu', nn.LeakyReLU()),
             ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
         kaiming_uniform_(self.word_rep_transform.linear1.weight)
         kaiming_uniform_(self.word_rep_transform.linear2.weight)
-        kaiming_uniform_(self.pos_rep_transform.linear1.weight)
-        kaiming_uniform_(self.pos_rep_transform.linear2.weight)
+        # self.pos_encoder = nn.Embedding(
+        #     num_embeddings=self.num_pos_tag,
+        #     embedding_dim=embedding_dim,
+        #     padding_idx=0)
+        # self.pos_rep_transform = nn.Sequential(OrderedDict([
+        #     ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
+        #     ('relu', nn.LeakyReLU()),
+        #     ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
+        # kaiming_uniform_(self.pos_rep_transform.linear1.weight)
+        # kaiming_uniform_(self.pos_rep_transform.linear2.weight)
+        # self.base_modules.append(self.pos_rep_transform)
         self.word_ff = FeedForward(
             self.model_dim,
             self.model_dim,
@@ -601,7 +602,6 @@ class Tree_Net(nn.Module):
             dropout=ff_dropout)
         self.span_ff = FeedForward(self.model_dim, self.model_dim, 1, dropout=ff_dropout)
         self.base_modules.append(self.word_rep_transform)
-        self.base_modules.append(self.pos_rep_transform)
         self.base_modules.append(self.word_ff)
         self.base_modules.append(self.phrase_ff)
         self.base_modules.append(self.span_ff)
@@ -640,10 +640,9 @@ class Tree_Net(nn.Module):
             random_num_node, vector_list, lengths, random_original_position)
         original_vector_shape = original_vector.shape
         random_vector_shape = random_vector.shape
-        original_vector = original_vector.view(-1, self.embedding_dim)
-        random_vector = random_vector.view(-1, self.embedding_dim)
+        original_vector = original_vector.view(-1, self.model_dim)
+        random_vector = random_vector.view(-1, self.model_dim)
         vector = torch.cat((original_vector, random_vector))
-        # vector = standardize(self.transform_word_rep(vector))
         vector = normalize(vector, dim=-1)
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
@@ -667,7 +666,7 @@ class Tree_Net(nn.Module):
             padding=True,
             return_tensors='pt').to(self.device)
         word_vector = self.model(**input).last_hidden_state[:, 1:-1]
-        pos_vector_list = self.pos_encoder(pos)
+        # pos_vector_list = self.pos_encoder(pos)
         word_vector_list = []
         lengths = []
         for vector, info in zip(word_vector, word_split):
@@ -678,8 +677,9 @@ class Tree_Net(nn.Module):
             lengths.append(len(temp))
         word_vector_list = pad_sequence(word_vector_list, batch_first=True)
         word_rep = self.word_rep_transform(word_vector_list)
-        pos_rep = self.pos_rep_transform(pos_vector_list)
-        rep = word_rep + pos_rep
+        # pos_rep = self.pos_rep_transform(pos_vector_list)
+        rep = word_rep
+        # rep = word_rep + pos_rep
         lengths = torch.tensor(lengths, device=torch.device('cpu'))
         return rep, lengths
 
@@ -687,7 +687,7 @@ class Tree_Net(nn.Module):
         leaf_node_vector = torch.zeros(
             (len(num_node),
              torch.tensor(max(num_node)),
-             self.embedding_dim), device=self.device)
+             self.model_dim), device=self.device)
         for idx in range(len(num_node)):
             batch_id = torch.tensor([idx for _ in range(lengths[idx])])
             # target_id is node.self_id
