@@ -9,7 +9,7 @@ word_category_vocab = load(condition.path_to_word_category_vocab)
 phrase_category_vocab = load(
     condition.path_to_phrase_category_vocab)
 
-phrase_category_vocab = Vocab(phrase_category_vocab.freqs, min_freq=20, specials=['<unk>'])
+phrase_category_vocab = Vocab(phrase_category_vocab.freqs, min_freq=0, specials=['<unk>'])
 
 print('loading tree list...')
 train_tree_list = Tree_List(

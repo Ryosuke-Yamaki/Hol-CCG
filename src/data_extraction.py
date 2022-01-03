@@ -118,6 +118,7 @@ class Node:
             self.ready = True
             self.content = node_info[4]
             self.category = node_info[1]
+            self.pos = node_info[2]
         else:
             self.is_leaf = False
             self.ready = False
