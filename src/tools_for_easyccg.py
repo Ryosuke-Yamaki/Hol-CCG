@@ -1,6 +1,6 @@
 import torch
 import subprocess
-from utils import single_circular_correlation
+from utils import circular_correlation
 import re
 
 
@@ -71,7 +71,7 @@ class Tree:
                         left_child_node = self.node_list[node.left_child_node_id]
                         right_child_node = self.node_list[node.right_child_node_id]
                         if left_child_node.ready and right_child_node.ready:
-                            node.vector = single_circular_correlation(
+                            node.vector = circular_correlation(
                                 left_child_node.vector, right_child_node.vector)
                             node.score = linear(
                                 node.vector)[

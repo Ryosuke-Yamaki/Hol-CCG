@@ -2,7 +2,7 @@ import sys
 from utils import load, Condition_Setter
 import time
 import torch
-from utils import single_circular_correlation
+from utils import circular_correlation
 from grammar import Combinator
 
 
@@ -239,7 +239,7 @@ class Parser:
                                             if parent_cat_info[1] not in ['ba', 'bc']:
                                                 filtered_parent_cat_info.append(parent_cat_info)
                                         possible_cats_info = filtered_parent_cat_info
-                                    composed_vector = single_circular_correlation(
+                                    composed_vector = circular_correlation(
                                         left_cat.vector, right_cat.vector)
                                     span_prob = torch.sigmoid(self.span_ff(composed_vector))
                                     if span_prob > self.span_threshold:

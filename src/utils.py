@@ -1,4 +1,3 @@
-from torch.functional import norm
 import torch.nn as nn
 from tqdm import tqdm
 import os
@@ -9,54 +8,47 @@ import numpy as np
 import torch
 from torch import conj
 from torch.fft import fft, ifft
-from torch.nn.functional import normalize
 
 
 def circular_correlation(a, b):
     a_ = conj(fft(a))
     b_ = fft(b)
     c_ = a_ * b_
-    # c = standardize(ifft(c_).real)
-    c = normalize(ifft(c_).real, dim=-1)
+    c = ifft(c_).real
     return c
 
 
-def single_circular_correlation(a, b):
-    a_ = conj(fft(a))
-    b_ = fft(b)
-    c_ = a_ * b_
-    # c = standardize(ifft(c_).real)
-    c = normalize(ifft(c_).real, dim=-1)
-    # c = ifft(c_).real
-    return c
+def inverse_circular_correlation(p, c1, child_is_left=True):
+    p_ = fft(p)
+    if child_is_left:
+        c1_ = conj(fft(c1))
+    else:
+        c1_ = fft(c1)
+    c2_ = p_ / (c1_ + 1e-6)
+    c2 = ifft(c2_).real
+    return c2
 
 
 def circular_convolution(a, b):
     a_ = fft(a)
     b_ = fft(b)
     c_ = a_ * b_
-    c = normalize(ifft(c_).real, dim=-1)
+    c = ifft(c_).real
     return c
 
 
-def single_circular_convolution(a, b):
-    a_ = fft(a)
-    b_ = fft(b)
-    c_ = a_ * b_
-    # c = standardize(ifft(c_).real)
-    c = normalize(ifft(c_).real, dim=-1)
-    # c = ifft(c_).real
-    return c
+def inverse_circular_convolution(p, c1):
+    p_ = fft(p)
+    c1_ = conj(fft(c1))
+    c2_ = p_ / (c1_ + 1e-6)
+    c2 = ifft(c2_).real
+    return c2
 
 
-def standardize(v):
-    original_shape = v.shape
-    v = v.view(-1, v.shape[-1])
-    mean = torch.mean(v, dim=-1).view(-1, 1)
-    std = torch.std(v, dim=-1, unbiased=False).view(-1, 1)
-    dim = v.shape[-1]
-    v = (v - mean) / (std * np.sqrt(dim))
-    v = v.view(original_shape)
+def complex_normalize(v):
+    v_ = fft(v)
+    v_ = v_ / (torch.abs(v_) + 1e-6)
+    v = ifft(v_).real
     return v
 
 

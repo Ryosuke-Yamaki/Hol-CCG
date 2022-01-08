@@ -1,4 +1,4 @@
-from utils import load, single_circular_correlation, set_random_seed, Condition_Setter
+from utils import load, circular_correlation, set_random_seed, Condition_Setter
 import torch
 import matplotlib.pyplot as plt
 
@@ -38,11 +38,11 @@ for embedding_type in ['GloVe', 'random']:
         wave_list[w1] = embedding(torch.tensor(vocab[w1]))
         wave_list[w2] = embedding(torch.tensor(vocab[w2]))
         wave_list[w3] = embedding(torch.tensor(vocab[w3]))
-        wave_list['{}_{}'.format(w0, w1)] = single_circular_correlation(
+        wave_list['{}_{}'.format(w0, w1)] = circular_correlation(
             wave_list[w0], wave_list[w1])
-        wave_list['{}_{}'.format(w2, w3)] = single_circular_correlation(
+        wave_list['{}_{}'.format(w2, w3)] = circular_correlation(
             wave_list[w2], wave_list[w3])
-        wave_list['{}_{}_{}_{}'.format(w0, w1, w2, w3)] = single_circular_correlation(
+        wave_list['{}_{}_{}_{}'.format(w0, w1, w2, w3)] = circular_correlation(
             wave_list['{}_{}'.format(w0, w1)], wave_list['{}_{}'.format(w2, w3)])
 
         x = range(0, condition.embedding_dim)

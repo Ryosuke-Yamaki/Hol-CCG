@@ -1,7 +1,6 @@
 from torchtext.vocab import Vocab
 from collections import Counter
 import random
-from torch.nn.functional import normalize
 from torch.nn.init import kaiming_uniform_
 from tqdm import tqdm
 import numpy as np
@@ -9,9 +8,8 @@ from torch.nn.utils.rnn import pad_sequence
 import torch
 import torch.nn as nn
 from operator import itemgetter
-from utils import circular_correlation, single_circular_correlation
+from utils import circular_correlation, complex_normalize
 from collections import OrderedDict
-from torch.nn.functional import normalize
 
 
 class Node:
@@ -516,7 +514,6 @@ class Tree_List:
             batch_random_composition_info,
             batch_random_original_pos,
             batch_random_negative_node_id))
-        np.random.shuffle(batch_list)
         return batch_list
 
     def set_vector(self, tree_net):
@@ -526,8 +523,7 @@ class Tree_List:
                 sentence = [" ".join(tree.sentence)]
                 word_split = [tree.word_split]
                 vector_list, _ = tree_net.encode(sentence, word_split=word_split)
-                # vector_list = standardize(tree_net.transform_word_rep(vector_list[0]))
-                vector_list = normalize(tree_net.transform_word_rep(vector_list[0]), dim=-1)
+                vector_list = complex_normalize(tree_net.transform_word_rep(vector_list[0]))
                 for pos in tree.original_position:
                     node_id = pos[0]
                     original_position = pos[1]
@@ -542,7 +538,7 @@ class Tree_List:
                     else:
                         left_node = tree.node_list[composition_info[2]]
                         right_node = tree.node_list[composition_info[3]]
-                        parent_node.vector = single_circular_correlation(
+                        parent_node.vector = circular_correlation(
                             left_node.vector, right_node.vector)
                 pbar.update(1)
 
@@ -552,18 +548,16 @@ class Tree_Net(nn.Module):
             self,
             num_word_cat,
             num_phrase_cat,
-            num_pos_tag,
             model,
             tokenizer=None,
             train_embedder=True,
             embedding_dim=1024,
-            model_dim=1024,
+            model_dim=512,
             ff_dropout=0.2,
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
         self.num_phrase_cat = num_phrase_cat
-        self.num_pos_tag = num_pos_tag
         self.model = model
         self.tokenizer = tokenizer
         self.embedding_dim = embedding_dim
@@ -575,21 +569,10 @@ class Tree_Net(nn.Module):
 
         self.word_rep_transform = nn.Sequential(OrderedDict([
             ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
-            ('relu', nn.LeakyReLU()),
+            ('relu', nn.ReLU()),
             ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
         kaiming_uniform_(self.word_rep_transform.linear1.weight)
         kaiming_uniform_(self.word_rep_transform.linear2.weight)
-        # self.pos_encoder = nn.Embedding(
-        #     num_embeddings=self.num_pos_tag,
-        #     embedding_dim=embedding_dim,
-        #     padding_idx=0)
-        # self.pos_rep_transform = nn.Sequential(OrderedDict([
-        #     ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
-        #     ('relu', nn.LeakyReLU()),
-        #     ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
-        # kaiming_uniform_(self.pos_rep_transform.linear1.weight)
-        # kaiming_uniform_(self.pos_rep_transform.linear2.weight)
-        # self.base_modules.append(self.pos_rep_transform)
         self.word_ff = FeedForward(
             self.model_dim,
             self.model_dim,
@@ -618,7 +601,6 @@ class Tree_Net(nn.Module):
         original_position = batch[2]
         composition_info = batch[3]
         batch_label = batch[4]
-        pos = batch[5]
         word_split = batch[6]
         random_num_node = batch[7]
         random_composition_info = batch[8]
@@ -626,11 +608,11 @@ class Tree_Net(nn.Module):
         random_negative_node_id = batch[10]
 
         if self.train_embedder:
-            vector_list, lengths = self.encode(sentence, word_split, pos)
+            vector_list, lengths = self.encode(sentence, word_split)
         # when not train word embedder, the computation of gradient is not needed
         else:
             with torch.no_grad():
-                vector_list, lengths = self.encode(sentence, word_split, pos)
+                vector_list, lengths = self.encode(sentence, word_split)
 
         # compose word vectors and fed them into FFNN
         original_vector = self.set_leaf_node_vector(
@@ -643,7 +625,6 @@ class Tree_Net(nn.Module):
         original_vector = original_vector.view(-1, self.model_dim)
         random_vector = random_vector.view(-1, self.model_dim)
         vector = torch.cat((original_vector, random_vector))
-        vector = normalize(vector, dim=-1)
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
         random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
@@ -660,13 +641,12 @@ class Tree_Net(nn.Module):
         return word_output, phrase_output, span_output, word_label, phrase_label, span_label
 
     # embedding word vector
-    def encode(self, sentence, word_split, pos):
+    def encode(self, sentence, word_split):
         input = self.tokenizer(
             sentence,
             padding=True,
             return_tensors='pt').to(self.device)
         word_vector = self.model(**input).last_hidden_state[:, 1:-1]
-        # pos_vector_list = self.pos_encoder(pos)
         word_vector_list = []
         lengths = []
         for vector, info in zip(word_vector, word_split):
@@ -676,12 +656,9 @@ class Tree_Net(nn.Module):
             word_vector_list.append(torch.stack(temp))
             lengths.append(len(temp))
         word_vector_list = pad_sequence(word_vector_list, batch_first=True)
-        word_rep = self.word_rep_transform(word_vector_list)
-        # pos_rep = self.pos_rep_transform(pos_vector_list)
-        rep = word_rep
-        # rep = word_rep + pos_rep
+        word_rep = complex_normalize(self.word_rep_transform(word_vector_list))
         lengths = torch.tensor(lengths, device=torch.device('cpu'))
-        return rep, lengths
+        return word_rep, lengths
 
     def set_leaf_node_vector(self, num_node, vector_list, lengths, original_position):
         leaf_node_vector = torch.zeros(
@@ -804,7 +781,7 @@ class FeedForward(nn.Module):
         super(FeedForward, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_dim)
         self.layer_norm = nn.LayerNorm(hidden_dim)
-        self.relu = nn.LeakyReLU()
+        self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=dropout)
         self.linear2 = nn.Linear(hidden_dim, output_dim)
         kaiming_uniform_(self.linear1.weight)
