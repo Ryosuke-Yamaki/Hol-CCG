@@ -62,7 +62,7 @@ dev_test = args[2]
 THRESHOLD = args[3]
 
 target = model.replace(".pth", "_" + dev_test)
-path_to_autos = condition.PATH_TO_DIR + f"/span_parsing/AUTO/{target}.auto"
+path_to_autos = condition.PATH_TO_DIR + f"span_parsing/AUTO/{target}.auto"
 path_to_error_log = condition.path_to_conversion_error_log
 
 if dev_test == 'dev':

@@ -206,18 +206,14 @@ class Parser:
                                 else:
                                     # apply filter to possible categories based on Eisner
                                     # constraints
-                                    if left_cat.type == 'fc':
-                                        filtered_parent_cat_info = []
-                                        for parent_cat_info in possible_cats_info:
-                                            if parent_cat_info[1] not in ['fa', 'fc']:
-                                                filtered_parent_cat_info.append(parent_cat_info)
-                                        possible_cats_info = filtered_parent_cat_info
-                                    if right_cat.type == 'bc':
-                                        filtered_parent_cat_info = []
-                                        for parent_cat_info in possible_cats_info:
-                                            if parent_cat_info[1] not in ['ba', 'bc']:
-                                                filtered_parent_cat_info.append(parent_cat_info)
-                                        possible_cats_info = filtered_parent_cat_info
+                                    filtered_parent_cat_info = []
+                                    for parent_cat_info in possible_cats_info:
+                                        if (left_cat.type == 'fc' and parent_cat_info in ['fa', 'fc']) or (
+                                                right_cat.type == 'bc' and parent_cat_info[1] not in ['ba', 'bc']):
+                                            continue
+                                        else:
+                                            filtered_parent_cat_info.append(parent_cat_info)
+                                    possible_cats_info = filtered_parent_cat_info
                                     composed_vector = circular_correlation(
                                         left_cat.vector, right_cat.vector)
                                     span_prob = torch.sigmoid(self.span_ff(composed_vector))
