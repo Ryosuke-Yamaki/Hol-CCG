@@ -51,12 +51,6 @@ def fix_deps_idx(extracted_deps, start):
 
 
 args = sys.argv
-# args = [
-#     '',
-#     "/home/yamaki-ryosuke/span_parsing/AUTO/roberta-large_phrase_span_3_dev_0.1_0.0_0.1_5.auto",
-#     "/home/yamaki-ryosuke/span_parsing/CCGBANK_DEPS/roberta-large_phrase_span_3_dev_0.1_0.0_0.1_5.ccgbank_deps",
-#     "/home/yamaki-ryosuke/span_parsing/FAILURE/roberta-large_phrase_span_3_failure.out",
-#     "/home/yamaki-ryosuke/candc-1.00/errors.log"]
 
 path_to_autos = args[1]
 path_to_ccgbank_deps = args[2]

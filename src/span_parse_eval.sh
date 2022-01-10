@@ -3,7 +3,7 @@
 model=$1
 dev_test=$2
 stag_threshold=$3
-label_threshold=$4
+phrase_threshold=$4
 span_threshold=$5
 min_freq=$6
 result=${model/.pth/_}
@@ -11,7 +11,7 @@ result+=${dev_test}
 result+="_"
 result+=${stag_threshold}
 result+="_"
-result+=${label_threshold}
+result+=${phrase_threshold}
 result+="_"
 result+=${span_threshold}
 result+="_"
@@ -22,7 +22,7 @@ else
     gold="wsj23"
 fi
 
-python parser.py ${model} ${dev_test} ${stag_threshold} ${label_threshold} ${span_threshold} ${min_freq}| tee ~/span_parsing/AUTO/${result}.auto
+python parser.py ${model} ${dev_test} ${stag_threshold} ${phrase_threshold} ${span_threshold} ${min_freq}| tee ~/span_parsing/AUTO/${result}.auto
 
 cd ~/candc-1.00
 src/scripts/ccg/convert_auto ~/span_parsing/AUTO/${result}.auto | src/scripts/ccg/convert_brackets > ~/span_parsing/PIPE/${result}.pipe

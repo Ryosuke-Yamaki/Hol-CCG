@@ -65,7 +65,7 @@ class Parser:
             word_category_vocab,
             phrase_category_vocab,
             stag_threshold,
-            label_threshold,
+            phrase_threshold,
             span_threshold,
             max_parse_time=60):
         self.tokenizer = tree_net.tokenizer
@@ -77,7 +77,7 @@ class Parser:
         self.word_category_vocab = word_category_vocab
         self.phrase_category_vocab = phrase_category_vocab
         self.stag_threshold = stag_threshold
-        self.label_threshold = label_threshold
+        self.phrase_threshold = phrase_threshold
         self.span_threshold = span_threshold
         self.max_parse_time = max_parse_time
 
@@ -181,7 +181,7 @@ class Parser:
                                 if parent_cat_id != 0:
                                     parent_cat_type = parent_cat_info[1]
                                     label_prob = phrase_probs[parent_cat_id]
-                                    if label_prob > self.label_threshold:
+                                    if label_prob > self.phrase_threshold:
                                         label_ll = torch.log(label_prob)
                                         total_ll = label_ll + span_ll + child_cat.total_ll
                                         parent_category = Category(
@@ -253,7 +253,7 @@ class Parser:
                                             if parent_cat_id != 0:
                                                 parent_cat_type = parent_cat_info[1]
                                                 label_prob = phrase_probs[parent_cat_id]
-                                                if label_prob > self.label_threshold:
+                                                if label_prob > self.phrase_threshold:
                                                     label_ll = torch.log(label_prob)
                                                     total_ll = label_ll + span_ll + left_cat.total_ll + right_cat.total_ll
                                                     head = self.combinator.head_info[(
@@ -296,7 +296,7 @@ class Parser:
                                         if parent_cat_id != 0:
                                             parent_cat_type = parent_cat_info[1]
                                             label_prob = phrase_probs[parent_cat_id]
-                                            if label_prob > self.label_threshold:
+                                            if label_prob > self.phrase_threshold:
                                                 label_ll = torch.log(label_prob)
                                                 total_ll = label_ll + span_ll + child_cat.total_ll
                                                 parent_category = Category(
@@ -441,7 +441,7 @@ def main():
     model = args[1]
     dev_test = args[2]
     stag_threhold = float(args[3])
-    label_threshold = float(args[4])
+    phrase_threshold = float(args[4])
     span_threshold = float(args[5])
     min_freq = int(args[6])
 
@@ -471,7 +471,7 @@ def main():
         word_category_vocab=word_category_vocab,
         phrase_category_vocab=phrase_category_vocab,
         stag_threshold=stag_threhold,
-        label_threshold=label_threshold,
+        phrase_threshold=phrase_threshold,
         span_threshold=span_threshold)
 
     with open(condition.PATH_TO_DIR + path_to_sentence_list, 'r') as f:
