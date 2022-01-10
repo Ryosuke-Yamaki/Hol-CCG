@@ -416,6 +416,9 @@ class Condition_Setter:
         # path to trained_model
         self.path_to_model = PATH_TO_DIR + "Hol-CCG/result/data/model/"
 
+        # path to candc parser's conversion error log
+        self.path_to_conversion_error_log = PATH_TO_DIR + "candc-1.00/errors.log"
+
         # ******************** the path depend on the embedding type********************
         if set_embedding_type:
             # path_to_weight_matrix

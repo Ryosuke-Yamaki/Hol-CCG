@@ -68,8 +68,7 @@ class Parser:
             phrase_threshold,
             span_threshold,
             max_parse_time=60):
-        self.tokenizer = tree_net.tokenizer
-        self.encoder = tree_net.model
+        self.tree_net = tree_net
         self.word_ff = tree_net.word_ff
         self.phrase_ff = tree_net.phrase_ff
         self.span_ff = tree_net.span_ff
@@ -97,29 +96,9 @@ class Parser:
             if r"\/" in content:
                 content = content.replace(r"\/", "/")
             converted_sentence.append(content)
-        tokens = self.tokenizer.tokenize(" ".join(converted_sentence))
-        tokenized_pos = 0
-        word_split = []
-        for original_position in range(len(converted_sentence)):
-            word = converted_sentence[original_position]
-            length = 1
-            while True:
-                temp = self.tokenizer.convert_tokens_to_string(
-                    tokens[tokenized_pos:tokenized_pos + length]).replace(" ", "")
-                if word == temp or word.lower() == temp:
-                    word_split.append([tokenized_pos, tokenized_pos + length])
-                    tokenized_pos += length
-                    break
-                else:
-                    length += 1
-        input = self.tokenizer(
-            " ".join(converted_sentence),
-            return_tensors='pt').to(self.encoder.device)
-        output = self.encoder(**input).last_hidden_state[0, 1:-1]
-        temp = []
-        for start_idx, end_idx in word_split:
-            temp.append(torch.mean(output[start_idx:end_idx], dim=0))
-        word_vectors = torch.stack(temp)
+        word_split = self.tree_net.set_word_split(converted_sentence)
+        word_vectors, _ = self.tree_net.encode([" ".join(converted_sentence)], [word_split])
+        word_vectors = word_vectors[0]
         word_probs_list = torch.softmax(self.word_ff(word_vectors), dim=-1)
         word_predict_cats = torch.argsort(word_probs_list, descending=True)
         word_predict_cats = word_predict_cats[word_predict_cats != 0].view(
@@ -436,7 +415,14 @@ def main():
     condition = Condition_Setter(set_embedding_type=False)
 
     args = sys.argv
-    # args = ['', 'roberta-large_phrase_span_1.pth', 'dev', '0.1', '0.01', '0.05', '10']
+    # args = [
+    #     '',
+    #     'roberta-large_phrase_span_2022-01-08_17:57:10.pth',
+    #     'dev',
+    #     '0.1',
+    #     '0.01',
+    #     '0.05',
+    #     '10']
 
     model = args[1]
     dev_test = args[2]
@@ -463,7 +449,7 @@ def main():
     word_category_vocab = load(condition.path_to_word_category_vocab)
     phrase_category_vocab = load(condition.path_to_phrase_category_vocab)
 
-    combinator = Combinator("/home/yamaki-ryosuke/span_parsing/GRAMMAR/", min_freq=min_freq)
+    combinator = Combinator(condition.PATH_TO_DIR + "span_parsing/GRAMMAR/", min_freq=min_freq)
 
     parser = Parser(
         tree_net,
