@@ -10,6 +10,11 @@ args = sys.argv
 MODEL = args[1]
 DEV_TEST = args[2]
 THRESHOLD = float(args[3])
+TARGET = MODEL.replace(".pth", "_" + DEV_TEST)
+if len(args) == 5 and args[4] == 'failure':
+    FAILURE = True
+else:
+    FAILURE = False
 
 word_category_vocab = load(condition.path_to_word_category_vocab)
 tree_net = torch.load(condition.path_to_model + MODEL, map_location=device)
@@ -17,23 +22,22 @@ tree_net.device = device
 tree_net.eval()
 word_ff = tree_net.word_ff
 
-if DEV_TEST == 'dev':
-    path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
-    path_to_auto_pos = condition.PATH_TO_DIR + "java-candc/data/auto-pos/wsj00.auto_pos"
-    stagged_file = condition.PATH_TO_DIR + "java-candc/data/auto-stagged/" + \
-        MODEL.replace('.pth', '_') + DEV_TEST + '.stagged'
-    gold = 'wsj00'
-elif DEV_TEST == 'test':
-    path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
-    path_to_auto_pos = condition.PATH_TO_DIR + "java-candc/data/auto-pos/wsj23.auto_pos"
-    stagged_file = condition.PATH_TO_DIR + "java-candc/data/auto-stagged/" + \
-        MODEL.replace('.pth', '_') + DEV_TEST + '.stagged'
-    gold = "wsj23"
-elif DEV_TEST == 'failure':
-    result = args[5]
-    path_to_sentence = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.raw".format(result)
-    path_to_auto_pos = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.auto_pos".format(result)
-    stagged_file = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.stagged".format(result)
+if FAILURE:
+    path_to_sentence = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.raw".format(TARGET)
+    path_to_auto_pos = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.auto_pos".format(TARGET)
+    stagged_file = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.stagged".format(TARGET)
+else:
+    if DEV_TEST == 'dev':
+        path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
+        path_to_auto_pos = condition.PATH_TO_DIR + "java-candc/data/auto-pos/wsj00.auto_pos"
+        stagged_file = condition.PATH_TO_DIR + "java-candc/data/auto-stagged/" + \
+            TARGET + '.stagged'
+    elif DEV_TEST == 'test':
+        path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
+        path_to_auto_pos = condition.PATH_TO_DIR + "java-candc/data/auto-pos/wsj23.auto_pos"
+        stagged_file = condition.PATH_TO_DIR + "java-candc/data/auto-stagged/" + \
+            TARGET + '.stagged'
+
 
 with open(path_to_sentence, "r") as f:
     sentence_list = f.readlines()

@@ -60,6 +60,7 @@ for MODEL in MODEL_LIST:
                 MODEL.replace('.pth', '_') + DEV_TEST + '.stagged'
             gold = "wsj23"
 
+        os.chdir(condition.PATH_TO_DIR + 'Hol-CCG/src')
         stag_command = "python supertagging.py {} {} {}".format(MODEL, DEV_TEST, THRESHOLD)
         subprocess.run(stag_command, shell=True, text=True)
         os.chdir(condition.PATH_TO_DIR + 'java-candc')

@@ -1,7 +1,6 @@
 import os
 import subprocess
 import sys
-from candc_parse import THRESHOLD
 from utils import Condition_Setter
 
 
@@ -57,12 +56,13 @@ def fix_deps_idx(extracted_deps, start):
 condition = Condition_Setter(set_embedding_type=False)
 
 args = sys.argv
+# args = ["", "roberta-large_phrase_span_2022-01-08_15:15:54.pth", "dev", 0.1]
 model = args[1]
 dev_test = args[2]
 THRESHOLD = args[3]
 
 target = model.replace(".pth", "_" + dev_test)
-path_to_autos = condition.PATH_TO_DIR + "/span_parsing/AUTO/{target}.auto"
+path_to_autos = condition.PATH_TO_DIR + f"/span_parsing/AUTO/{target}.auto"
 path_to_error_log = condition.path_to_conversion_error_log
 
 if dev_test == 'dev':
@@ -70,10 +70,10 @@ if dev_test == 'dev':
 elif dev_test == 'test':
     path_to_sentence = condition.PATH_TO_DIR + "span_parsing/GOLD/wsj23.raw"
 
-path_to_failed_sentence = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.raw".format(target)
-path_to_auto_pos = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.auto_pos".format(target)
-path_to_ccgbank_deps = condition.PATH_TO_DIR + "span_parsing/CCGBANK_DEPS/{target}.ccgbank_deps"
-path_to_alt_deps = condition.PATH_TO_DIR + "span_parsing/FAILURE/{target}.out"
+path_to_failed_sentence = condition.PATH_TO_DIR + f"span_parsing/FAILURE/{target}.raw"
+path_to_auto_pos = condition.PATH_TO_DIR + f"span_parsing/FAILURE/{target}.auto_pos"
+path_to_ccgbank_deps = condition.PATH_TO_DIR + f"span_parsing/CCGBANK_DEPS/{target}.ccgbank_deps"
+path_to_alt_deps = condition.PATH_TO_DIR + f"span_parsing/FAILURE/{target}.out"
 path_to_replaced_ccgbank_deps = path_to_ccgbank_deps.replace(
     ".ccgbank_deps", ".replaced_ccgbank_deps")
 
@@ -123,8 +123,8 @@ with open(path_to_failed_sentence, 'w') as f:
 os.chdir(condition.PATH_TO_DIR + "candc-1.00")
 pos_command = "bin/pos --model models/pos --input {} --output {}".format(
     path_to_failed_sentence, path_to_auto_pos)
-stag_command = "python supertagging.py {model} failure {THRESHOLD}"
-candc_command = "java -Xmx6g -classpath bin ParserBeam ~/span_parsing/FAILURE/{target}.stagged  ~/span_parsing/FAILURE/{target}.out ~/span_parsing/FAILURE/{target}.log model/weights params"
+stag_command = f"python supertagging.py {model} {dev_test} {THRESHOLD} failure"
+candc_command = f"""java -Xmx6g -classpath bin ParserBeam {condition.PATH_TO_DIR}span_parsing/FAILURE/{target}.stagged {condition.PATH_TO_DIR}span_parsing/FAILURE/{target}.out {condition.PATH_TO_DIR}span_parsing/FAILURE/{target}.log model/weights params"""
 subprocess.run(pos_command, shell=True, text=True)
 os.chdir(condition.PATH_TO_DIR + "Hol-CCG/src")
 subprocess.run(stag_command, shell=True, text=True)
