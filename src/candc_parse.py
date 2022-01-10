@@ -48,7 +48,8 @@ MODEL_LIST = ["roberta-large_2022-01-09_14_52_28.pth",
 
 stat = []
 for MODEL in MODEL_LIST:
-    for DEV_TEST in ["dev", "test"]:
+    print(MODEL)
+    for DEV_TEST in ["dev"]:
         THRESHOLD = 0.1
         if DEV_TEST == 'dev':
             stagged_file = condition.PATH_TO_DIR + "java-candc/data/auto-stagged/" + \
