@@ -208,7 +208,7 @@ class Parser:
                                     # constraints
                                     filtered_parent_cat_info = []
                                     for parent_cat_info in possible_cats_info:
-                                        if (left_cat.type == 'fc' and parent_cat_info in ['fa', 'fc']) or (
+                                        if (left_cat.type == 'fc' and parent_cat_info[1] in ['fa', 'fc']) or (
                                                 right_cat.type == 'bc' and parent_cat_info[1] not in ['ba', 'bc']):
                                             continue
                                         else:
