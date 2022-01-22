@@ -787,6 +787,6 @@ class FeedForward(nn.Module):
         kaiming_uniform_(self.linear2.weight)
 
     def forward(self, x):
-        x = self.linear2(self.dropout(self.relu(self.layer_norm(self.linear1(x)))))
+        # x = self.linear2(self.dropout(self.relu(self.layer_norm(self.linear1(x)))))
         x = self.linear2(self.dropout(self.relu(self.batch_norm(self.linear1(x)))))
         return x
