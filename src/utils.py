@@ -153,8 +153,7 @@ def evaluate_tree_list(tree_list, tree_net):
 def evaluate_batch_list(
         batch_list,
         tree_net,
-        cat_criteria=nn.CrossEntropyLoss(),
-        span_criteria=nn.BCELoss()):
+        criteria=nn.CrossEntropyLoss()):
     print("evaluating...")
     num_word = 0
     num_phrase = 0
@@ -169,15 +168,14 @@ def evaluate_batch_list(
         for batch in batch_list:
             word_output, phrase_output, span_output, word_label, phrase_label, span_label = tree_net(
                 batch)
-            span_output = torch.sigmoid(span_output)
 
             num_word += word_output.shape[0]
             num_phrase += phrase_output.shape[0]
             num_span += span_output.shape[0]
 
-            word_loss += cat_criteria(word_output, word_label)
-            phrase_loss += cat_criteria(phrase_output, phrase_label)
-            span_loss += span_criteria(span_output, span_label)
+            word_loss += criteria(word_output, word_label)
+            phrase_loss += criteria(phrase_output, phrase_label)
+            span_loss += criteria(span_output, span_label)
 
             # remove unknown categories
             word_output = word_output[word_label != 0]
@@ -188,9 +186,7 @@ def evaluate_batch_list(
             num_correct_word += torch.count_nonzero(torch.argmax(word_output, dim=1) == word_label)
             num_correct_phrase += torch.count_nonzero(
                 torch.argmax(phrase_output, dim=1) == phrase_label)
-            span_output[span_output >= 0.5] = 1.0
-            span_output[span_output < 0.5] = 0.0
-            num_correct_span += torch.count_nonzero(span_output == span_label)
+            num_correct_span += torch.count_nonzero(torch.argmax(span_output, dim=1) == span_label)
 
             pbar.update(1)
 
