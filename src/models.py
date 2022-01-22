@@ -550,9 +550,9 @@ class Tree_Net(nn.Module):
             num_phrase_cat,
             model,
             tokenizer=None,
-            train_embedder=True,
+            train_encoder=True,
             embedding_dim=1024,
-            model_dim=512,
+            model_dim=1024,
             ff_dropout=0.2,
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
@@ -562,17 +562,18 @@ class Tree_Net(nn.Module):
         self.tokenizer = tokenizer
         self.embedding_dim = embedding_dim
         self.model_dim = model_dim
-        self.train_embedder = train_embedder
+        self.train_encoder = train_encoder
         # the list which to record the modules to set separated learning rate
         self.base_modules = []
         self.base_params = []
 
-        self.word_rep_transform = nn.Sequential(OrderedDict([
-            ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
-            ('relu', nn.ReLU()),
-            ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
-        kaiming_uniform_(self.word_rep_transform.linear1.weight)
-        kaiming_uniform_(self.word_rep_transform.linear2.weight)
+        # self.word_rep_transform = nn.Sequential(OrderedDict([
+        #     ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
+        #     ('relu', nn.ReLU()),
+        #     ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
+        # kaiming_uniform_(self.word_rep_transform.linear1.weight)
+        # kaiming_uniform_(self.word_rep_transform.linear2.weight)
+        # self.base_modules.append(self.word_rep_transform)
         self.word_ff = FeedForward(
             self.model_dim,
             self.model_dim,
@@ -583,8 +584,7 @@ class Tree_Net(nn.Module):
             self.model_dim,
             self.num_phrase_cat,
             dropout=ff_dropout)
-        self.span_ff = FeedForward(self.model_dim, self.model_dim, 1, dropout=ff_dropout)
-        self.base_modules.append(self.word_rep_transform)
+        self.span_ff = FeedForward(self.model_dim, self.model_dim, 2, dropout=ff_dropout)
         self.base_modules.append(self.word_ff)
         self.base_modules.append(self.phrase_ff)
         self.base_modules.append(self.span_ff)
@@ -607,12 +607,7 @@ class Tree_Net(nn.Module):
         random_original_position = batch[9]
         random_negative_node_id = batch[10]
 
-        if self.train_embedder:
-            vector_list, lengths = self.encode(sentence, word_split)
-        # when not train word embedder, the computation of gradient is not needed
-        else:
-            with torch.no_grad():
-                vector_list, lengths = self.encode(sentence, word_split)
+        vector_list, lengths = self.encode(sentence, word_split)
 
         # compose word vectors and fed them into FFNN
         original_vector = self.set_leaf_node_vector(
@@ -646,7 +641,11 @@ class Tree_Net(nn.Module):
             sentence,
             padding=True,
             return_tensors='pt').to(self.device)
-        word_vector = self.model(**input).last_hidden_state[:, 1:-1]
+        if self.train_encoder:
+            word_vector = self.model(**input).last_hidden_state[:, 1:-1]
+        else:
+            with torch.no_grad():
+                word_vector = self.model(**input).last_hidden_state[:, 1:-1]
         word_vector_list = []
         lengths = []
         for vector, info in zip(word_vector, word_split):
@@ -656,9 +655,8 @@ class Tree_Net(nn.Module):
             word_vector_list.append(torch.stack(temp))
             lengths.append(len(temp))
         word_vector_list = pad_sequence(word_vector_list, batch_first=True)
-        word_rep = complex_normalize(self.word_rep_transform(word_vector_list))
         lengths = torch.tensor(lengths, device=torch.device('cpu'))
-        return word_rep, lengths
+        return word_vector, lengths
 
     def set_leaf_node_vector(self, num_node, vector_list, lengths, original_position):
         leaf_node_vector = torch.zeros(
@@ -780,7 +778,8 @@ class FeedForward(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, dropout=0.2):
         super(FeedForward, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_dim)
-        self.layer_norm = nn.LayerNorm(hidden_dim)
+        # self.layer_norm = nn.LayerNorm(hidden_dim)
+        self.batch_norm = nn.BatchNorm1d(hidden_dim)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=dropout)
         self.linear2 = nn.Linear(hidden_dim, output_dim)
@@ -789,4 +788,5 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         x = self.linear2(self.dropout(self.relu(self.layer_norm(self.linear1(x)))))
+        x = self.linear2(self.dropout(self.relu(self.batch_norm(self.linear1(x)))))
         return x

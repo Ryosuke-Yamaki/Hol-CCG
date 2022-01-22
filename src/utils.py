@@ -1,3 +1,4 @@
+from locale import normalize
 import torch.nn as nn
 from tqdm import tqdm
 import os
@@ -8,13 +9,15 @@ import numpy as np
 import torch
 from torch import conj
 from torch.fft import fft, ifft
+from torch.nn.functional import normalize
 
 
-def circular_correlation(a, b):
+def circular_correlation(a, b, k=31.65):
     a_ = conj(fft(a))
     b_ = fft(b)
     c_ = a_ * b_
     c = ifft(c_).real
+    c = k * normalize(c, dim=-1)
     return c
 
 
