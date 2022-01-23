@@ -4,3 +4,5 @@ __pycache__/
 /result/data/weight_matrix
 /result/data/model
 /src/*test*
+/src/wandb
+/src/*.log
