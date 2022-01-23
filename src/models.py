@@ -251,34 +251,47 @@ class Tree_List:
                 node_list = []
                 tree_id += 1
 
-    def set_vocab_and_head(self):
+    def set_vocab_and_head(self, binary=False):
         word_category_counter = Counter()
         phrase_category_counter = Counter()
-        pos_counter = Counter()
         head_info_temp = {}
         for tree in self.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
                     word_category_counter[node.category] += 1
-                    pos_counter[node.pos] += 1
                 else:
                     if node.num_child == 2:
                         left_child = tree.node_list[node.left_child_node_id]
                         right_child = tree.node_list[node.right_child_node_id]
-                        rule = (left_child.category, right_child.category, node.category)
+                        if binary:
+                            rule = (
+                                left_child.prime_category,
+                                right_child.prime_category,
+                                node.prime_category)
+                        else:
+                            rule = (left_child.category, right_child.category, node.category)
                         if rule not in head_info_temp:
                             head_info_temp[rule] = [0, 0]
                         head_info_temp[rule][node.head] += 1
                     phrase_category_counter[node.category] += 1
-        self.word_category_vocab = Vocab(
-            word_category_counter,
-            min_freq=self.min_word_category,
-            specials=['<unk>'])
-        self.phrase_category_vocab = Vocab(
-            phrase_category_counter,
-            min_freq=self.min_phrase_category,
-            specials=['<unk>'])
-        self.pos_tag_vocab = Vocab(pos_counter, min_freq=0, specials=['<pad>'])
+        if binary:
+            self.binary_word_category_vocab = Vocab(
+                word_category_counter,
+                min_freq=self.min_word_category,
+                specials=['<unk>'])
+            self.binary_phrase_category_vocab = Vocab(
+                phrase_category_counter,
+                min_freq=self.min_phrase_category,
+                specials=['<unk>'])
+        else:
+            self.word_category_vocab = Vocab(
+                word_category_counter,
+                min_freq=self.min_word_category,
+                specials=['<unk>'])
+            self.phrase_category_vocab = Vocab(
+                phrase_category_counter,
+                min_freq=self.min_phrase_category,
+                specials=['<unk>'])
         self.head_info = {}
         for k, v in head_info_temp.items():
             # when left head is majority
@@ -336,7 +349,7 @@ class Tree_List:
 
     def make_shuffled_tree_id(self):
         shuffled_tree_id = []
-        splitted = np.array_split(self.sorted_tree_id, 4)
+        splitted = np.array_split(self.sorted_tree_id, 40)
         for id_list in splitted:
             np.random.shuffle(id_list)
             shuffled_tree_id.append(id_list)
@@ -626,7 +639,7 @@ class Tree_Net(nn.Module):
         vector = torch.cat((original_vector, random_vector))
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
-        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]                               :, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
+        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
         composed_vector = self.compose(original_vector, composition_info)
         random_composed_vector = self.compose(random_vector, random_composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
