@@ -215,21 +215,21 @@ test_tree_list = Tree_List(
     head_info=head_info)
 
 
-dump(train_tree_list, condition.path_to_train_tree_list)
-dump(dev_tree_list, condition.path_to_dev_tree_list)
-dump(test_tree_list, condition.path_to_test_tree_list)
-dump(word_category_vocab, condition.path_to_word_category_vocab)
-dump(phrase_category_vocab, condition.path_to_phrase_category_vocab)
-dump(head_info, condition.path_to_head_info)
+# dump(train_tree_list, condition.path_to_train_tree_list)
+# dump(dev_tree_list, condition.path_to_dev_tree_list)
+# dump(test_tree_list, condition.path_to_test_tree_list)
+# dump(word_category_vocab, condition.path_to_word_category_vocab)
+# dump(phrase_category_vocab, condition.path_to_phrase_category_vocab)
+# dump(head_info, condition.path_to_head_info)
 
 print('setting binary tree list...')
 train_tree_list.convert_to_binary(type='train')
-binary_word_category_vocab = train_tree_list.binary_word_category_vocab
-binary_phrase_category_vocab = train_tree_list.binary_phrase_category_vocab
-dev_tree_list.binary_word_category_vocab = binary_word_category_vocab
-dev_tree_list.binary_phrase_category_vocab = binary_phrase_category_vocab
-test_tree_list.binary_word_category_vocab = binary_word_category_vocab
-test_tree_list.binary_phrase_category_vocab = binary_phrase_category_vocab
+binary_word_category_vocab = train_tree_list.word_category_vocab
+binary_phrase_category_vocab = train_tree_list.phrase_category_vocab
+dev_tree_list.word_category_vocab = binary_word_category_vocab
+dev_tree_list.phrase_category_vocab = binary_phrase_category_vocab
+test_tree_list.word_category_vocab = binary_word_category_vocab
+test_tree_list.phrase_category_vocab = binary_phrase_category_vocab
 dev_tree_list.convert_to_binary(type='dev')
 test_tree_list.convert_to_binary(type='test')
 

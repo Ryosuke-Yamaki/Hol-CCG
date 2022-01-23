@@ -57,13 +57,12 @@ class Tree:
         self.self_id = self_id
         self.node_list = node_list
 
-    def set_node_composition_info(self, binary=False):
-        if binary:
-            for node in self.node_list:
-                if node.is_leaf:
-                    node.ready = True
-                else:
-                    node.ready = False
+    def set_node_composition_info(self):
+        for node in self.node_list:
+            if node.is_leaf:
+                node.ready = True
+            else:
+                node.ready = False
         self.composition_info = []
         while True:
             num_ready_node = 0
@@ -273,24 +272,15 @@ class Tree_List:
                                 head_info_temp[rule] = [0, 0]
                             head_info_temp[rule][node.head] += 1
                     phrase_category_counter[node.category] += 1
-        if binary:
-            self.binary_word_category_vocab = Vocab(
-                word_category_counter,
-                min_freq=self.min_word_category,
-                specials=['<unk>'])
-            self.binary_phrase_category_vocab = Vocab(
-                phrase_category_counter,
-                min_freq=self.min_phrase_category,
-                specials=['<unk>'])
-        else:
-            self.word_category_vocab = Vocab(
-                word_category_counter,
-                min_freq=self.min_word_category,
-                specials=['<unk>'])
-            self.phrase_category_vocab = Vocab(
-                phrase_category_counter,
-                min_freq=self.min_phrase_category,
-                specials=['<unk>'])
+        self.word_category_vocab = Vocab(
+            word_category_counter,
+            min_freq=self.min_word_category,
+            specials=['<unk>'])
+        self.phrase_category_vocab = Vocab(
+            phrase_category_counter,
+            min_freq=self.min_phrase_category,
+            specials=['<unk>'])
+        if not binary:
             self.head_info = {}
             for k, v in head_info_temp.items():
                 # when left head is majority
@@ -300,20 +290,16 @@ class Tree_List:
                 else:
                     self.head_info[k] = 1
 
-    def set_category_id(self, binary=False):
-        if binary:
-            word_category_vocab = self.binary_word_category_vocab
-            phrase_category_vocab = self.binary_phrase_category_vocab
-        else:
-            word_category_vocab = self.word_category_vocab
-            phrase_category_vocab = self.phrase_category_vocab
+    def set_category_id(self):
+        word_category_vocab = self.word_category_vocab
+        phrase_category_vocab = self.phrase_category_vocab
         for tree in self.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
                     node.category_id = word_category_vocab[node.category]
                 else:
                     node.category_id = phrase_category_vocab[node.category]
-            tree.set_node_composition_info(binary=binary)
+            tree.set_node_composition_info()
             tree.set_original_position_of_leaf_node()
 
     def set_info_for_training(self, tokenizer=None):
@@ -592,7 +578,7 @@ class Tree_List:
             tree.node_list = binary_node_list
         if type == 'train':
             self.set_vocab_and_head(binary=True)
-        self.set_category_id(binary=True)
+        self.set_category_id()
 
 
 class Tree_Net(nn.Module):
