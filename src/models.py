@@ -57,7 +57,13 @@ class Tree:
         self.self_id = self_id
         self.node_list = node_list
 
-    def set_node_composition_info(self):
+    def set_node_composition_info(self, binary=False):
+        if binary:
+            for node in self.node_list:
+                if node.is_leaf:
+                    node.ready = True
+                else:
+                    node.ready = False
         self.composition_info = []
         while True:
             num_ready_node = 0
@@ -215,7 +221,6 @@ class Tree_List:
             type,
             word_category_vocab=None,
             phrase_category_vocab=None,
-            pos_tag_vocab=None,
             head_info=None,
             min_word_category=0,
             min_phrase_category=0,
@@ -230,7 +235,6 @@ class Tree_List:
         else:
             self.word_category_vocab = word_category_vocab
             self.phrase_category_vocab = phrase_category_vocab
-            self.pos_tag_vocab = pos_tag_vocab
             self.head_info = head_info
         self.set_category_id()
 
@@ -263,16 +267,11 @@ class Tree_List:
                     if node.num_child == 2:
                         left_child = tree.node_list[node.left_child_node_id]
                         right_child = tree.node_list[node.right_child_node_id]
-                        if binary:
-                            rule = (
-                                left_child.prime_category,
-                                right_child.prime_category,
-                                node.prime_category)
-                        else:
+                        if not binary:
                             rule = (left_child.category, right_child.category, node.category)
-                        if rule not in head_info_temp:
-                            head_info_temp[rule] = [0, 0]
-                        head_info_temp[rule][node.head] += 1
+                            if rule not in head_info_temp:
+                                head_info_temp[rule] = [0, 0]
+                            head_info_temp[rule][node.head] += 1
                     phrase_category_counter[node.category] += 1
         if binary:
             self.binary_word_category_vocab = Vocab(
@@ -292,27 +291,29 @@ class Tree_List:
                 phrase_category_counter,
                 min_freq=self.min_phrase_category,
                 specials=['<unk>'])
-        self.head_info = {}
-        for k, v in head_info_temp.items():
-            # when left head is majority
-            if v[0] >= v[1]:
-                self.head_info[k] = 0
-            # when right head is majority
-            else:
-                self.head_info[k] = 1
+            self.head_info = {}
+            for k, v in head_info_temp.items():
+                # when left head is majority
+                if v[0] >= v[1]:
+                    self.head_info[k] = 0
+                # when right head is majority
+                else:
+                    self.head_info[k] = 1
 
-    def set_category_id(self):
-        word_category_vocab = self.word_category_vocab
-        phrase_category_vocab = self.phrase_category_vocab
-        pos_tag_vocab = self.pos_tag_vocab
+    def set_category_id(self, binary=False):
+        if binary:
+            word_category_vocab = self.binary_word_category_vocab
+            phrase_category_vocab = self.binary_phrase_category_vocab
+        else:
+            word_category_vocab = self.word_category_vocab
+            phrase_category_vocab = self.phrase_category_vocab
         for tree in self.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
                     node.category_id = word_category_vocab[node.category]
-                    node.pos_id = pos_tag_vocab[node.pos]
                 else:
                     node.category_id = phrase_category_vocab[node.category]
-            tree.set_node_composition_info()
+            tree.set_node_composition_info(binary=binary)
             tree.set_original_position_of_leaf_node()
 
     def set_info_for_training(self, tokenizer=None):
@@ -349,7 +350,7 @@ class Tree_List:
 
     def make_shuffled_tree_id(self):
         shuffled_tree_id = []
-        splitted = np.array_split(self.sorted_tree_id, 40)
+        splitted = np.array_split(self.sorted_tree_id, 4)
         for id_list in splitted:
             np.random.shuffle(id_list)
             shuffled_tree_id.append(id_list)
@@ -555,6 +556,43 @@ class Tree_List:
                         parent_node.vector = circular_correlation(
                             left_node.vector, right_node.vector, k=None)
                 pbar.update(1)
+
+    def convert_to_binary(self, type):
+        for tree in self.tree_list:
+            root_node = tree.node_list[-1]
+            root_node.parent_node = None
+            for node in reversed(tree.node_list):
+                if not node.is_leaf:
+                    if node.num_child == 1:
+                        child_node = tree.node_list[node.child_node_id]
+                        if node.parent_node is None:
+                            child_node.parent_node = node
+                        else:
+                            child_node.parent_node = node.parent_node
+                        child_node.category += '-->' + node.category
+                    elif node.num_child == 2:
+                        left_child_node = tree.node_list[node.left_child_node_id]
+                        right_child_node = tree.node_list[node.right_child_node_id]
+                        left_child_node.parent_node = node
+                        right_child_node.parent_node = node
+            binary_node_list = []
+            node_id = 0
+            for node in tree.node_list:
+                if node.is_leaf or node.num_child == 2:
+                    node.self_id = node_id
+                    node.prime_category = node.category.split('-->')[0]
+                    if node.parent_node is not None:
+                        parent_node = node.parent_node
+                        if parent_node.start_idx == node.start_idx:
+                            parent_node.left_child_node_id = node.self_id
+                        elif parent_node.end_idx == node.end_idx:
+                            parent_node.right_child_node_id = node.self_id
+                    binary_node_list.append(node)
+                    node_id += 1
+            tree.node_list = binary_node_list
+        if type == 'train':
+            self.set_vocab_and_head(binary=True)
+        self.set_category_id(binary=True)
 
 
 class Tree_Net(nn.Module):
