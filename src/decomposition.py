@@ -1,5 +1,8 @@
+from torch.fft import ifft
+from torch.fft import fft
+from collections import Counter
 import numpy as npstandardize
-from utils import load, Condition_Setter, circular_convolution
+from utils import circular_correlation, load, Condition_Setter, circular_convolution, inverse_circular_correlation
 from sklearn.decomposition import PCA
 import torch
 import matplotlib.pyplot as plt
@@ -13,9 +16,9 @@ if torch.cuda.is_available():
 else:
     device = torch.device('cpu')
 
-model = 'roberta-large_phrase_span_2021-12-20_13:53:40.pth'
+model = 'roberta-large_phrase_span_2022-01-22_13:49:06.pth'
 dev_tree_list = load(condition.path_to_dev_tree_list)
-dev_tree_list.tree_list = dev_tree_list.tree_list[:100]
+# dev_tree_list.tree_list = dev_tree_list.tree_list[:100]
 tree_net = torch.load(condition.path_to_model + model,
                       map_location=device)
 tree_net.device = device
@@ -27,10 +30,13 @@ dev_tree_list.set_info_for_training(tokenizer=tree_net.tokenizer)
 with torch.no_grad():
     dev_tree_list.set_vector(tree_net)
 
-total = 0
-correct = 0
+fail = 0
+success = 0
 total_cos = 0
-cos_list = []
+
+
+counter = Counter()
+
 for tree in dev_tree_list.tree_list:
     for node in tree.node_list:
         if not node.is_leaf and node.num_child == 2:
@@ -40,26 +46,20 @@ for tree in dev_tree_list.tree_list:
             p = parent.vector
             l = left_child.vector
             r = right_child.vector
-            r_ = circular_convolution(l, p)
-            if right_child.is_leaf:
-                classifier = tree_net.word_ff
-                vocab = dev_tree_list.word_category_vocab
+            rr = inverse_circular_correlation(p, l, k=None)
+            temp = cos(r, rr, dim=-1)
+            # ll = inverse_circular_correlation(p, r, child_is_left=False)
+            # temp = cos(l, ll, dim=-1)
+            if temp < 0.9:
+                print(left_child.content, right_child.content)
+                p_ = fft(p)
+                l_ = fft(l)
+                norm_r = torch.norm(r)
+                r_ = fft(r)
+                counter[parent.category] += 1
+                fail += 1
             else:
-                classifier = tree_net.phrase_ff
-                vocab = dev_tree_list.phrase_category_vocab
-            cat_score = classifier(r_)
-            cat_id = torch.argmax(cat_score)
-            predict_cat = vocab.itos[cat_id]
-            # print('parent:{}, {}'.format(parent.content, parent.category))
-            # print('left:{}, {}'.format(left_child.content, left_child.category))
-            # print('right:{}, {}'.format(right_child.content, right_child.category))
-            # print('predicted right category:{}'.format(predict_cat))
-            # print('cos similarity:{}\n'.format(cos(r, r_, dim=-1)))
-            total_cos += cos(r, r_, dim=-1)
-            cos_list.append(cos(r, r_, dim=-1).cpu().numpy())
-            total += 1
-print(total_cos / total)
-print(correct / total)
-plt.hist(cos_list, bins=10)
-plt.show()
-a = 0
+                success += 1
+                total_cos += temp
+print(total_cos / success)
+print(f'{fail}/{fail+success}')

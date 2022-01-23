@@ -1,3 +1,4 @@
+from torch.nn.functional import normalize
 from torchtext.vocab import Vocab
 from collections import Counter
 import random
@@ -523,7 +524,7 @@ class Tree_List:
                 sentence = [" ".join(tree.sentence)]
                 word_split = [tree.word_split]
                 vector_list, _ = tree_net.encode(sentence, word_split=word_split)
-                vector_list = complex_normalize(tree_net.transform_word_rep(vector_list[0]))
+                vector_list = complex_normalize(vector_list[0])
                 for pos in tree.original_position:
                     node_id = pos[0]
                     original_position = pos[1]
@@ -539,7 +540,7 @@ class Tree_List:
                         left_node = tree.node_list[composition_info[2]]
                         right_node = tree.node_list[composition_info[3]]
                         parent_node.vector = circular_correlation(
-                            left_node.vector, right_node.vector)
+                            left_node.vector, right_node.vector, k=None)
                 pbar.update(1)
 
 
@@ -554,6 +555,8 @@ class Tree_Net(nn.Module):
             embedding_dim=1024,
             model_dim=1024,
             ff_dropout=0.2,
+            normalize_type='real',
+            vector_norm=1e+3,
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
@@ -562,18 +565,19 @@ class Tree_Net(nn.Module):
         self.tokenizer = tokenizer
         self.embedding_dim = embedding_dim
         self.model_dim = model_dim
+        self.normalize_type = normalize_type
+        if self.normalize_type == 'real':
+            self.vector_norm = vector_norm
+        elif self.normalize_type == 'complex':
+            self.vector_norm = None
         self.train_encoder = train_encoder
         # the list which to record the modules to set separated learning rate
         self.base_modules = []
         self.base_params = []
 
-        # self.word_rep_transform = nn.Sequential(OrderedDict([
-        #     ('linear1', nn.Linear(self.embedding_dim, self.embedding_dim)),
-        #     ('relu', nn.ReLU()),
-        #     ('linear2', nn.Linear(self.embedding_dim, self.model_dim))]))
-        # kaiming_uniform_(self.word_rep_transform.linear1.weight)
-        # kaiming_uniform_(self.word_rep_transform.linear2.weight)
-        # self.base_modules.append(self.word_rep_transform)
+        self.linear = nn.Linear(self.embedding_dim, self.model_dim)
+        kaiming_uniform_(self.linear.weight)
+        self.base_modules.append(self.linear)
         self.word_ff = FeedForward(
             self.model_dim,
             self.model_dim,
@@ -622,7 +626,7 @@ class Tree_Net(nn.Module):
         vector = torch.cat((original_vector, random_vector))
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
-        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
+        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]                               :, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
         composed_vector = self.compose(original_vector, composition_info)
         random_composed_vector = self.compose(random_vector, random_composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
@@ -635,7 +639,7 @@ class Tree_Net(nn.Module):
         span_output = self.span_ff(span_vector)
         return word_output, phrase_output, span_output, word_label, phrase_label, span_label
 
-    # embedding word vector
+    # encoding word vector
     def encode(self, sentence, word_split):
         input = self.tokenizer(
             sentence,
@@ -654,7 +658,12 @@ class Tree_Net(nn.Module):
                 temp.append(torch.mean(vector[start_idx:end_idx], dim=0))
             word_vector_list.append(torch.stack(temp))
             lengths.append(len(temp))
-        word_vector_list = pad_sequence(word_vector_list, batch_first=True)
+        word_vector = pad_sequence(word_vector_list, batch_first=True)
+        word_vector = self.linear(word_vector)
+        if self.normalize_type == 'real':
+            word_vector = self.vector_norm * normalize(word_vector, dim=-1)
+        elif self.normalize_type == 'complex':
+            word_vector = complex_normalize(word_vector)
         lengths = torch.tensor(lengths, device=torch.device('cpu'))
         return word_vector, lengths
 
@@ -694,7 +703,8 @@ class Tree_Net(nn.Module):
                 right_child_idx = two_child_composition_info[:, 3]
                 left_child_vector = vector[(two_child_composition_idx, left_child_idx)]
                 right_child_vector = vector[(two_child_composition_idx, right_child_idx)]
-                composed_vector = circular_correlation(left_child_vector, right_child_vector)
+                composed_vector = circular_correlation(
+                    left_child_vector, right_child_vector, self.vector_norm)
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
 
@@ -778,8 +788,8 @@ class FeedForward(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, dropout=0.2):
         super(FeedForward, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_dim)
-        # self.layer_norm = nn.LayerNorm(hidden_dim)
-        self.batch_norm = nn.BatchNorm1d(hidden_dim)
+        self.layer_norm = nn.LayerNorm(hidden_dim)
+        # self.batch_norm = nn.BatchNorm1d(hidden_dim)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=dropout)
         self.linear2 = nn.Linear(hidden_dim, output_dim)
@@ -787,6 +797,6 @@ class FeedForward(nn.Module):
         kaiming_uniform_(self.linear2.weight)
 
     def forward(self, x):
-        # x = self.linear2(self.dropout(self.relu(self.layer_norm(self.linear1(x)))))
-        x = self.linear2(self.dropout(self.relu(self.batch_norm(self.linear1(x)))))
+        x = self.linear2(self.dropout(self.relu(self.layer_norm(self.linear1(x)))))
+        # x = self.linear2(self.dropout(self.relu(self.batch_norm(self.linear1(x)))))
         return x

@@ -12,23 +12,26 @@ from torch.fft import fft, ifft
 from torch.nn.functional import normalize
 
 
-def circular_correlation(a, b, k=31.65):
-    a_ = conj(fft(a))
+def circular_correlation(a, b, vector_norm):
+    a_ = fft(a)
     b_ = fft(b)
-    c_ = a_ * b_
+    c_ = conj(a_) * b_
     c = ifft(c_).real
-    c = k * normalize(c, dim=-1)
+    if vector_norm is not None:
+        c = vector_norm * normalize(c, dim=-1)
     return c
 
 
-def inverse_circular_correlation(p, c1, child_is_left=True):
+def inverse_circular_correlation(p, c1, child_is_left=True, k=31.65):
     p_ = fft(p)
+    c1_ = fft(c1)
     if child_is_left:
-        c1_ = conj(fft(c1))
+        c2_ = p_ / (conj(c1_) + 1e-12)
     else:
-        c1_ = fft(c1)
-    c2_ = p_ / (c1_ + 1e-6)
+        c2_ = conj(p_ / (c1_ + 1e-12))
     c2 = ifft(c2_).real
+    if k is not None:
+        c2 = k * normalize(c2, dim=-1)
     return c2
 
 
@@ -50,7 +53,7 @@ def inverse_circular_convolution(p, c1):
 
 def complex_normalize(v):
     v_ = fft(v)
-    v_ = v_ / (torch.abs(v_) + 1e-6)
+    v_ = v_ / (torch.abs(v_) + 1e-12)
     v = ifft(v_).real
     return v
 
@@ -154,7 +157,6 @@ def evaluate_batch_list(
         batch_list,
         tree_net,
         criteria=nn.CrossEntropyLoss()):
-    print("evaluating...")
     num_word = 0
     num_phrase = 0
     num_span = 0
@@ -165,6 +167,7 @@ def evaluate_batch_list(
     phrase_loss = 0
     span_loss = 0
     with tqdm(total=len(batch_list), unit="batch") as pbar:
+        pbar.set_description("evaluating...")
         for batch in batch_list:
             word_output, phrase_output, span_output, word_label, phrase_label, span_label = tree_net(
                 batch)
