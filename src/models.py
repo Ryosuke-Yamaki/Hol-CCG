@@ -789,7 +789,6 @@ class FeedForward(nn.Module):
         super(FeedForward, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_dim)
         self.layer_norm = nn.LayerNorm(hidden_dim)
-        # self.batch_norm = nn.BatchNorm1d(hidden_dim)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=dropout)
         self.linear2 = nn.Linear(hidden_dim, output_dim)
@@ -798,5 +797,4 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         x = self.linear2(self.dropout(self.relu(self.layer_norm(self.linear1(x)))))
-        # x = self.linear2(self.dropout(self.relu(self.batch_norm(self.linear1(x)))))
         return x
