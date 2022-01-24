@@ -106,16 +106,6 @@ def load(path):
         return data
 
 
-def include_unk(content_id, unk_content_id):
-    bit = 0
-    for id in content_id:
-        if id in unk_content_id:
-            bit = 1
-            return True
-    if bit == 0:
-        return False
-
-
 @torch.no_grad()
 def evaluate_tree_list(tree_list, tree_net):
     for tree in tree_list.tree_list:
@@ -217,11 +207,7 @@ def evaluate_batch_list(
 
 
 @torch.no_grad()
-def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
-    # if tree_list.embedder == 'transformer':
-    #     for tree in tree_list.tree_list:
-    #         tree.set_word_split(tree_net.tokenizer)
-    # tree_list.set_vector(tree_net)
+def evaluate_multi(tree_list, tree_net, gamma=0.1, alpha=10):
     word_ff = tree_net.word_ff
     phrase_ff = tree_net.phrase_ff
     num_word = 0
@@ -240,7 +226,7 @@ def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
                     predict_prob, predict_idx = torch.sort(output[1:], dim=-1, descending=True)
                     # add one to index for the removing of zero index of "<UNK>"
                     predict_idx += 1
-                    predict_idx = predict_idx[predict_prob > beta][:alpha]
+                    predict_idx = predict_idx[predict_prob >= gamma][:alpha]
                     num_word += 1
                     num_predicted_word += predict_idx.shape[0]
                     if node.category_id in predict_idx and node.category_id != 0:
@@ -249,20 +235,70 @@ def evaluate_beta(tree_list, tree_net, beta=0.0005, alpha=10):
                     output = torch.softmax(phrase_ff(node.vector), dim=-1)
                     predict_prob, predict_idx = torch.sort(output[1:], dim=-1, descending=True)
                     predict_idx += 1
-                    predict_idx = predict_idx[predict_prob > beta][:alpha]
+                    predict_idx = predict_idx[predict_prob >= gamma][:alpha]
                     num_phrase += 1
                     num_predicted_phrase += predict_idx.shape[0]
                     if node.category_id in predict_idx and node.category_id != 0:
                         num_correct_phrase += 1
             pbar.update(1)
     print('-' * 50)
-    print('beta={},alpha={}'.format(beta, alpha))
-    print('word: {}'.format(num_correct_word / num_word))
-    print('cat per word: {}'.format(num_predicted_word / num_word))
-    print('phrase: {}'.format(num_correct_phrase / num_phrase))
-    print('cat per phrase: {}'.format(num_predicted_phrase / num_phrase))
+    print(f'gamma={gamma}, alpha={alpha}')
+    print(f'word: {num_correct_word / num_word}')
+    print(f'cat per word: {num_predicted_word / num_word}')
+    print(f'phrase: {num_correct_phrase / num_phrase}')
+    print(f'cat per phrase: {num_predicted_phrase / num_phrase}')
 
     return num_correct_word / num_word, num_predicted_word / num_word
+
+
+@torch.no_grad()
+def evaluate_prime(tree_list, tree_net):
+    word_ff = tree_net.word_ff
+    phrase_ff = tree_net.phrase_ff
+    word_category_vocab = tree_list.word_category_vocab
+    phrase_category_vocab = tree_list.phrase_category_vocab
+    num_word = 0
+    num_phrase = 0
+    num_correct_word = 0
+    num_correct_phrase = 0
+    with tqdm(total=len(tree_list.tree_list)) as pbar:
+        pbar.set_description("evaluating...")
+        for tree in tree_list.tree_list:
+            for node in tree.node_list:
+                if node.is_leaf:
+                    predict_prob = torch.softmax(word_ff(node.vector), dim=-1)
+                    predict_idx = torch.argmax(predict_prob, dim=-1)
+                    num_word += 1
+                    if predict_idx != 0:
+                        predict_cat = word_category_vocab.itos[predict_idx]
+                        predict_prime_cat = predict_cat.split('-->')[0]
+                        if predict_prime_cat == node.prime_category:
+                            num_correct_word += 1
+                        else:
+                            if len(predict_cat.split('-->')) > 1:
+                                _, top_n = torch.sort(predict_prob, dim=-1, descending=True)
+                                for idx in top_n[:5]:
+                                    print(word_category_vocab.itos[idx], predict_prob[idx].item())
+                                print('\n')
+                else:
+                    predict_prob = torch.softmax(phrase_ff(node.vector), dim=-1)
+                    predict_idx = torch.argmax(predict_prob, dim=-1)
+                    num_phrase += 1
+                    if predict_idx != 0:
+                        predict_cat = phrase_category_vocab.itos[predict_idx]
+                        predict_prime_cat = predict_cat.split('-->')[0]
+                        if predict_prime_cat == node.prime_category:
+                            num_correct_phrase += 1
+                        else:
+                            if len(predict_cat.split('-->')) > 1:
+                                _, top_n = torch.sort(predict_prob, dim=-1, descending=True)
+                                for idx in top_n[:5]:
+                                    print(phrase_category_vocab.itos[idx], predict_prob[idx].item())
+                                print('\n')
+            pbar.update(1)
+    print('-' * 50)
+    print(f'word: {num_correct_word / num_word}')
+    print(f'phrase: {num_correct_phrase / num_phrase}')
 
 
 class History:

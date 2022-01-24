@@ -254,7 +254,7 @@ class Tree_List:
                 node_list = []
                 tree_id += 1
 
-    def set_vocab_and_head(self, binary=False):
+    def set_vocab_and_head(self):
         word_category_counter = Counter()
         phrase_category_counter = Counter()
         head_info_temp = {}
@@ -266,11 +266,13 @@ class Tree_List:
                     if node.num_child == 2:
                         left_child = tree.node_list[node.left_child_node_id]
                         right_child = tree.node_list[node.right_child_node_id]
-                        if not binary:
-                            rule = (left_child.category, right_child.category, node.category)
-                            if rule not in head_info_temp:
-                                head_info_temp[rule] = [0, 0]
-                            head_info_temp[rule][node.head] += 1
+                        left = left_child.category.split('-->')[-1]
+                        right = right_child.category.split('-->')[-1]
+                        parent = node.category.split('-->')[0]
+                        rule = (left, right, parent)
+                        if rule not in head_info_temp:
+                            head_info_temp[rule] = [0, 0]
+                        head_info_temp[rule][node.head] += 1
                     phrase_category_counter[node.category] += 1
         self.word_category_vocab = Vocab(
             word_category_counter,
@@ -280,15 +282,14 @@ class Tree_List:
             phrase_category_counter,
             min_freq=self.min_phrase_category,
             specials=['<unk>'])
-        if not binary:
-            self.head_info = {}
-            for k, v in head_info_temp.items():
-                # when left head is majority
-                if v[0] >= v[1]:
-                    self.head_info[k] = 0
-                # when right head is majority
-                else:
-                    self.head_info[k] = 1
+        self.head_info = {}
+        for k, v in head_info_temp.items():
+            # when left head is majority
+            if v[0] >= v[1]:
+                self.head_info[k] = 0
+            # when right head is majority
+            else:
+                self.head_info[k] = 1
 
     def set_category_id(self):
         word_category_vocab = self.word_category_vocab
@@ -524,23 +525,18 @@ class Tree_List:
                 sentence = [" ".join(tree.sentence)]
                 word_split = [tree.word_split]
                 vector_list, _ = tree_net.encode(sentence, word_split=word_split)
-                vector_list = complex_normalize(vector_list[0])
+                vector_list = vector_list[0]
                 for pos in tree.original_position:
                     node_id = pos[0]
                     original_position = pos[1]
                     node = tree.node_list[node_id]
                     node.vector = torch.squeeze(vector_list[original_position])
                 for composition_info in tree.composition_info:
-                    num_child = composition_info[0]
                     parent_node = tree.node_list[composition_info[1]]
-                    if num_child == 1:
-                        child_node = tree.node_list[composition_info[2]]
-                        parent_node.vector = child_node.vector
-                    else:
-                        left_node = tree.node_list[composition_info[2]]
-                        right_node = tree.node_list[composition_info[3]]
-                        parent_node.vector = circular_correlation(
-                            left_node.vector, right_node.vector, k=None)
+                    left_node = tree.node_list[composition_info[2]]
+                    right_node = tree.node_list[composition_info[3]]
+                    parent_node.vector = circular_correlation(
+                        left_node.vector, right_node.vector, tree_net.vector_norm)
                 pbar.update(1)
 
     def convert_to_binary(self, type):
@@ -577,7 +573,7 @@ class Tree_List:
                     node_id += 1
             tree.node_list = binary_node_list
         if type == 'train':
-            self.set_vocab_and_head(binary=True)
+            self.set_vocab_and_head()
         self.set_category_id()
 
 

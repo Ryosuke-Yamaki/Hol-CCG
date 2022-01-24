@@ -12,22 +12,31 @@ class Category:
             cell_id,
             cat,
             type,
-            vector,
-            total_ll,
-            label_ll,
+            is_leaf=False,
+            vector=None,
+            total_ll=None,
+            cat_ll=None,
             span_ll=None,
             num_child=None,
             left_child=None,
             right_child=None,
             head=None,
-            is_leaf=False,
             word=None):
         self.cell_id = cell_id
-        self.cat = cat
+        self.original_cat = cat
+        cat_list = cat.split('-->')
+        # not exist unary_chain
+        if len(cat_list) == 1:
+            self.cat = cat_list[0]
+            self.unary_chain = []
+        # exist unary_chain
+        else:
+            self.cat = cat_list[-1]
+            self.unary_chain = cat_list[:-1]
         self.type = type
         self.vector = vector
         self.total_ll = total_ll
-        self.label_ll = label_ll
+        self.cat_ll = cat_ll
         self.span_ll = span_ll
         self.num_child = num_child
         self.left_child = left_child
@@ -40,21 +49,60 @@ class Category:
 class Cell:
     def __init__(self, content):
         self.content = content
-        self.category_list = []
-        self.best_category_id = {}
+        self.best_category = {}
 
     def add_category(self, category):
         # when category already exist in the cell
-        if category.cat in self.best_category_id:
-            best_category = self.category_list[self.best_category_id[category.cat]]
+        if category.cat in self.best_category:
+            best_category = self.best_category[category.cat]
             # only when the new category has higher probability than existing one, replace it
             if category.total_ll > best_category.total_ll:
-                self.best_category_id[category.cat] = len(self.category_list)
-                self.category_list.append(category)
+                self.best_category[category.cat] = category
+                # when category has unary chain
+                if len(category.unary_chain) > 0:
+                    self.set_unary_chain(category)
         else:
-            self.best_category_id[category.cat] = len(self.category_list)
-            self.category_list.append(category)
-            return self.best_category_id[category.cat]
+            self.best_category[category.cat] = category
+            if len(category.unary_chain) > 0:
+                self.set_unary_chain(category)
+            return self.best_category[category.cat]
+
+    def set_unary_chain(self, category):
+        cell_id = category.cell_id
+        type = category.type
+        is_leaf = category.is_leaf
+        num_child = category.num_child
+        left_child_cat = category.left_child
+        right_child_cat = category.right_child
+        head = category.head
+        word = category.word
+        category.unary_chain_cat_list = []
+        for cat in category.unary_chain:
+            temp_cat = Category(
+                cell_id=cell_id,
+                cat=cat,
+                type=type,
+                is_leaf=is_leaf,
+                num_child=num_child,
+                left_child=left_child_cat,
+                right_child=right_child_cat,
+                head=head,
+                word=word)
+            category.unary_chain_cat_list.append(temp_cat)
+            left_child_cat = temp_cat
+            right_child_cat = None
+            type = 'unary'
+            is_leaf = False
+            num_child = 1
+            head = None
+            word = None
+        category.left_child = left_child_cat
+        category.right_child = right_child_cat
+        category.type = type
+        category.is_leaf = is_leaf
+        category.num_child = num_child
+        category.head = head
+        category.word = word
 
 
 class Parser:
@@ -111,13 +159,14 @@ class Parser:
             vector = word_vectors[idx]
             word_probs = word_probs_list[idx]
             top_cat_id = word_predict_cats[idx, 0]
+            top_cat = self.word_category_vocab.itos[top_cat_id]
             top_category = Category(
                 cell_id=(idx, idx + 1),
-                cat=self.word_category_vocab.itos[top_cat_id],
+                cat=top_cat,
                 type='stag',
                 vector=vector,
                 total_ll=torch.log(word_probs[top_cat_id]),
-                label_ll=torch.log(word_probs[top_cat_id]),
+                cat_ll=torch.log(word_probs[top_cat_id]),
                 is_leaf=True,
                 word=word)
             chart[(idx, idx + 1)] = Cell(word)
@@ -131,55 +180,12 @@ class Parser:
                                         type='stag',
                                         vector=vector,
                                         total_ll=torch.log(word_probs[cat_id]),
-                                        label_ll=torch.log(word_probs[cat_id]),
+                                        cat_ll=torch.log(word_probs[cat_id]),
                                         is_leaf=True,
                                         word=word)
                     chart[(idx, idx + 1)].add_category(category)
                 else:
                     break
-
-            waiting_cat_id = list(chart[(idx, idx + 1)].best_category_id.values())
-            while True:
-                if waiting_cat_id == []:
-                    break
-                else:
-                    child_cat_id = waiting_cat_id.pop(0)
-                    child_cat = chart[(idx, idx + 1)].category_list[child_cat_id]
-                    possible_cats_info = self.combinator.unary_rule.get(child_cat.cat)
-                    if possible_cats_info is None:
-                        continue
-                    else:
-                        span_prob = torch.sigmoid(self.span_ff(child_cat.vector))
-                        if span_prob > self.span_threshold:
-                            span_ll = torch.log(span_prob)
-                            phrase_probs = torch.softmax(self.phrase_ff(child_cat.vector), dim=-1)
-                            for parent_cat_info in possible_cats_info:
-                                parent_cat = parent_cat_info[0]
-                                parent_cat_id = self.phrase_category_vocab[parent_cat]
-                                # when target category is not <unk>
-                                if parent_cat_id != 0:
-                                    parent_cat_type = parent_cat_info[1]
-                                    label_prob = phrase_probs[parent_cat_id]
-                                    if label_prob > self.phrase_threshold:
-                                        label_ll = torch.log(label_prob)
-                                        total_ll = label_ll + span_ll + child_cat.total_ll
-                                        parent_category = Category(
-                                            cell_id=(idx, idx + 1),
-                                            cat=parent_cat,
-                                            type=parent_cat_type,
-                                            vector=child_cat.vector,
-                                            total_ll=total_ll,
-                                            label_ll=label_ll,
-                                            span_ll=span_ll,
-                                            num_child=1,
-                                            left_child=child_cat,
-                                            head=0)
-                                        new_cat_id = chart[(idx, idx + 1)].add_category(
-                                            parent_category)
-                                        if new_cat_id is None:
-                                            continue
-                                        else:
-                                            waiting_cat_id.append(new_cat_id)
         return chart
 
     @torch.no_grad()
@@ -194,10 +200,8 @@ class Parser:
                 # when time is not over
                 if time.time() - start < self.max_parse_time:
                     for split in range(left + 1, right):
-                        for left_cat_id in chart[(left, split)].best_category_id.values():
-                            left_cat = chart[(left, split)].category_list[left_cat_id]
-                            for right_cat_id in chart[(split, right)].best_category_id.values():
-                                right_cat = chart[(split, right)].category_list[right_cat_id]
+                        for left_cat in chart[(left, split)].best_category.values():
+                            for right_cat in chart[(split, right)].best_category.values():
                                 # list of gramatically possible category
                                 possible_cats_info = self.combinator.binary_rule.get(
                                     (left_cat.cat, right_cat.cat))
@@ -215,8 +219,9 @@ class Parser:
                                             filtered_parent_cat_info.append(parent_cat_info)
                                     possible_cats_info = filtered_parent_cat_info
                                     composed_vector = circular_correlation(
-                                        left_cat.vector, right_cat.vector)
-                                    span_prob = torch.sigmoid(self.span_ff(composed_vector))
+                                        left_cat.vector, right_cat.vector, vector_norm=30)
+                                    span_prob = torch.softmax(
+                                        self.span_ff(composed_vector), dim=-1)[1]
                                     if span_prob > self.span_threshold:
                                         span_ll = torch.log(span_prob)
                                         phrase_probs = torch.softmax(
@@ -227,19 +232,19 @@ class Parser:
                                             # when category is not None
                                             if parent_cat_id != 0:
                                                 parent_cat_type = parent_cat_info[1]
-                                                label_prob = phrase_probs[parent_cat_id]
-                                                if label_prob > self.phrase_threshold:
-                                                    label_ll = torch.log(label_prob)
-                                                    total_ll = label_ll + span_ll + left_cat.total_ll + right_cat.total_ll
+                                                cat_prob = phrase_probs[parent_cat_id]
+                                                if cat_prob > self.phrase_threshold:
+                                                    cat_ll = torch.log(cat_prob)
+                                                    total_ll = cat_ll + span_ll + left_cat.total_ll + right_cat.total_ll
                                                     head = self.combinator.head_info[(
-                                                        left_cat.cat, right_cat.cat, parent_cat)]
+                                                        left_cat.cat, right_cat.cat, parent_cat.split('-->')[0])]
                                                     parent_category = Category(
                                                         cell_id=(left, right),
                                                         cat=parent_cat,
                                                         type=parent_cat_type,
                                                         vector=composed_vector,
                                                         total_ll=total_ll,
-                                                        label_ll=label_ll,
+                                                        cat_ll=cat_ll,
                                                         span_ll=span_ll,
                                                         num_child=2,
                                                         left_child=left_cat,
@@ -247,50 +252,6 @@ class Parser:
                                                         head=head)
                                                     chart[(left, right)].add_category(
                                                         parent_category)
-
-                    waiting_cat_id = list(chart[(left, right)].best_category_id.values())
-                    while True:
-                        if waiting_cat_id == []:
-                            break
-                        else:
-                            child_cat_id = waiting_cat_id.pop(0)
-                            child_cat = chart[(left, right)].category_list[child_cat_id]
-                            possible_cats_info = self.combinator.unary_rule.get(child_cat.cat)
-                            if possible_cats_info is None:
-                                continue
-                            else:
-                                span_prob = torch.sigmoid(self.span_ff(child_cat.vector))
-                                if span_prob > self.span_threshold:
-                                    span_ll = torch.log(span_prob)
-                                    phrase_probs = torch.softmax(
-                                        self.phrase_ff(child_cat.vector), dim=-1)
-                                    for parent_cat_info in possible_cats_info:
-                                        parent_cat = parent_cat_info[0]
-                                        parent_cat_id = self.phrase_category_vocab[parent_cat]
-                                        # when category is not <unk>
-                                        if parent_cat_id != 0:
-                                            parent_cat_type = parent_cat_info[1]
-                                            label_prob = phrase_probs[parent_cat_id]
-                                            if label_prob > self.phrase_threshold:
-                                                label_ll = torch.log(label_prob)
-                                                total_ll = label_ll + span_ll + child_cat.total_ll
-                                                parent_category = Category(
-                                                    cell_id=(left, right),
-                                                    cat=parent_cat,
-                                                    type=parent_cat_type,
-                                                    vector=child_cat.vector,
-                                                    total_ll=total_ll,
-                                                    label_ll=label_ll,
-                                                    span_ll=span_ll,
-                                                    num_child=1,
-                                                    left_child=child_cat,
-                                                    head=0)
-                                                new_cat_id = chart[(left, right)].add_category(
-                                                    parent_category)
-                                                if new_cat_id is None:
-                                                    continue
-                                                else:
-                                                    waiting_cat_id.append(new_cat_id)
         return chart
 
     def skimmer(self, chart):
@@ -307,7 +268,7 @@ class Parser:
                     if scope[0] <= cell_id[0] and cell_id[1] <= scope[1]:
                         cell = chart[cell_id]
                         max_span_length = 0
-                        if len(cell.best_category_id) != 0:
+                        if len(cell.best_category) != 0:
                             span_length = cell_id[1] - cell_id[0]
                             if span_length > max_span_length:
                                 max_span_length = span_length
@@ -391,8 +352,8 @@ class Parser:
                 else:
                     yield i
 
-        root_cat = root_cell.category_list[0]
-        for cat in root_cell.category_list[1:]:
+        root_cat = list(root_cell.best_category.values())[0]
+        for cat in list(root_cell.best_category.values())[1:]:
             if cat.total_ll > root_cat.total_ll:
                 root_cat = cat
         root_cat.auto = []
@@ -411,21 +372,19 @@ def main():
     condition = Condition_Setter(set_embedding_type=False)
 
     args = sys.argv
-    # args = [
-    #     '',
-    #     'roberta-large_phrase_span_2022-01-08_17:57:10.pth',
-    #     'dev',
-    #     '0.1',
-    #     '0.01',
-    #     '0.05',
-    #     '10']
+    args = [
+        '',
+        'roberta-large_phrase_span_2022-01-23_15:12:55.pth',
+        'dev',
+        '0.1',
+        '0.01',
+        '0.01']
 
     model = args[1]
     dev_test = args[2]
     stag_threhold = float(args[3])
     phrase_threshold = float(args[4])
     span_threshold = float(args[5])
-    min_freq = int(args[6])
 
     if dev_test == 'dev':
         path_to_sentence_list = "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
@@ -442,10 +401,11 @@ def main():
     tree_net.device = device
     tree_net.eval()
 
-    word_category_vocab = load(condition.path_to_word_category_vocab)
-    phrase_category_vocab = load(condition.path_to_phrase_category_vocab)
+    train_tree_list = load(condition.path_to_binary_train_tree_list)
+    word_category_vocab = load(condition.path_to_binary_word_category_vocab)
+    phrase_category_vocab = load(condition.path_to_binary_phrase_category_vocab)
 
-    combinator = Combinator(condition.PATH_TO_DIR + "span_parsing/GRAMMAR/", min_freq=min_freq)
+    combinator = Combinator(train_tree_list)
 
     parser = Parser(
         tree_net,
@@ -465,7 +425,7 @@ def main():
         sentence = sentence.rstrip()
         chart = parser.parse(sentence)
         root_cell = list(chart.values())[-1]
-        if len(root_cell.best_category_id) == 0:
+        if len(root_cell.best_category) == 0:
             autos, scope_list = parser.skimmer(chart)
             n = 0
             for auto, scope in zip(autos, scope_list):
