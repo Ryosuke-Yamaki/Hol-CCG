@@ -16,7 +16,7 @@ if len(args) == 5 and args[4] == 'failure':
 else:
     FAILURE = False
 
-word_category_vocab = load(condition.path_to_word_category_vocab)
+word_category_vocab = load(condition.path_to_binary_word_category_vocab)
 tree_net = torch.load(condition.path_to_model + MODEL, map_location=device)
 tree_net.device = device
 tree_net.eval()
@@ -76,11 +76,11 @@ with torch.no_grad():
             super_tags = []
             for idx in range(word_cat_prob.shape[0]):
                 # add top probability category
-                temp = [[word_category_vocab.itos[predict_cat_id[idx, 0]],
+                temp = [[word_category_vocab.itos[predict_cat_id[idx, 0]].split('-->')[0],
                         word_cat_prob[idx, predict_cat_id[idx, 0]].item()]]
                 for cat_id in predict_cat_id[idx, 1:]:
                     if word_cat_prob[idx, cat_id] > THRESHOLD:
-                        temp.append([word_category_vocab.itos[cat_id],
+                        temp.append([word_category_vocab.itos[cat_id].split('-->')[0],
                                     word_cat_prob[idx, cat_id].item()])
                     else:
                         break

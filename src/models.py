@@ -58,6 +58,11 @@ class Tree:
         self.node_list = node_list
 
     def set_node_composition_info(self):
+        for node in self.node_list:
+            if node.is_leaf:
+                node.ready = True
+            else:
+                node.ready = False
         self.composition_info = []
         while True:
             num_ready_node = 0
@@ -215,7 +220,6 @@ class Tree_List:
             type,
             word_category_vocab=None,
             phrase_category_vocab=None,
-            pos_tag_vocab=None,
             head_info=None,
             min_word_category=0,
             min_phrase_category=0,
@@ -230,7 +234,6 @@ class Tree_List:
         else:
             self.word_category_vocab = word_category_vocab
             self.phrase_category_vocab = phrase_category_vocab
-            self.pos_tag_vocab = pos_tag_vocab
             self.head_info = head_info
         self.set_category_id()
 
@@ -254,18 +257,19 @@ class Tree_List:
     def set_vocab_and_head(self):
         word_category_counter = Counter()
         phrase_category_counter = Counter()
-        pos_counter = Counter()
         head_info_temp = {}
         for tree in self.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
                     word_category_counter[node.category] += 1
-                    pos_counter[node.pos] += 1
                 else:
                     if node.num_child == 2:
                         left_child = tree.node_list[node.left_child_node_id]
                         right_child = tree.node_list[node.right_child_node_id]
-                        rule = (left_child.category, right_child.category, node.category)
+                        left = left_child.category.split('-->')[-1]
+                        right = right_child.category.split('-->')[-1]
+                        parent = node.category.split('-->')[0]
+                        rule = (left, right, parent)
                         if rule not in head_info_temp:
                             head_info_temp[rule] = [0, 0]
                         head_info_temp[rule][node.head] += 1
@@ -278,7 +282,6 @@ class Tree_List:
             phrase_category_counter,
             min_freq=self.min_phrase_category,
             specials=['<unk>'])
-        self.pos_tag_vocab = Vocab(pos_counter, min_freq=0, specials=['<pad>'])
         self.head_info = {}
         for k, v in head_info_temp.items():
             # when left head is majority
@@ -291,12 +294,10 @@ class Tree_List:
     def set_category_id(self):
         word_category_vocab = self.word_category_vocab
         phrase_category_vocab = self.phrase_category_vocab
-        pos_tag_vocab = self.pos_tag_vocab
         for tree in self.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
                     node.category_id = word_category_vocab[node.category]
-                    node.pos_id = pos_tag_vocab[node.pos]
                 else:
                     node.category_id = phrase_category_vocab[node.category]
             tree.set_node_composition_info()
@@ -524,24 +525,56 @@ class Tree_List:
                 sentence = [" ".join(tree.sentence)]
                 word_split = [tree.word_split]
                 vector_list, _ = tree_net.encode(sentence, word_split=word_split)
-                vector_list = complex_normalize(vector_list[0])
+                vector_list = vector_list[0]
                 for pos in tree.original_position:
                     node_id = pos[0]
                     original_position = pos[1]
                     node = tree.node_list[node_id]
                     node.vector = torch.squeeze(vector_list[original_position])
                 for composition_info in tree.composition_info:
-                    num_child = composition_info[0]
                     parent_node = tree.node_list[composition_info[1]]
-                    if num_child == 1:
-                        child_node = tree.node_list[composition_info[2]]
-                        parent_node.vector = child_node.vector
-                    else:
-                        left_node = tree.node_list[composition_info[2]]
-                        right_node = tree.node_list[composition_info[3]]
-                        parent_node.vector = circular_correlation(
-                            left_node.vector, right_node.vector, k=None)
+                    left_node = tree.node_list[composition_info[2]]
+                    right_node = tree.node_list[composition_info[3]]
+                    parent_node.vector = circular_correlation(
+                        left_node.vector, right_node.vector, tree_net.vector_norm)
                 pbar.update(1)
+
+    def convert_to_binary(self, type):
+        for tree in self.tree_list:
+            root_node = tree.node_list[-1]
+            root_node.parent_node = None
+            for node in reversed(tree.node_list):
+                if not node.is_leaf:
+                    if node.num_child == 1:
+                        child_node = tree.node_list[node.child_node_id]
+                        if node.parent_node is None:
+                            child_node.parent_node = node
+                        else:
+                            child_node.parent_node = node.parent_node
+                        child_node.category += '-->' + node.category
+                    elif node.num_child == 2:
+                        left_child_node = tree.node_list[node.left_child_node_id]
+                        right_child_node = tree.node_list[node.right_child_node_id]
+                        left_child_node.parent_node = node
+                        right_child_node.parent_node = node
+            binary_node_list = []
+            node_id = 0
+            for node in tree.node_list:
+                if node.is_leaf or node.num_child == 2:
+                    node.self_id = node_id
+                    node.prime_category = node.category.split('-->')[0]
+                    if node.parent_node is not None:
+                        parent_node = node.parent_node
+                        if parent_node.start_idx == node.start_idx:
+                            parent_node.left_child_node_id = node.self_id
+                        elif parent_node.end_idx == node.end_idx:
+                            parent_node.right_child_node_id = node.self_id
+                    binary_node_list.append(node)
+                    node_id += 1
+            tree.node_list = binary_node_list
+        if type == 'train':
+            self.set_vocab_and_head()
+        self.set_category_id()
 
 
 class Tree_Net(nn.Module):
@@ -626,7 +659,7 @@ class Tree_Net(nn.Module):
         vector = torch.cat((original_vector, random_vector))
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
-        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]                               :, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
+        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
         composed_vector = self.compose(original_vector, composition_info)
         random_composed_vector = self.compose(random_vector, random_composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
