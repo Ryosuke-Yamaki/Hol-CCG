@@ -56,7 +56,6 @@ def fix_deps_idx(extracted_deps, start):
 condition = Condition_Setter(set_embedding_type=False)
 
 args = sys.argv
-# args = ["", "roberta-large_phrase_span_2022-01-08_17_57_10.pth", "dev", 0.1]
 model = args[1]
 dev_test = args[2]
 THRESHOLD = args[3]

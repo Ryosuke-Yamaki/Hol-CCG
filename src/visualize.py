@@ -7,13 +7,13 @@ import matplotlib.pyplot as plt
 condition = Condition_Setter(set_embedding_type=False)
 
 if torch.cuda.is_available():
-    device = torch.device('cuda')
+    device = torch.device('cuda:3')
 else:
     device = torch.device('cpu')
 
-model = 'roberta-large_phrase_span_2022-01-23_15:12:55.pth'
+model = 'roberta-large_phrase_span_2022-01-30_11:36:05.pth'
 n_dot = None
-dev_tree_list = load(condition.path_to_dev_tree_list)
+dev_tree_list = load(condition.path_to_binary_dev_tree_list)
 tree_net = torch.load(condition.path_to_model + model,
                       map_location=device)
 tree_net.device = device
@@ -54,4 +54,3 @@ ax.scatter(word_vector[:, 0], word_vector[:, 1], word_vector[:, 2], c='r', s=1)
 ax.scatter(phrase_vector[:, 0], phrase_vector[:, 1], phrase_vector[:, 2], c='b', s=1)
 ax.scatter(sentence_vector[:, 0], sentence_vector[:, 1], sentence_vector[:, 2], c='g', s=1)
 fig.savefig(condition.PATH_TO_DIR + 'Hol-CCG/result/fig/map/' + model.replace('.pth', '.pdf'))
-plt.show()

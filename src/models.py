@@ -307,7 +307,6 @@ class Tree_List:
         self.num_node = []
         self.sentence_list = []
         self.label_list = []
-        self.pos_list = []
         self.original_position = []
         self.composition_info = []
         self.word_split = []
@@ -315,13 +314,9 @@ class Tree_List:
             self.num_node.append(len(tree.node_list))
             self.sentence_list.append(" ".join(tree.sentence))
             label_list = []
-            pos_list = []
             for node in tree.node_list:
-                if node.is_leaf:
-                    pos_list.append(node.pos_id)
                 label_list.append([node.category_id])
             self.label_list.append(label_list)
-            self.pos_list.append(torch.tensor(pos_list, dtype=torch.long, device=self.device))
             self.original_position.append(
                 torch.tensor(
                     tree.original_position,
@@ -348,7 +343,6 @@ class Tree_List:
         batch_num_node = []
         batch_sentence_list = []
         batch_label_list = []
-        batch_pos_list = []
         batch_original_position = []
         batch_composition_info = []
         batch_word_split = []
@@ -390,14 +384,6 @@ class Tree_List:
             batch_sentence_list.append(list(itemgetter(*batch_tree_id_list)(self.sentence_list)))
             batch_label_list.append(list(itemgetter(
                 *batch_tree_id_list)(self.label_list)))
-            batch_pos_list.append(
-                pad_sequence(
-                    list(
-                        itemgetter(
-                            *
-                            batch_tree_id_list)(
-                            self.pos_list)),
-                    batch_first=True))
             batch_original_position.append(
                 list(
                     itemgetter(
@@ -430,11 +416,6 @@ class Tree_List:
                             self.sentence_list)))
                 batch_label_list.append(list(itemgetter(
                     *batch_tree_id_list)(self.label_list)))
-                batch_pos_list.append(pad_sequence(list(
-                    itemgetter(
-                        *batch_tree_id_list)(
-                        self.pos_list)),
-                    batch_first=True))
                 batch_original_position.append(
                     list(
                         itemgetter(
@@ -459,8 +440,6 @@ class Tree_List:
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.sentence_list)))
             batch_label_list.append(list(itemgetter(
                 *shuffled_tree_id[idx + BATCH_SIZE:])(self.label_list)))
-            batch_pos_list.append(pad_sequence(list(itemgetter(
-                *shuffled_tree_id[idx + BATCH_SIZE:])(self.pos_list)), batch_first=True))
             batch_original_position.append(
                 list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.original_position)))
             batch_composition_info.append(list(itemgetter(
@@ -510,7 +489,6 @@ class Tree_List:
             batch_original_position,
             batch_composition_info,
             batch_label_list,
-            batch_pos_list,
             batch_word_split,
             batch_random_num_node,
             batch_random_composition_info,
@@ -589,7 +567,7 @@ class Tree_Net(nn.Module):
             model_dim=1024,
             ff_dropout=0.2,
             normalize_type='real',
-            vector_norm=1e+3,
+            vector_norm=1.0,
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
@@ -638,11 +616,11 @@ class Tree_Net(nn.Module):
         original_position = batch[2]
         composition_info = batch[3]
         batch_label = batch[4]
-        word_split = batch[6]
-        random_num_node = batch[7]
-        random_composition_info = batch[8]
-        random_original_position = batch[9]
-        random_negative_node_id = batch[10]
+        word_split = batch[5]
+        random_num_node = batch[6]
+        random_composition_info = batch[7]
+        random_original_position = batch[8]
+        random_negative_node_id = batch[9]
 
         vector_list, lengths = self.encode(sentence, word_split)
 

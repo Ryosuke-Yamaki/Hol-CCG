@@ -1,9 +1,8 @@
+from collections import Counter
 import sys
 from utils import load, Condition_Setter
-import time
 import torch
 from utils import circular_correlation
-from grammar import Combinator
 
 
 class Category:
@@ -25,14 +24,9 @@ class Category:
         self.cell_id = cell_id
         self.original_cat = cat
         cat_list = cat.split('-->')
-        # not exist unary_chain
-        if len(cat_list) == 1:
-            self.cat = cat_list[0]
-            self.unary_chain = []
-        # exist unary_chain
-        else:
-            self.cat = cat_list[-1]
-            self.unary_chain = cat_list[:-1]
+        # set final category as cat
+        self.cat = cat_list[-1]
+        self.unary_chain = cat_list[:-1]
         self.type = type
         self.vector = vector
         self.total_ll = total_ll
@@ -58,14 +52,12 @@ class Cell:
             # only when the new category has higher probability than existing one, replace it
             if category.total_ll > best_category.total_ll:
                 self.best_category[category.cat] = category
-                # when category has unary chain
-                if len(category.unary_chain) > 0:
-                    self.set_unary_chain(category)
+        # when firstly add category into the cell
         else:
             self.best_category[category.cat] = category
-            if len(category.unary_chain) > 0:
-                self.set_unary_chain(category)
-            return self.best_category[category.cat]
+        # when category has unary chain
+        if len(category.unary_chain) > 0:
+            self.set_unary_chain(category)
 
     def set_unary_chain(self, category):
         cell_id = category.cell_id
@@ -76,6 +68,7 @@ class Cell:
         right_child_cat = category.right_child
         head = category.head
         word = category.word
+        # the list of unary children
         category.unary_chain_cat_list = []
         for cat in category.unary_chain:
             temp_cat = Category(
@@ -108,26 +101,45 @@ class Cell:
 class Parser:
     def __init__(
             self,
+            tree_list,
             tree_net,
-            combinator,
-            word_category_vocab,
-            phrase_category_vocab,
             stag_threshold,
             phrase_threshold,
             span_threshold,
-            max_parse_time=60):
+            min_freq=1):
+        self.word_category_vocab = tree_list.word_category_vocab
+        self.phrase_category_vocab = tree_list.phrase_category_vocab
         self.tree_net = tree_net
         self.word_ff = tree_net.word_ff
         self.phrase_ff = tree_net.phrase_ff
         self.span_ff = tree_net.span_ff
-        self.combinator = combinator
-        self.word_category_vocab = word_category_vocab
-        self.phrase_category_vocab = phrase_category_vocab
         self.stag_threshold = stag_threshold
         self.phrase_threshold = phrase_threshold
         self.span_threshold = span_threshold
-        self.max_parse_time = max_parse_time
+        self.min_freq = min_freq
+        self.define_rule(tree_list)
 
+    def define_rule(self, tree_list):
+        self.head_info = tree_list.head_info
+        self.binary_counter = Counter()
+        self.binary_rule = {}
+        for tree in tree_list.tree_list:
+            for node in tree.node_list:
+                if not node.is_leaf:
+                    left_child_node = tree.node_list[node.left_child_node_id]
+                    right_child_node = tree.node_list[node.right_child_node_id]
+                    left = left_child_node.category.split('-->')[-1]
+                    right = right_child_node.category.split('-->')[-1]
+                    parent = node.category
+                    self.binary_counter[(left, right, parent)] += 1
+        for key, freq in self.binary_counter.items():
+            if freq >= self.min_freq:
+                if (key[0], key[1]) in self.binary_rule:
+                    self.binary_rule[(key[0], key[1])].append(key[2])
+                else:
+                    self.binary_rule[(key[0], key[1])] = [key[2]]
+
+    @torch.no_grad()
     def initialize_chart(self, sentence):
         sentence = sentence.split()
         converted_sentence = []
@@ -190,68 +202,54 @@ class Parser:
 
     @torch.no_grad()
     def parse(self, sentence):
-        start = time.time()
         chart = self.initialize_chart(sentence)
         n = len(chart)
         for length in range(2, n + 1):
             for left in range(n - length + 1):
                 right = left + length
                 chart[(left, right)] = Cell(' '.join(sentence.split()[left:right]))
-                # when time is not over
-                if time.time() - start < self.max_parse_time:
-                    for split in range(left + 1, right):
-                        for left_cat in chart[(left, split)].best_category.values():
-                            for right_cat in chart[(split, right)].best_category.values():
-                                # list of gramatically possible category
-                                possible_cats_info = self.combinator.binary_rule.get(
-                                    (left_cat.cat, right_cat.cat))
-                                if possible_cats_info is None:
-                                    continue
-                                else:
-                                    # apply filter to possible categories based on Eisner
-                                    # constraints
-                                    filtered_parent_cat_info = []
-                                    for parent_cat_info in possible_cats_info:
-                                        if (left_cat.type == 'fc' and parent_cat_info[1] in ['fa', 'fc']) or (
-                                                right_cat.type == 'bc' and parent_cat_info[1] not in ['ba', 'bc']):
-                                            continue
-                                        else:
-                                            filtered_parent_cat_info.append(parent_cat_info)
-                                    possible_cats_info = filtered_parent_cat_info
-                                    composed_vector = circular_correlation(
-                                        left_cat.vector, right_cat.vector, vector_norm=30)
-                                    span_prob = torch.softmax(
-                                        self.span_ff(composed_vector), dim=-1)[1]
-                                    if span_prob > self.span_threshold:
-                                        span_ll = torch.log(span_prob)
-                                        phrase_probs = torch.softmax(
-                                            self.phrase_ff(composed_vector), dim=-1)
-                                        for parent_cat_info in possible_cats_info:
-                                            parent_cat = parent_cat_info[0]
-                                            parent_cat_id = self.phrase_category_vocab[parent_cat]
-                                            # when category is not None
-                                            if parent_cat_id != 0:
-                                                parent_cat_type = parent_cat_info[1]
-                                                cat_prob = phrase_probs[parent_cat_id]
-                                                if cat_prob > self.phrase_threshold:
-                                                    cat_ll = torch.log(cat_prob)
-                                                    total_ll = cat_ll + span_ll + left_cat.total_ll + right_cat.total_ll
-                                                    head = self.combinator.head_info[(
-                                                        left_cat.cat, right_cat.cat, parent_cat.split('-->')[0])]
-                                                    parent_category = Category(
-                                                        cell_id=(left, right),
-                                                        cat=parent_cat,
-                                                        type=parent_cat_type,
-                                                        vector=composed_vector,
-                                                        total_ll=total_ll,
-                                                        cat_ll=cat_ll,
-                                                        span_ll=span_ll,
-                                                        num_child=2,
-                                                        left_child=left_cat,
-                                                        right_child=right_cat,
-                                                        head=head)
-                                                    chart[(left, right)].add_category(
-                                                        parent_category)
+                for split in range(left + 1, right):
+                    for left_cat in chart[(left, split)].best_category.values():
+                        for right_cat in chart[(split, right)].best_category.values():
+                            # list of gramatically possible category
+                            possible_cats = self.binary_rule.get(
+                                (left_cat.cat, right_cat.cat))
+                            # when no binary combination is available
+                            if possible_cats is None:
+                                continue
+                            else:
+                                composed_vector = circular_correlation(
+                                    left_cat.vector, right_cat.vector, self.tree_net.vector_norm)
+                                span_prob = torch.softmax(
+                                    self.span_ff(composed_vector), dim=-1)[1]
+                                if span_prob > self.span_threshold:
+                                    span_ll = torch.log(span_prob)
+                                    phrase_probs = torch.softmax(
+                                        self.phrase_ff(composed_vector), dim=-1)
+                                    for parent_cat in possible_cats:
+                                        parent_cat_id = self.phrase_category_vocab[parent_cat]
+                                        # when category is not <unk>
+                                        if parent_cat_id != 0:
+                                            cat_prob = phrase_probs[parent_cat_id]
+                                            if cat_prob > self.phrase_threshold:
+                                                cat_ll = torch.log(cat_prob)
+                                                total_ll = cat_ll + span_ll + left_cat.total_ll + right_cat.total_ll
+                                                head = self.head_info[(
+                                                    left_cat.cat, right_cat.cat, parent_cat.split('-->')[0])]
+                                                parent_category = Category(
+                                                    cell_id=(left, right),
+                                                    cat=parent_cat,
+                                                    type='bin',
+                                                    vector=composed_vector,
+                                                    total_ll=total_ll,
+                                                    cat_ll=cat_ll,
+                                                    span_ll=span_ll,
+                                                    num_child=2,
+                                                    left_child=left_cat,
+                                                    right_child=right_cat,
+                                                    head=head)
+                                                chart[(left, right)].add_category(
+                                                    parent_category)
         return chart
 
     def skimmer(self, chart):
@@ -372,49 +370,32 @@ def main():
     condition = Condition_Setter(set_embedding_type=False)
 
     args = sys.argv
-    args = [
-        '',
-        'roberta-large_phrase_span_2022-01-23_15:12:55.pth',
-        'dev',
-        '0.1',
-        '0.01',
-        '0.01']
-
     model = args[1]
     dev_test = args[2]
     stag_threhold = float(args[3])
     phrase_threshold = float(args[4])
     span_threshold = float(args[5])
+    min_freq = int(args[6])
+    device = torch.device(args[7])
 
     if dev_test == 'dev':
         path_to_sentence_list = "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
-    else:
+    elif dev_test == 'test':
         path_to_sentence_list = "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
 
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-    else:
-        device = torch.device('cpu')
-
+    tree_list = load(condition.path_to_binary_train_tree_list)
     tree_net = torch.load(condition.path_to_model + model,
                           map_location=device)
     tree_net.device = device
     tree_net.eval()
 
-    train_tree_list = load(condition.path_to_binary_train_tree_list)
-    word_category_vocab = load(condition.path_to_binary_word_category_vocab)
-    phrase_category_vocab = load(condition.path_to_binary_phrase_category_vocab)
-
-    combinator = Combinator(train_tree_list)
-
     parser = Parser(
-        tree_net,
-        combinator=combinator,
-        word_category_vocab=word_category_vocab,
-        phrase_category_vocab=phrase_category_vocab,
+        tree_list=tree_list,
+        tree_net=tree_net,
         stag_threshold=stag_threhold,
         phrase_threshold=phrase_threshold,
-        span_threshold=span_threshold)
+        span_threshold=span_threshold,
+        min_freq=min_freq)
 
     with open(condition.PATH_TO_DIR + path_to_sentence_list, 'r') as f:
         sentence_list = f.readlines()

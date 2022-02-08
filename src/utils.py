@@ -22,7 +22,7 @@ def circular_correlation(a, b, vector_norm):
     return c
 
 
-def inverse_circular_correlation(p, c1, child_is_left=True, k=31.65):
+def inverse_circular_correlation(p, c1, vector_norm, child_is_left=True):
     p_ = fft(p)
     c1_ = fft(c1)
     if child_is_left:
@@ -30,8 +30,8 @@ def inverse_circular_correlation(p, c1, child_is_left=True, k=31.65):
     else:
         c2_ = conj(p_ / (c1_ + 1e-12))
     c2 = ifft(c2_).real
-    if k is not None:
-        c2 = k * normalize(c2, dim=-1)
+    if vector_norm is not None:
+        c2 = vector_norm * normalize(c2, dim=-1)
     return c2
 
 
@@ -252,17 +252,13 @@ def evaluate_multi(tree_list, tree_net, gamma=0.1, alpha=10):
 
 
 @torch.no_grad()
-def evaluate_prime(tree_list, tree_net):
+def evaluate_stag(tree_list, tree_net):
     word_ff = tree_net.word_ff
-    phrase_ff = tree_net.phrase_ff
     word_category_vocab = tree_list.word_category_vocab
-    phrase_category_vocab = tree_list.phrase_category_vocab
     num_word = 0
-    num_phrase = 0
     num_correct_word = 0
-    num_correct_phrase = 0
     with tqdm(total=len(tree_list.tree_list)) as pbar:
-        pbar.set_description("evaluating...")
+        pbar.set_description("evaluating supertagging...")
         for tree in tree_list.tree_list:
             for node in tree.node_list:
                 if node.is_leaf:
@@ -274,31 +270,9 @@ def evaluate_prime(tree_list, tree_net):
                         predict_prime_cat = predict_cat.split('-->')[0]
                         if predict_prime_cat == node.prime_category:
                             num_correct_word += 1
-                        else:
-                            if len(predict_cat.split('-->')) > 1:
-                                _, top_n = torch.sort(predict_prob, dim=-1, descending=True)
-                                for idx in top_n[:5]:
-                                    print(word_category_vocab.itos[idx], predict_prob[idx].item())
-                                print('\n')
-                else:
-                    predict_prob = torch.softmax(phrase_ff(node.vector), dim=-1)
-                    predict_idx = torch.argmax(predict_prob, dim=-1)
-                    num_phrase += 1
-                    if predict_idx != 0:
-                        predict_cat = phrase_category_vocab.itos[predict_idx]
-                        predict_prime_cat = predict_cat.split('-->')[0]
-                        if predict_prime_cat == node.prime_category:
-                            num_correct_phrase += 1
-                        else:
-                            if len(predict_cat.split('-->')) > 1:
-                                _, top_n = torch.sort(predict_prob, dim=-1, descending=True)
-                                for idx in top_n[:5]:
-                                    print(phrase_category_vocab.itos[idx], predict_prob[idx].item())
-                                print('\n')
             pbar.update(1)
-    print('-' * 50)
-    print(f'word: {num_correct_word / num_word}')
-    print(f'phrase: {num_correct_phrase / num_phrase}')
+    print(f'supertagging_acc: {num_correct_word / num_word}')
+    return num_correct_word / num_word
 
 
 class History:
@@ -446,10 +420,10 @@ class Condition_Setter:
 
         # path_to_rule
         self.path_to_grammar = PATH_TO_DIR + \
-            "CCGbank/ccgbank_1_1/data/GRAMMAR/CCGbank.02-21.grammar"
+            "span_parsing/GRAMMAR/"
         self.path_to_binary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/binary_rule.txt"
         self.path_to_unary_rule = PATH_TO_DIR + "Hol-CCG/data/parsing/unary_rule.txt"
-        self.path_to_head_info = PATH_TO_DIR + "Hol-CCG/data/parsing/head_info.txt"
+        self.path_to_head_info = self.path_to_grammar + "head_info.pickle"
 
         # path_for_visualization
         self.path_to_vis_dict = PATH_TO_DIR + \

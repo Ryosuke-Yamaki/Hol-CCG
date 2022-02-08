@@ -4,53 +4,64 @@ from utils import Condition_Setter
 
 condition = Condition_Setter(set_embedding_type=False)
 
-MODEL_LIST = ["roberta-large_2022-01-09_14_52_28.pth",
-              "roberta-large_2022-01-09_12_17_27.pth",
-              "roberta-large_2022-01-09_09_38_20.pth",
-              "roberta-large_2022-01-09_07_06_03.pth",
-              "roberta-large_2022-01-09_04_33_40.pth",
-              "roberta-large_2022-01-09_01_53_57.pth",
-              "roberta-large_2022-01-08_20_38_20.pth",
-              "roberta-large_2022-01-08_23_15_36.pth",
-              "roberta-large_2022-01-08_15_15_41.pth",
-              "roberta-large_2022-01-08_17_55_37.pth",
-              "roberta-large_phrase_2022-01-09_14_47_30.pth",
-              "roberta-large_phrase_2022-01-09_12_16_41.pth",
-              "roberta-large_phrase_2022-01-09_09_41_24.pth",
-              "roberta-large_phrase_2022-01-09_07_03_50.pth",
-              "roberta-large_phrase_2022-01-09_04_31_51.pth",
-              "roberta-large_phrase_2022-01-09_01_48_54.pth",
-              "roberta-large_phrase_2022-01-08_23_10_27.pth",
-              "roberta-large_phrase_2022-01-08_20_34_09.pth",
-              "roberta-large_phrase_2022-01-08_17_56_22.pth",
-              "roberta-large_phrase_2022-01-08_15_15_45.pth",
-              "roberta-large_span_2022-01-09_13_43_24.pth",
-              "roberta-large_span_2022-01-09_11_15_10.pth",
-              "roberta-large_span_2022-01-09_08_49_05.pth",
-              "roberta-large_span_2022-01-09_06_23_49.pth",
-              "roberta-large_span_2022-01-09_03_57_35.pth",
-              "roberta-large_span_2022-01-09_01_24_54.pth",
-              "roberta-large_span_2022-01-08_22_52_48.pth",
-              "roberta-large_span_2022-01-08_20_23_07.pth",
-              "roberta-large_span_2022-01-08_17_51_04.pth",
-              "roberta-large_span_2022-01-08_15_15_48.pth",
-              "roberta-large_phrase_span_2022-01-09_14_41_36.pth",
-              "roberta-large_phrase_span_2022-01-09_12_26_53.pth",
-              "roberta-large_phrase_span_2022-01-09_12_12_24.pth",
-              "roberta-large_phrase_span_2022-01-09_07_04_32.pth",
-              "roberta-large_phrase_span_2022-01-09_04_28_30.pth",
-              "roberta-large_phrase_span_2022-01-09_01_52_35.pth",
-              "roberta-large_phrase_span_2022-01-08_23_15_40.pth",
-              "roberta-large_phrase_span_2022-01-08_20_34_15.pth",
-              "roberta-large_phrase_span_2022-01-08_17_57_10.pth",
-              "roberta-large_phrase_span_2022-01-08_15_15_54.pth"
-              ]
+MODEL_LIST = ["roberta-large_phrase_span_2022-01-26_11:08:46.pth",
+              "roberta-large_phrase_span_2022-01-26_21:18:30.pth",
+              "roberta-large_phrase_span_2022-01-26_04:56:33.pth",
+              "roberta-large_phrase_span_2022-01-26_09:02:21.pth",
+              "roberta-large_phrase_span_2022-01-26_06:57:59.pth",
+              "roberta-large_phrase_span_2022-01-26_17:14:21.pth",
+              "roberta-large_phrase_span_2022-01-26_15:14:18.pth",
+              "roberta-large_phrase_span_2022-01-26_13:14:00.pth",
+              "roberta-large_phrase_span_2022-01-26_23:21:23.pth",
+              "roberta-large_phrase_span_2022-01-26_19:14:30.pth",
+              "roberta-large_phrase_2022-01-28_05:39:36.pth",
+              "roberta-large_phrase_2022-01-28_13:59:11.pth",
+              "roberta-large_phrase_2022-01-31_04:57:52.pth",
+              "roberta-large_phrase_2022-01-28_07:47:07.pth",
+              "roberta-large_phrase_2022-01-28_18:12:40.pth",
+              "roberta-large_phrase_2022-01-28_11:55:39.pth",
+              "roberta-large_phrase_2022-01-28_22:22:56.pth",
+              "roberta-large_phrase_2022-01-29_00:29:51.pth",
+              "roberta-large_phrase_2022-01-28_20:19:51.pth",
+              "roberta-large_phrase_2022-01-28_16:05:16.pth",
+              "roberta-large_span_2022-01-28_18:04:45.pth",
+              "roberta-large_span_2022-01-28_20:09:54.pth",
+              "roberta-large_span_2022-01-28_22:15:29.pth",
+              "roberta-large_span_2022-01-28_07:43:15.pth",
+              "roberta-large_span_2022-01-28_15:58:06.pth",
+              "roberta-large_span_2022-01-28_13:53:18.pth",
+              "roberta-large_span_2022-01-29_00:17:53.pth",
+              "roberta-large_span_2022-01-28_11:49:43.pth",
+              "roberta-large_span_2022-01-28_05:39:45.pth",
+              "roberta-large_span_2022-01-28_09:48:13.pth",
+              "roberta-large_2022-01-29_18:04:38.pth",
+              "roberta-large_2022-01-29_16:05:35.pth",
+              "roberta-large_2022-01-29_22:03:58.pth",
+              "roberta-large_2022-01-30_06:10:43.pth",
+              "roberta-large_2022-01-30_04:10:59.pth",
+              "roberta-large_2022-01-30_02:11:33.pth",
+              "roberta-large_2022-01-29_20:04:18.pth",
+              "roberta-large_2022-01-30_08:12:44.pth",
+              "roberta-large_2022-01-29_14:06:06.pth",
+              "roberta-large_2022-01-30_00:06:48.pth",
+              "roberta-large_phrase_span_2022-01-26_20:16:06.pth",
+              "roberta-large_phrase_span_2022-01-26_08:45:19.pth",
+              "roberta-large_phrase_span_2022-01-26_12:39:01.pth",
+              "roberta-large_phrase_span_2022-01-30_13:43:39.pth",
+              "roberta-large_phrase_span_2022-01-26_16:28:05.pth",
+              "roberta-large_phrase_span_2022-01-30_23:17:40.pth",
+              "roberta-large_phrase_span_2022-01-26_06:48:23.pth",
+              "roberta-large_phrase_span_2022-01-30_15:40:51.pth",
+              "roberta-large_phrase_span_2022-01-26_22:09:11.pth",
+              "roberta-large_phrase_span_2022-01-30_19:30:23.pth",
+              "roberta-large_phrase_span_2022-01-30_11:36:05.pth",
+              "roberta-large_phrase_span_2022-01-30_11:36:28.pth"]
 
 stat = []
-for MODEL in MODEL_LIST:
-    print(MODEL)
-    for DEV_TEST in ["dev"]:
-        THRESHOLD = 0.1
+THRESHOLD = 0.1
+for DEV_TEST in ["dev", "test"]:
+    for MODEL in MODEL_LIST:
+        print(MODEL)
         if DEV_TEST == 'dev':
             stagged_file = condition.PATH_TO_DIR + "java-candc/data/auto-stagged/" + \
                 MODEL.replace('.pth', '_') + DEV_TEST + '.stagged'
@@ -82,6 +93,9 @@ for MODEL in MODEL_LIST:
                 lf = float(line.split()[1].replace('%', ''))
             elif line.startswith('lsent:'):
                 lsent = float(line.split()[1].replace('%', ''))
-        stat.append("{} {} {} {} {} {}\n".format(MODEL, DEV_TEST, lp, lr, lf, lsent))
+        stat.append(f"{MODEL} {DEV_TEST} {lp} {lr} {lf} {lsent}\n")
+for line in stat:
+    print(line)
+
 with open("data/eval/candc.stat", "w") as f:
     f.writelines(stat)

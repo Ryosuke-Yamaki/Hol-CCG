@@ -226,6 +226,7 @@ print('setting binary tree list...')
 train_tree_list.convert_to_binary(type='train')
 binary_word_category_vocab = train_tree_list.word_category_vocab
 binary_phrase_category_vocab = train_tree_list.phrase_category_vocab
+head_info = train_tree_list.head_info
 dev_tree_list.word_category_vocab = binary_word_category_vocab
 dev_tree_list.phrase_category_vocab = binary_phrase_category_vocab
 test_tree_list.word_category_vocab = binary_word_category_vocab
@@ -238,3 +239,4 @@ dump(dev_tree_list, condition.path_to_binary_dev_tree_list)
 dump(test_tree_list, condition.path_to_binary_test_tree_list)
 dump(binary_word_category_vocab, condition.path_to_binary_word_category_vocab)
 dump(binary_phrase_category_vocab, condition.path_to_binary_phrase_category_vocab)
+dump(head_info, condition.path_to_head_info)
