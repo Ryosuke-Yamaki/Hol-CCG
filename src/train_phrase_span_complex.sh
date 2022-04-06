@@ -1,12 +1,12 @@
 #!~/Hol-CCG/src
 
-python train.py 1.0 1.0 complex cuda:1
-python train.py 1.0 1.0 complex cuda:1
-python train.py 1.0 1.0 complex cuda:1
-python train.py 1.0 1.0 complex cuda:1
-python train.py 1.0 1.0 complex cuda:1
-python train.py 1.0 1.0 complex cuda:1
-python train.py 1.0 1.0 complex cuda:1
-python train.py 1.0 1.0 complex cuda:1
-python train.py 1.0 1.0 complex cuda:1
-python train.py 1.0 1.0 complex cuda:1
+python train.py --normalize complex --device cuda:1 --log
+python train.py --normalize complex --device cuda:1 --log
+python train.py --normalize complex --device cuda:1 --log
+python train.py --normalize complex --device cuda:1 --log
+python train.py --normalize complex --device cuda:1 --log
+python train.py --normalize complex --device cuda:1 --log
+python train.py --normalize complex --device cuda:1 --log
+python train.py --normalize complex --device cuda:1 --log
+python train.py --normalize complex --device cuda:1 --log
+python train.py --normalize complex --device cuda:1 --log
