@@ -35,9 +35,19 @@ def inverse_circular_correlation(p, c1, vector_norm, child_is_left=True):
     return c2
 
 
-def circular_convolution(a, b):
+def circular_convolution(a, b, vector_norm):
     a_ = fft(a)
     b_ = fft(b)
+    c_ = a_ * b_
+    c = ifft(c_).real
+    if vector_norm is not None:
+        c = vector_norm * normalize(c, dim=-1)
+    return c
+
+
+def shuffled_circular_convolution(a, b, P):
+    a_ = fft(a)
+    b_ = fft(torch.mv(P, b))
     c_ = a_ * b_
     c = ifft(c_).real
     return c

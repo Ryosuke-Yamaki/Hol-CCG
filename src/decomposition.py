@@ -10,6 +10,7 @@ import torch
 import matplotlib.pyplot as plt
 from torch.nn.functional import cosine_similarity as cos
 from torch.nn.functional import normalize
+import random
 
 condition = Condition_Setter(set_embedding_type=False)
 
@@ -20,6 +21,7 @@ else:
 
 model = 'roberta-large_phrase_span_2022-01-26_06:48:23.pth'
 dev_tree_list = load(condition.path_to_binary_dev_tree_list)
+tree = dev_tree_list.tree_list[42]
 tree_net = torch.load(condition.path_to_model + model,
                       map_location=device)
 tree_net.device = device
@@ -31,15 +33,43 @@ dev_tree_list.set_info_for_training(tokenizer=tree_net.tokenizer)
 with torch.no_grad():
     dev_tree_list.set_vector(tree_net)
 
-t1 = [1, 21, 'l']
-t2 = [42, 20, 'r']
-t3 = [120, 10, 'r']
-t4 = [71, 30, 'l']
-t5 = [1090, 18, 'r']
-t6 = [1148, 19, 'r']
+# t0 = [1885, 16, 'l']
+# t1 = [1, 21, 'l']
+# t2 = [42, 20, 'r']
+# t3 = [120, 10, 'r']
+# t4 = [71, 30, 'l']
+# t5 = [1090, 18, 'r']
+# t6 = [1148, 19, 'r']
+node_list = [[1683, 34, 'r'],
+             [1885, 16, 'l'],
+             [1876, 19, 'l'],
+             [1438, 10, 'l'],
+             [78, 9, 'r'],
+             [42, 24, 'l'],
+             [952, 8, 'r'],
+             [758, 10, 'r'],
+             [1233, 15, 'l'],
+             [1824, 10, 'r'],
+             [512, 30, 'l'],
+             [554, 32, 'l'],
+             [64, 23, 'r'],
+             [1766, 11, 'l'],
+             [1744, 24, 'l'],
+             [290, 16, 'l'],
+             [744, 24, 'l'],
+             [331, 11, 'r'],
+             [527, 18, 'l'],
+             [370, 30, 'l'],
+             [840, 7, 'l'],
+             [1051, 30, 'l'],
+             [748, 20, 'l'],
+             [1896, 8, 'l'],
+             [1782, 8, 'l'],
+             [246, 18, 'l'],
+             [103, 15, 'l']
+             ]
 
-
-for info in [t1, t2, t3, t4, t5, t6]:
+for info in node_list:
     tree = dev_tree_list.tree_list[info[0]]
     print('*' * 50)
     print(" ".join(tree.sentence))
@@ -75,3 +105,4 @@ for info in [t1, t2, t3, t4, t5, t6]:
         node = tree.node_list[id[1]]
         print(" ".join(node.content))
         print(f'similarity:{sim_list[idx]}\n')
+    a = 0

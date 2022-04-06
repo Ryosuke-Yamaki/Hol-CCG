@@ -9,7 +9,7 @@ from torch.nn.utils.rnn import pad_sequence
 import torch
 import torch.nn as nn
 from operator import itemgetter
-from utils import circular_correlation, complex_normalize
+from utils import circular_correlation, circular_convolution, complex_normalize
 from collections import OrderedDict
 
 
@@ -714,7 +714,9 @@ class Tree_Net(nn.Module):
                 right_child_idx = two_child_composition_info[:, 3]
                 left_child_vector = vector[(two_child_composition_idx, left_child_idx)]
                 right_child_vector = vector[(two_child_composition_idx, right_child_idx)]
-                composed_vector = circular_correlation(
+                # composed_vector = circular_correlation(
+                #     left_child_vector, right_child_vector, self.vector_norm)
+                composed_vector = circular_convolution(
                     left_child_vector, right_child_vector, self.vector_norm)
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
