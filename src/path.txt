@@ -1,0 +1,3 @@
+train_data CCGbank/converted/train.txt
+dev_data CCGbank/converted/dev.txt
+test_data 

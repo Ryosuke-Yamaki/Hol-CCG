@@ -1,5 +1,6 @@
 from models import Tree_List
-from utils import Condition_Setter, dump
+from utils import dump
+import os
 
 
 class Converter:
@@ -161,82 +162,100 @@ class Node_Stack:
                 self.ready = True
 
 
-condition = Condition_Setter(set_embedding_type=False)
+path_to_auto_list = os.path.join(
+    os.path.dirname(__file__),
+    '../../CCGbank/ccgbank_1_1/doc/file.tbl')
+path_to_train_converted = os.path.join(
+    os.path.dirname(__file__),
+    '../../CCGbank/converted/train.txt')
+path_to_dev_converted = os.path.join(os.path.dirname(__file__), '../../CCGbank/converted/dev.txt')
+path_to_test_converted = os.path.join(os.path.dirname(__file__), '../../CCGbank/converted/test.txt')
+path_to_train_tree_list = os.path.join(
+    os.path.dirname(__file__),
+    '../data/tree_list/train_tree_list.pickle')
+path_to_dev_tree_list = os.path.join(
+    os.path.dirname(__file__),
+    '../data/tree_list/dev_tree_list.pickle')
+path_to_test_tree_list = os.path.join(
+    os.path.dirname(__file__),
+    '../data/tree_list/test_tree_list.pickle')
+path_to_word_category_vocab = os.path.join(
+    os.path.dirname(__file__),
+    '../data/vocab/word_category_vocab.pickle')
+path_to_phrase_category_vocab = os.path.join(
+    os.path.dirname(__file__),
+    '../data/vocab/phrase_category_vocab.pickle')
+path_to_head_info = os.path.join(
+    os.path.dirname(__file__),
+    '../data/vocab/head_info.pickle')
 
-path_to_file_table = condition.PATH_TO_DIR + 'CCGbank/ccgbank_1_1/doc/file.tbl'
-path_to_train = condition.path_to_train_data
-path_to_dev = condition.path_to_dev_data
-path_to_test = condition.path_to_test_data
-open(path_to_train, 'w')
-open(path_to_dev, 'w')
-open(path_to_test, 'w')
-f = open(path_to_file_table, 'r')
-path_to_data = f.readlines()
+open(path_to_train_converted, 'w')
+open(path_to_dev_converted, 'w')
+open(path_to_test_converted, 'w')
+f = open(path_to_auto_list, 'r')
+path_to_auto = f.readlines()
 i = 0
-print('converting auto file...')
-for path in path_to_data:
+print('Converting auto file...')
+for path in path_to_auto:
     if '.auto' in path:
         idx = int(path[-10:-6])
         if idx < 100:
-            path_to_save = path_to_dev
+            path_to_save = path_to_dev_converted
         elif 200 <= idx and idx < 2200:
-            path_to_save = path_to_train
+            path_to_save = path_to_train_converted
         elif 2300 <= idx and idx < 2400:
-            path_to_save = path_to_test
+            path_to_save = path_to_test_converted
         else:
             path_to_save = None
         if path_to_save is not None:
-            path = condition.PATH_TO_DIR + 'CCGbank/ccgbank_1_1/' + path.replace('\n', '')
+            path = os.path.join(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    '../../CCGbank/ccgbank_1_1/'),
+                path.replace(
+                    '\n',
+                    ''))
             converter = Converter(path)
             for sentence in converter.sentence_list:
-                num_node = sentence.count('<')
                 converter.convert(sentence)
                 converter.save_node_info(path_to_save)
     else:
         break
 
-print('setting tree list...')
+print('Initializing tree...')
 train_tree_list = Tree_List(
-    condition.path_to_train_data, type='train')
+    path_to_train_converted, type='train')
 word_category_vocab = train_tree_list.word_category_vocab
 phrase_category_vocab = train_tree_list.phrase_category_vocab
 head_info = train_tree_list.head_info
 dev_tree_list = Tree_List(
-    condition.path_to_dev_data,
+    path_to_dev_converted,
     type='dev',
     word_category_vocab=word_category_vocab,
     phrase_category_vocab=phrase_category_vocab,
     head_info=head_info)
 test_tree_list = Tree_List(
-    condition.path_to_test_data,
+    path_to_test_converted,
     type='test',
     word_category_vocab=word_category_vocab,
     phrase_category_vocab=phrase_category_vocab,
     head_info=head_info)
 
-
-# dump(train_tree_list, condition.path_to_train_tree_list)
-# dump(dev_tree_list, condition.path_to_dev_tree_list)
-# dump(test_tree_list, condition.path_to_test_tree_list)
-# dump(word_category_vocab, condition.path_to_word_category_vocab)
-# dump(phrase_category_vocab, condition.path_to_phrase_category_vocab)
-# dump(head_info, condition.path_to_head_info)
-
-print('setting binary tree list...')
+print('Binarizing tree...')
 train_tree_list.convert_to_binary(type='train')
-binary_word_category_vocab = train_tree_list.word_category_vocab
-binary_phrase_category_vocab = train_tree_list.phrase_category_vocab
+word_category_vocab = train_tree_list.word_category_vocab
+phrase_category_vocab = train_tree_list.phrase_category_vocab
 head_info = train_tree_list.head_info
-dev_tree_list.word_category_vocab = binary_word_category_vocab
-dev_tree_list.phrase_category_vocab = binary_phrase_category_vocab
-test_tree_list.word_category_vocab = binary_word_category_vocab
-test_tree_list.phrase_category_vocab = binary_phrase_category_vocab
+dev_tree_list.word_category_vocab = word_category_vocab
+dev_tree_list.phrase_category_vocab = phrase_category_vocab
+test_tree_list.word_category_vocab = word_category_vocab
+test_tree_list.phrase_category_vocab = phrase_category_vocab
 dev_tree_list.convert_to_binary(type='dev')
 test_tree_list.convert_to_binary(type='test')
 
-dump(train_tree_list, condition.path_to_binary_train_tree_list)
-dump(dev_tree_list, condition.path_to_binary_dev_tree_list)
-dump(test_tree_list, condition.path_to_binary_test_tree_list)
-dump(binary_word_category_vocab, condition.path_to_binary_word_category_vocab)
-dump(binary_phrase_category_vocab, condition.path_to_binary_phrase_category_vocab)
-dump(head_info, condition.path_to_head_info)
+dump(train_tree_list, path_to_train_tree_list)
+dump(dev_tree_list, path_to_dev_tree_list)
+dump(test_tree_list, path_to_test_tree_list)
+dump(word_category_vocab, path_to_word_category_vocab)
+dump(phrase_category_vocab, path_to_phrase_category_vocab)
+dump(head_info, path_to_head_info)
