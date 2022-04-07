@@ -513,8 +513,12 @@ class Tree_List:
                     parent_node = tree.node_list[composition_info[1]]
                     left_node = tree.node_list[composition_info[2]]
                     right_node = tree.node_list[composition_info[3]]
-                    parent_node.vector = circular_correlation(
-                        left_node.vector, right_node.vector, tree_net.vector_norm)
+                    if tree_net.composition == 'corr':
+                        parent_node.vector = circular_correlation(
+                            left_node.vector, right_node.vector, tree_net.vector_norm)
+                    elif tree_net.composition == 'conv':
+                        parent_node.vector = circular_convolution(
+                            left_node.vector, right_node.vector, tree_net.vector_norm)
                 pbar.update(1)
 
     def convert_to_binary(self, type):
@@ -554,6 +558,19 @@ class Tree_List:
             self.set_vocab_and_head()
         self.set_category_id()
 
+    def count_rule(self):
+        rule_counter = Counter()
+        for tree in self.tree_list:
+            for node in tree.node_list:
+                if not node.is_leaf:
+                    left_child_node = tree.node_list[node.left_child_node_id]
+                    right_child_node = tree.node_list[node.right_child_node_id]
+                    left = left_child_node.category.split('-->')[-1]
+                    right = right_child_node.category.split('-->')[-1]
+                    parent = node.category
+                    rule_counter[(left, right, parent)] += 1
+        return rule_counter
+
 
 class Tree_Net(nn.Module):
     def __init__(
@@ -567,7 +584,8 @@ class Tree_Net(nn.Module):
             model_dim=1024,
             ff_dropout=0.2,
             normalize_type='real',
-            vector_norm=1.0,
+            vector_norm=30,
+            composition='corr',
             device=torch.device('cpu')):
         super(Tree_Net, self).__init__()
         self.num_word_cat = num_word_cat
@@ -581,6 +599,7 @@ class Tree_Net(nn.Module):
             self.vector_norm = vector_norm
         elif self.normalize_type == 'complex':
             self.vector_norm = None
+        self.composition = composition
         self.train_encoder = train_encoder
         # the list which to record the modules to set separated learning rate
         self.base_modules = []
@@ -637,7 +656,7 @@ class Tree_Net(nn.Module):
         vector = torch.cat((original_vector, random_vector))
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
-        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
+        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]                               :, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
         composed_vector = self.compose(original_vector, composition_info)
         random_composed_vector = self.compose(random_vector, random_composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(
@@ -714,10 +733,12 @@ class Tree_Net(nn.Module):
                 right_child_idx = two_child_composition_info[:, 3]
                 left_child_vector = vector[(two_child_composition_idx, left_child_idx)]
                 right_child_vector = vector[(two_child_composition_idx, right_child_idx)]
-                # composed_vector = circular_correlation(
-                #     left_child_vector, right_child_vector, self.vector_norm)
-                composed_vector = circular_convolution(
-                    left_child_vector, right_child_vector, self.vector_norm)
+                if self.composition == 'corr':
+                    composed_vector = circular_correlation(
+                        left_child_vector, right_child_vector, self.vector_norm)
+                elif self.composition == 'conv':
+                    composed_vector = circular_convolution(
+                        left_child_vector, right_child_vector, self.vector_norm)
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
 
@@ -802,7 +823,6 @@ class FeedForward(nn.Module):
         super(FeedForward, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_dim)
         self.layer_norm = nn.LayerNorm(hidden_dim)
-        # self.batch_norm = nn.BatchNorm1d(hidden_dim)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=dropout)
         self.linear2 = nn.Linear(hidden_dim, output_dim)
@@ -811,5 +831,4 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         x = self.linear2(self.dropout(self.relu(self.layer_norm(self.linear1(x)))))
-        # x = self.linear2(self.dropout(self.relu(self.batch_norm(self.linear1(x)))))
         return x

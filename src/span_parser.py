@@ -1,8 +1,10 @@
+import os
+import argparse
 from collections import Counter
 import sys
-from utils import load, Condition_Setter
+from utils import load
 import torch
-from utils import circular_correlation
+from utils import circular_correlation, circular_convolution
 
 
 class Category:
@@ -101,43 +103,33 @@ class Cell:
 class Parser:
     def __init__(
             self,
-            tree_list,
+            word_category_vocab,
+            phrase_category_vocab,
+            head_info,
+            rule_counter,
             tree_net,
             stag_threshold,
             phrase_threshold,
             span_threshold,
-            min_freq=1):
-        self.word_category_vocab = tree_list.word_category_vocab
-        self.phrase_category_vocab = tree_list.phrase_category_vocab
+            min_freq):
+        self.word_category_vocab = word_category_vocab
+        self.phrase_category_vocab = phrase_category_vocab
+        self.head_info = head_info
+        self.binary_rule = {}
+        for key, freq in rule_counter.items():
+            if freq >= min_freq:
+                if (key[0], key[1]) in self.binary_rule:
+                    self.binary_rule[(key[0], key[1])].append(key[2])
+                else:
+                    self.binary_rule[(key[0], key[1])] = [key[2]]
         self.tree_net = tree_net
+        self.composition = tree_net.composition
         self.word_ff = tree_net.word_ff
         self.phrase_ff = tree_net.phrase_ff
         self.span_ff = tree_net.span_ff
         self.stag_threshold = stag_threshold
         self.phrase_threshold = phrase_threshold
         self.span_threshold = span_threshold
-        self.min_freq = min_freq
-        self.define_rule(tree_list)
-
-    def define_rule(self, tree_list):
-        self.head_info = tree_list.head_info
-        self.binary_counter = Counter()
-        self.binary_rule = {}
-        for tree in tree_list.tree_list:
-            for node in tree.node_list:
-                if not node.is_leaf:
-                    left_child_node = tree.node_list[node.left_child_node_id]
-                    right_child_node = tree.node_list[node.right_child_node_id]
-                    left = left_child_node.category.split('-->')[-1]
-                    right = right_child_node.category.split('-->')[-1]
-                    parent = node.category
-                    self.binary_counter[(left, right, parent)] += 1
-        for key, freq in self.binary_counter.items():
-            if freq >= self.min_freq:
-                if (key[0], key[1]) in self.binary_rule:
-                    self.binary_rule[(key[0], key[1])].append(key[2])
-                else:
-                    self.binary_rule[(key[0], key[1])] = [key[2]]
 
     @torch.no_grad()
     def initialize_chart(self, sentence):
@@ -218,8 +210,12 @@ class Parser:
                             if possible_cats is None:
                                 continue
                             else:
-                                composed_vector = circular_correlation(
-                                    left_cat.vector, right_cat.vector, self.tree_net.vector_norm)
+                                if self.composition == 'corr':
+                                    composed_vector = circular_correlation(
+                                        left_cat.vector, right_cat.vector, self.tree_net.vector_norm)
+                                elif self.composition == 'conv':
+                                    composed_vector = circular_convolution(
+                                        left_cat.vector, right_cat.vector, self.tree_net.vector_norm)
                                 span_prob = torch.softmax(
                                     self.span_ff(composed_vector), dim=-1)[1]
                                 if span_prob > self.span_threshold:
@@ -367,37 +363,68 @@ class Parser:
 
 
 def main():
-    condition = Condition_Setter(set_embedding_type=False)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--model', type=str, required=True)
+    parser.add_argument('-t', '--target', type=str, choices=['dev', 'test'], required=True)
+    parser.add_argument('--stag_threshold', type=float, default=0.1)
+    parser.add_argument('--phrase_threshold', type=float, default=0.01)
+    parser.add_argument('--span_threshold', type=float, default=0.01)
+    parser.add_argument('--min_freq', type=int, default=1)
+    parser.add_argument('-d', '--device', type=torch.device, default=torch.device('cuda:0'))
 
-    args = sys.argv
-    model = args[1]
-    dev_test = args[2]
-    stag_threhold = float(args[3])
-    phrase_threshold = float(args[4])
-    span_threshold = float(args[5])
-    min_freq = int(args[6])
-    device = torch.device(args[7])
+    args = parser.parse_args()
 
-    if dev_test == 'dev':
-        path_to_sentence_list = "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
-    elif dev_test == 'test':
-        path_to_sentence_list = "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
+    model = args.model
+    target = args.target
+    stag_threhold = args.stag_threshold
+    phrase_threshold = args.phrase_threshold
+    span_threshold = args.span_threshold
+    min_freq = args.min_freq
+    device = args.device
 
-    tree_list = load(condition.path_to_binary_train_tree_list)
-    tree_net = torch.load(condition.path_to_model + model,
-                          map_location=device)
+    path_to_model = os.path.join(os.path.join(os.path.dirname(__file__),
+                                              '../data/model/'), model)
+    path_to_word_category_vocab = os.path.join(
+        os.path.dirname(__file__),
+        '../data/grammar/word_category_vocab.pickle')
+    path_to_phrase_category_vocab = os.path.join(
+        os.path.dirname(__file__),
+        '../data/grammar/phrase_category_vocab.pickle')
+    path_to_head_info = os.path.join(
+        os.path.dirname(__file__),
+        '../data/grammar/head_info.pickle')
+    path_to_rule_counter = os.path.join(
+        os.path.dirname(__file__),
+        '../data/grammar/rule_counter.pickle')
+    if target == 'dev':
+        path_to_sentence_list = os.path.join(
+            os.path.dirname(__file__),
+            '../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw')
+    elif target == 'test':
+        path_to_sentence_list = os.path.join(
+            os.path.dirname(__file__),
+            '../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw')
+
+    word_category_vocab = load(path_to_word_category_vocab)
+    phrase_category_vocab = load(path_to_phrase_category_vocab)
+    head_info = load(path_to_head_info)
+    rule_counter = load(path_to_rule_counter)
+    tree_net = torch.load(path_to_model, map_location=device)
     tree_net.device = device
     tree_net.eval()
 
     parser = Parser(
-        tree_list=tree_list,
+        word_category_vocab=word_category_vocab,
+        phrase_category_vocab=phrase_category_vocab,
+        head_info=head_info,
+        rule_counter=rule_counter,
         tree_net=tree_net,
         stag_threshold=stag_threhold,
         phrase_threshold=phrase_threshold,
         span_threshold=span_threshold,
         min_freq=min_freq)
 
-    with open(condition.PATH_TO_DIR + path_to_sentence_list, 'r') as f:
+    with open(path_to_sentence_list, 'r') as f:
         sentence_list = f.readlines()
 
     sentence_id = 0

@@ -181,13 +181,16 @@ path_to_test_tree_list = os.path.join(
     '../data/tree_list/test_tree_list.pickle')
 path_to_word_category_vocab = os.path.join(
     os.path.dirname(__file__),
-    '../data/vocab/word_category_vocab.pickle')
+    '../data/grammar/word_category_vocab.pickle')
 path_to_phrase_category_vocab = os.path.join(
     os.path.dirname(__file__),
-    '../data/vocab/phrase_category_vocab.pickle')
+    '../data/grammar/phrase_category_vocab.pickle')
 path_to_head_info = os.path.join(
     os.path.dirname(__file__),
-    '../data/vocab/head_info.pickle')
+    '../data/grammar/head_info.pickle')
+path_to_rule_counter = os.path.join(
+    os.path.dirname(__file__),
+    '../data/grammar/rule_counter.pickle')
 
 open(path_to_train_converted, 'w')
 open(path_to_dev_converted, 'w')
@@ -246,6 +249,7 @@ train_tree_list.convert_to_binary(type='train')
 word_category_vocab = train_tree_list.word_category_vocab
 phrase_category_vocab = train_tree_list.phrase_category_vocab
 head_info = train_tree_list.head_info
+rule_counter = train_tree_list.count_rule()
 dev_tree_list.word_category_vocab = word_category_vocab
 dev_tree_list.phrase_category_vocab = phrase_category_vocab
 test_tree_list.word_category_vocab = word_category_vocab
@@ -259,3 +263,4 @@ dump(test_tree_list, path_to_test_tree_list)
 dump(word_category_vocab, path_to_word_category_vocab)
 dump(phrase_category_vocab, path_to_phrase_category_vocab)
 dump(head_info, path_to_head_info)
+dump(rule_counter, path_to_rule_counter)
