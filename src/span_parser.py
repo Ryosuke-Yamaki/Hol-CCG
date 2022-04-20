@@ -382,27 +382,27 @@ def main():
     min_freq = args.min_freq
     device = args.device
 
-    path_to_model = os.path.join(os.path.join(os.path.dirname(__file__),
+    path_to_model = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                               '../data/model/'), model)
     path_to_word_category_vocab = os.path.join(
-        os.path.dirname(__file__),
+        os.path.dirname(os.path.abspath(__file__)),
         '../data/grammar/word_category_vocab.pickle')
     path_to_phrase_category_vocab = os.path.join(
-        os.path.dirname(__file__),
+        os.path.dirname(os.path.abspath(__file__)),
         '../data/grammar/phrase_category_vocab.pickle')
     path_to_head_info = os.path.join(
-        os.path.dirname(__file__),
+        os.path.dirname(os.path.abspath(__file__)),
         '../data/grammar/head_info.pickle')
     path_to_rule_counter = os.path.join(
-        os.path.dirname(__file__),
+        os.path.dirname(os.path.abspath(__file__)),
         '../data/grammar/rule_counter.pickle')
     if target == 'dev':
         path_to_sentence_list = os.path.join(
-            os.path.dirname(__file__),
+            os.path.dirname(os.path.abspath(__file__)),
             '../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw')
     elif target == 'test':
         path_to_sentence_list = os.path.join(
-            os.path.dirname(__file__),
+            os.path.dirname(os.path.abspath(__file__)),
             '../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw')
 
     word_category_vocab = load(path_to_word_category_vocab)
@@ -410,6 +410,8 @@ def main():
     head_info = load(path_to_head_info)
     rule_counter = load(path_to_rule_counter)
     tree_net = torch.load(path_to_model, map_location=device)
+    ####### need to remove assignment of convolution here ######
+    tree_net.composition = 'conv'
     tree_net.device = device
     tree_net.eval()
 

@@ -163,33 +163,39 @@ class Node_Stack:
 
 
 path_to_auto_list = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     '../../CCGbank/ccgbank_1_1/doc/file.tbl')
 path_to_train_converted = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     '../../CCGbank/converted/train.txt')
-path_to_dev_converted = os.path.join(os.path.dirname(__file__), '../../CCGbank/converted/dev.txt')
-path_to_test_converted = os.path.join(os.path.dirname(__file__), '../../CCGbank/converted/test.txt')
+path_to_dev_converted = os.path.join(
+    os.path.dirname(
+        os.path.abspath(__file__)),
+    '../../CCGbank/converted/dev.txt')
+path_to_test_converted = os.path.join(
+    os.path.dirname(
+        os.path.abspath(__file__)),
+    '../../CCGbank/converted/test.txt')
 path_to_train_tree_list = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     '../data/tree_list/train_tree_list.pickle')
 path_to_dev_tree_list = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     '../data/tree_list/dev_tree_list.pickle')
 path_to_test_tree_list = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     '../data/tree_list/test_tree_list.pickle')
 path_to_word_category_vocab = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     '../data/grammar/word_category_vocab.pickle')
 path_to_phrase_category_vocab = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     '../data/grammar/phrase_category_vocab.pickle')
 path_to_head_info = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     '../data/grammar/head_info.pickle')
 path_to_rule_counter = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     '../data/grammar/rule_counter.pickle')
 
 open(path_to_train_converted, 'w')
@@ -213,7 +219,7 @@ for path in path_to_auto:
         if path_to_save is not None:
             path = os.path.join(
                 os.path.join(
-                    os.path.dirname(__file__),
+                    os.path.dirname(os.path.abspath(__file__)),
                     '../../CCGbank/ccgbank_1_1/'),
                 path.replace(
                     '\n',

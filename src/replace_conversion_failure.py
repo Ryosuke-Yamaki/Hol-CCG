@@ -1,7 +1,6 @@
+import argparse
 import os
 import subprocess
-import sys
-from utils import Condition_Setter
 
 
 def extract_tags(auto):
@@ -53,30 +52,60 @@ def fix_deps_idx(extracted_deps, start):
         extracted_deps[i] = deps
 
 
-condition = Condition_Setter(set_embedding_type=False)
+parser = argparse.ArgumentParser()
+parser.add_argument('-m', '--model', type=str, required=True)
+parser.add_argument('-t', '--target', type=str, choices=['dev', 'test'], required=True)
+parser.add_argument('--stag_threshold', type=float, default=0.1)
 
-args = sys.argv
-model = args[1]
-dev_test = args[2]
-THRESHOLD = args[3]
+# args = parser.parse_args()
+# model = args.model
+# target = args.target
+# stag_threshold = args.stag_threshold
 
-target = model.replace(".pth", "_" + dev_test)
-path_to_autos = condition.PATH_TO_DIR + f"span_parsing/AUTO/{target}.auto"
-path_to_error_log = condition.path_to_conversion_error_log
+model = 'roberta-large_w_p_s_2022-04-07_02:11:15.pth'
+target = 'dev'
 
-if dev_test == 'dev':
-    path_to_sentence = condition.PATH_TO_DIR + "span_parsing/GOLD/wsj00.raw"
-elif dev_test == 'test':
-    path_to_sentence = condition.PATH_TO_DIR + "span_parsing/GOLD/wsj23.raw"
+model_target = model.replace(".pth", "_" + target)
+path_to_auto = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    f'../span_parsing/AUTO/{model_target}.auto')
+path_to_error_log = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    '../../candc-1.00/errors.log')
+path_to_failed_sentence = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    f"../span_parsing/FAILURE/{model_target}.raw")
+path_to_auto_pos = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    f"../span_parsing/FAILURE/{model_target}.auto_pos")
+path_to_stagged = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), f"../span_parsing/FAILURE/{model_target}.stagged")
+path_to_ccgbank_deps = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    f"../span_parsing/CCGBANK_DEPS/{model_target}.ccgbank_deps")
+path_to_alt_deps = os.path.join(os.path.dirname(
+    __file__), f"../span_parsing/FAILURE/{model_target}.out")
+path_to_replaced_deps = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    f'../span_parsing/CCGBANK_DEPS/{model_target}.replaced_ccgbank_deps')
+path_to_log = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    f'../span_parsing/FAILURE/{model_target}.log')
+if target == 'dev':
+    path_to_sentence = os.path.join(
+        os.path.dirname(
+            os.path.abspath(__file__)),
+        "../span_parsing/GOLD/wsj00.raw")
+elif target == 'test':
+    path_to_sentence = os.path.join(
+        os.path.dirname(
+            os.path.abspath(__file__)),
+        "../span_parsing/GOLD/wsj23.raw")
 
-path_to_failed_sentence = condition.PATH_TO_DIR + f"span_parsing/FAILURE/{target}.raw"
-path_to_auto_pos = condition.PATH_TO_DIR + f"span_parsing/FAILURE/{target}.auto_pos"
-path_to_ccgbank_deps = condition.PATH_TO_DIR + f"span_parsing/CCGBANK_DEPS/{target}.ccgbank_deps"
-path_to_alt_deps = condition.PATH_TO_DIR + f"span_parsing/FAILURE/{target}.out"
-path_to_replaced_ccgbank_deps = path_to_ccgbank_deps.replace(
-    ".ccgbank_deps", ".replaced_ccgbank_deps")
+path_to_candc = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../candc-1.00/')
+path_to_java_candc = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../java-candc/')
 
-with open(path_to_autos, 'r') as f:
+with open(path_to_auto, 'r') as f:
     autos = f.readlines()
 with open(path_to_error_log, 'r') as f:
     error_log = f.readlines()
@@ -119,18 +148,16 @@ for line in autos:
 with open(path_to_failed_sentence, 'w') as f:
     f.writelines(failed_sentence_list)
 
-os.chdir(condition.PATH_TO_DIR + "candc-1.00")
-pos_command = "bin/pos --model models/pos --input {} --output {}".format(
-    path_to_failed_sentence, path_to_auto_pos)
-stag_command = f"python supertagging.py {model} {dev_test} {THRESHOLD} failure"
-candc_command = f"""java -Xmx6g -classpath bin ParserBeam {condition.PATH_TO_DIR}span_parsing/FAILURE/{target}.stagged {condition.PATH_TO_DIR}span_parsing/FAILURE/{target}.out {condition.PATH_TO_DIR}span_parsing/FAILURE/{target}.log model/weights params"""
+pos_command = f"{os.path.join(path_to_candc,'bin/pos')} --model {os.path.join(path_to_candc,'models/pos')} --input {path_to_failed_sentence} --output {path_to_auto_pos}"
+stag_command = f"python supertagging.py -m {model} -t {target} --failure"
+candc_command = f"java -Xmx6g -classpath bin ParserBeam {path_to_stagged} {path_to_alt_deps} {path_to_log} model/weights params"
 subprocess.run(pos_command, shell=True, text=True)
-os.chdir(condition.PATH_TO_DIR + "Hol-CCG/src")
 subprocess.run(stag_command, shell=True, text=True)
-os.chdir(condition.PATH_TO_DIR + "java-candc")
+os.chdir(path_to_java_candc)
 subprocess.run(candc_command, shell=True, text=True)
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-with open(path_to_autos, 'r') as f:
+with open(path_to_auto, 'r') as f:
     autos = f.readlines()
 with open(path_to_ccgbank_deps, 'r') as f:
     ccgbank_deps = f.readlines()
@@ -190,5 +217,5 @@ replaced_deps.extend(deps)
 replaced_deps.append('<c> ' + tags + '\n')
 replaced_deps.append('\n')
 
-with open(path_to_replaced_ccgbank_deps, 'w') as f:
+with open(path_to_replaced_deps, 'w') as f:
     f.writelines(replaced_deps)

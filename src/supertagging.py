@@ -1,44 +1,70 @@
-from utils import load, Condition_Setter
+from utils import load
 import torch
-import sys
 from tqdm import tqdm
+import os
+import argparse
 
-condition = Condition_Setter(set_embedding_type=False)
-device = torch.device("cuda")
+parser = argparse.ArgumentParser()
+parser.add_argument('-m', '--model', type=str, required=True)
+parser.add_argument('-t', '--target', type=str, choices=['dev', 'test'], required=True)
+parser.add_argument('--stag_threshold', type=float, default=0.1)
+parser.add_argument('-d', '--device', type=torch.device, default=torch.device('cuda:0'))
+parser.add_argument('--failure', action='store_true')
 
-args = sys.argv
-MODEL = args[1]
-DEV_TEST = args[2]
-THRESHOLD = float(args[3])
-TARGET = MODEL.replace(".pth", "_" + DEV_TEST)
-if len(args) == 5 and args[4] == 'failure':
-    FAILURE = True
+args = parser.parse_args()
+
+args = parser.parse_args()
+
+MODEL = args.model
+TARGET = args.target
+STAG_THRESHOLD = args.stag_threshold
+FAILURE = args.failure
+DEVICE = args.device
+MODEL_TARGET = MODEL.replace(".pth", "_" + TARGET)
+
+path_to_word_category_vocab = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    '../data/grammar/word_category_vocab.pickle')
+path_to_model = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                          '../data/model/'), MODEL)
+if FAILURE:
+    path_to_sentence = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "../span_parsing/FAILURE/{}.raw".format(MODEL_TARGET))
+    path_to_auto_pos = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "../span_parsing/FAILURE/{}.auto_pos".format(MODEL_TARGET))
+    stagged_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "../span_parsing/FAILURE/{}.stagged".format(MODEL_TARGET))
 else:
-    FAILURE = False
+    if TARGET == 'dev':
+        path_to_sentence = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw")
+        path_to_auto_pos = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "../../java-candc/data/auto-pos/wsj00.auto_pos")
+        stagged_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "../../java-candc/data/auto-stagged/" +
+            MODEL_TARGET +
+            '.stagged')
+    elif TARGET == 'test':
+        path_to_sentence = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw")
+        path_to_auto_pos = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "../../java-candc/data/auto-pos/wsj23.auto_pos")
+        stagged_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "../../java-candc/data/auto-stagged/" +
+            MODEL_TARGET +
+            '.stagged')
 
-word_category_vocab = load(condition.path_to_binary_word_category_vocab)
-tree_net = torch.load(condition.path_to_model + MODEL, map_location=device)
-tree_net.device = device
+word_category_vocab = load(path_to_word_category_vocab)
+tree_net = torch.load(path_to_model, map_location=DEVICE)
+tree_net.device = DEVICE
 tree_net.eval()
 word_ff = tree_net.word_ff
-
-if FAILURE:
-    path_to_sentence = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.raw".format(TARGET)
-    path_to_auto_pos = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.auto_pos".format(TARGET)
-    stagged_file = condition.PATH_TO_DIR + "span_parsing/FAILURE/{}.stagged".format(TARGET)
-else:
-    if DEV_TEST == 'dev':
-        path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw"
-        path_to_auto_pos = condition.PATH_TO_DIR + "java-candc/data/auto-pos/wsj00.auto_pos"
-        stagged_file = condition.PATH_TO_DIR + "java-candc/data/auto-stagged/" + \
-            TARGET + '.stagged'
-    elif DEV_TEST == 'test':
-        path_to_sentence = condition.PATH_TO_DIR + "CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw"
-        path_to_auto_pos = condition.PATH_TO_DIR + "java-candc/data/auto-pos/wsj23.auto_pos"
-        stagged_file = condition.PATH_TO_DIR + "java-candc/data/auto-stagged/" + \
-            TARGET + '.stagged'
-
-
 with open(path_to_sentence, "r") as f:
     sentence_list = f.readlines()
 with open(path_to_auto_pos, "r") as f:
@@ -79,7 +105,7 @@ with torch.no_grad():
                 temp = [[word_category_vocab.itos[predict_cat_id[idx, 0]].split('-->')[0],
                         word_cat_prob[idx, predict_cat_id[idx, 0]].item()]]
                 for cat_id in predict_cat_id[idx, 1:]:
-                    if word_cat_prob[idx, cat_id] > THRESHOLD:
+                    if word_cat_prob[idx, cat_id] > STAG_THRESHOLD:
                         temp.append([word_category_vocab.itos[cat_id].split('-->')[0],
                                     word_cat_prob[idx, cat_id].item()])
                     else:
