@@ -802,6 +802,8 @@ class Tree_Net(nn.Module):
         word_split = []
         for original_position in range(len(sentence.split())):
             word = sentence.split()[original_position]
+            word = word.replace(" ", "")
+            word = word.replace("\"", "``")
             length = 1
             while True:
                 temp = tokenizer.convert_tokens_to_string(

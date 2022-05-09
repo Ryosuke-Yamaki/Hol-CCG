@@ -365,12 +365,14 @@ class Parser:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model', type=str, required=True)
-    parser.add_argument('-t', '--target', type=str, choices=['dev', 'test'], required=True)
+    parser.add_argument('-t', '--target', type=str, required=True)
     parser.add_argument('--stag_threshold', type=float, default=0.1)
     parser.add_argument('--phrase_threshold', type=float, default=0.01)
     parser.add_argument('--span_threshold', type=float, default=0.01)
     parser.add_argument('--min_freq', type=int, default=1)
+    parser.add_argument('--skimmer_off', action='store_true')
     parser.add_argument('-d', '--device', type=torch.device, default=torch.device('cuda:0'))
+    parser.add_argument('--max_num_sentence', type=int, default=None)
 
     args = parser.parse_args()
 
@@ -380,7 +382,9 @@ def main():
     phrase_threshold = args.phrase_threshold
     span_threshold = args.span_threshold
     min_freq = args.min_freq
+    apply_skimmer = not args.skimmer_off
     device = args.device
+    max_num_sentence = args.max_num_sentence
 
     path_to_model = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                               '../data/model/'), model)
@@ -404,7 +408,8 @@ def main():
         path_to_sentence_list = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             '../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw')
-
+    else:
+        path_to_sentence_list = target
     word_category_vocab = load(path_to_word_category_vocab)
     phrase_category_vocab = load(path_to_phrase_category_vocab)
     head_info = load(path_to_head_info)
@@ -429,25 +434,37 @@ def main():
     with open(path_to_sentence_list, 'r') as f:
         sentence_list = f.readlines()
 
+    num_success = 0
+    num_fail = 0
     sentence_id = 0
-    for sentence in sentence_list:
+    for sentence in sentence_list[:max_num_sentence]:
         sentence_id += 1
         sentence = sentence.rstrip()
         chart = parser.parse(sentence)
         root_cell = list(chart.values())[-1]
+        # when parsing is failed
         if len(root_cell.best_category) == 0:
-            autos, scope_list = parser.skimmer(chart)
-            n = 0
-            for auto, scope in zip(autos, scope_list):
-                print(
-                    'ID={}.{} PARSER=TEST APPLY_SKIMMER=True SCOPE=({},{})'.format(
-                        sentence_id, n, scope[0], scope[1]))
-                print(auto)
-                n += 1
+            num_fail += 1
+            if apply_skimmer:
+                autos, scope_list = parser.skimmer(chart)
+                n = 0
+                for auto, scope in zip(autos, scope_list):
+                    print(
+                        'ID={}.{} PARSER=TEST APPLY_SKIMMER=True SCOPE=({},{})'.format(
+                            sentence_id, n, scope[0], scope[1]))
+                    print(auto)
+                    n += 1
+            else:
+                print('ID={} PARSER=TEST APPLY_SKIMMER=False'.format(sentence_id))
+                print('(<L fail POS POS {} fail>)'.format('_'.join(sentence.split())))
+        # when parsing is succesful
         else:
+            num_success += 1
             auto = parser.decode(root_cell)
             print('ID={} PARSER=TEST APPLY_SKIMMER=FALSE'.format(sentence_id))
             print(auto)
+    print(
+        f'success ratio: {num_success / (num_success + num_fail)}({num_success}/ {(num_success + num_fail)})')
 
 
 if __name__ == "__main__":
