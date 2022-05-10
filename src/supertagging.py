@@ -105,11 +105,7 @@ with torch.no_grad():
                 temp = [[word_category_vocab.itos[predict_cat_id[idx, 0]].split('-->')[0],
                         word_cat_prob[idx, predict_cat_id[idx, 0]].item()]]
                 for cat_id in predict_cat_id[idx, 1:]:
-<<<<<<< HEAD
                     if word_cat_prob[idx, cat_id] > STAG_THRESHOLD:
-=======
-                    if word_cat_prob[idx, cat_id] > THRESHOLD:
->>>>>>> 8963f6f9793b690e97b339eceb113821f9b7a37f
                         temp.append([word_category_vocab.itos[cat_id].split('-->')[0],
                                     word_cat_prob[idx, cat_id].item()])
                     else:

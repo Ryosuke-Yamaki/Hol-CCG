@@ -415,8 +415,6 @@ def main():
     head_info = load(path_to_head_info)
     rule_counter = load(path_to_rule_counter)
     tree_net = torch.load(path_to_model, map_location=device)
-    ####### need to remove assignment of convolution here ######
-    tree_net.composition = 'conv'
     tree_net.device = device
     tree_net.eval()
 

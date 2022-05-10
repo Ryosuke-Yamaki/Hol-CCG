@@ -200,7 +200,9 @@ for tree in tree_list.tree_list:
                 node.right_child = tree.node_list[node.right_child_node_id]
 
 mathml_list = []
+previous_image_id = 0
 for tree in tree_list.tree_list:
+    image_id = tree.self_id
     tree.root_node.mathml = []
     waiting_nodes = [tree.root_node]
     while len(waiting_nodes) > 0:
