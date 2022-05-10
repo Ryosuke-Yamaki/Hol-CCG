@@ -461,8 +461,9 @@ def main():
             auto = parser.decode(root_cell)
             print('ID={} PARSER=TEST APPLY_SKIMMER=FALSE'.format(sentence_id))
             print(auto)
-    print(
-        f'success ratio: {num_success / (num_success + num_fail)}({num_success}/ {(num_success + num_fail)})')
+    # print(
+    # f'success ratio: {num_success / (num_success + num_fail)}({num_success}/
+    # {(num_success + num_fail)})')
 
 
 if __name__ == "__main__":
