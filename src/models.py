@@ -245,14 +245,17 @@ class Tree_List:
             node_info_list = [node_info.strip() for node_info in f.readlines()]
         node_info_list = [node_info.replace(
             '\n', '') for node_info in node_info_list]
-        for node_info in node_info_list:
-            if node_info != '':
-                node = Node(node_info.split())
-                node_list.append(node)
-            elif node_list != []:
-                self.tree_list.append(Tree(tree_id, node_list))
-                node_list = []
-                tree_id += 1
+        with tqdm(total=len(node_info_list), unit="node_info") as pbar:
+            pbar.set_description("Constructing tree list...")
+            for node_info in node_info_list:
+                if node_info != '':
+                    node = Node(node_info.split())
+                    node_list.append(node)
+                elif node_list != []:
+                    self.tree_list.append(Tree(tree_id, node_list))
+                    node_list = []
+                    tree_id += 1
+                pbar.update(1)
 
     def set_vocab_and_head(self):
         word_category_counter = Counter()
@@ -656,7 +659,7 @@ class Tree_Net(nn.Module):
         vector = torch.cat((original_vector, random_vector))
         original_vector = vector[:original_vector_shape[0] * original_vector_shape[1],
                                  :].view(original_vector_shape[0], original_vector_shape[1], self.model_dim)
-        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]                               :, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
+        random_vector = vector[original_vector_shape[0] * original_vector_shape[1]:, :].view(random_vector_shape[0], random_vector_shape[1], self.model_dim)
         composed_vector = self.compose(original_vector, composition_info)
         random_composed_vector = self.compose(random_vector, random_composition_info)
         word_vector, phrase_vector, word_label, phrase_label = self.devide_word_phrase(

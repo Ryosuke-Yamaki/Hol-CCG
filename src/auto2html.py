@@ -1,5 +1,6 @@
+from lib2to3.pytree import convert
 from models import Tree_List
-import os
+from tqdm import tqdm
 import argparse
 
 
@@ -193,95 +194,104 @@ path_to_converted = 'converted.txt'
 open(path_to_converted, 'w')
 
 converter = Converter(path_to_auto)
-for sentence in converter.sentence_list:
-    converter.convert(sentence)
-    converter.save_node_info(path_to_converted)
+with tqdm(total=len(converter.sentence_list), unit="sentence") as pbar:
+    pbar.set_description("Converting auto format to tree format...")
+    for sentence in converter.sentence_list:
+        converter.convert(sentence)
+        converter.save_node_info(path_to_converted)
+        pbar.update(1)
 
 tree_list = Tree_List(
     path_to_converted, type='train')
 
-for tree in tree_list.tree_list:
-    tree.root_node = tree.node_list[-1]
-    tree.root_node.parent_node = None
-    for node in reversed(tree.node_list):
-        if not node.is_leaf:
-            if node.num_child == 1:
-                node.child = tree.node_list[node.child_node_id]
-            elif node.num_child == 2:
-                node.left_child = tree.node_list[node.left_child_node_id]
-                node.right_child = tree.node_list[node.right_child_node_id]
+with tqdm(total=len(tree_list.tree_list), unit="tree") as pbar:
+    pbar.set_description("Setting node information...")
+    for tree in tree_list.tree_list:
+        tree.root_node = tree.node_list[-1]
+        tree.root_node.parent_node = None
+        for node in reversed(tree.node_list):
+            if not node.is_leaf:
+                if node.num_child == 1:
+                    node.child = tree.node_list[node.child_node_id]
+                elif node.num_child == 2:
+                    node.left_child = tree.node_list[node.left_child_node_id]
+                    node.right_child = tree.node_list[node.right_child_node_id]
+        pbar.update(1)
 
 with open(path_to_images, 'r') as f:
     images = f.readlines()
 
 mathml_list = []
 previous_image = ''
-for tree, image in zip(tree_list.tree_list, images):
-    image = image.rstrip()
-    if image != previous_image:
-        num_sentence = 0
-        if 'coco' in path_to_images:
-            mathml_list.append('<p>Image ID={}</p><img src="{}" height="150">'.format(image,
-                                                                                      path_to_image + str(image.zfill(12)) + '.jpg'))
-        elif 'bird' in path_to_images:
-            mathml_list.append(
-                '<p>Image ID={}</p><img src="{}" height="150">'.format(image, path_to_image + image + '.jpg'))
-    tree.self_id = image + '.' + str(num_sentence)
-    previous_image = image
-    num_sentence += 1
-    tree.root_node.mathml = []
-    waiting_nodes = [tree.root_node]
-    while len(waiting_nodes) > 0:
-        node = waiting_nodes.pop(0)
-        if node.is_leaf:
-            node.mathml += ['<mfrac><mtext>',
-                            node.content[0],
-                            '</mtext><mtext>',
-                            node.category,
-                            '</mtext></mfrac>']
-        else:
-            if node.num_child == 1:
-                node.child.mathml = []
-                node.mathml += ['<mfrac>',
-                                node.child.mathml,
-                                '<mtext>',
+with tqdm(total=len(tree_list.tree_list), unit="tree") as pbar:
+    pbar.set_description("Converting to html format...")
+    for tree, image in zip(tree_list.tree_list, images):
+        image = image.rstrip()
+        if image != previous_image:
+            num_sentence = 0
+            if 'coco' in path_to_images:
+                mathml_list.append('<p>Image ID={}</p><img src="{}" height="150">'.format(image,
+                                                                                          path_to_image + str(image.zfill(12)) + '.jpg'))
+            elif 'bird' in path_to_images:
+                mathml_list.append(
+                    '<p>Image ID={}</p><img src="{}" height="150">'.format(image, path_to_image + image + '.jpg'))
+        tree.self_id = image + '.' + str(num_sentence)
+        previous_image = image
+        num_sentence += 1
+        tree.root_node.mathml = []
+        waiting_nodes = [tree.root_node]
+        while len(waiting_nodes) > 0:
+            node = waiting_nodes.pop(0)
+            if node.is_leaf:
+                node.mathml += ['<mfrac><mtext>',
+                                node.content[0],
+                                '</mtext><mtext>',
                                 node.category,
                                 '</mtext></mfrac>']
-                if node.child.is_leaf:
-                    node.child.mathml += ['<mfrac><mtext>',
-                                          node.child.content[0],
-                                          '</mtext><mtext>',
-                                          node.child.category,
-                                          '</mtext></mfrac>']
-                else:
-                    waiting_nodes.append(node.child)
-            elif node.num_child == 2:
-                node.left_child.mathml = []
-                node.right_child.mathml = []
-                node.mathml += ['<mfrac><mrow>',
-                                node.left_child.mathml,
-                                node.right_child.mathml,
-                                '</mrow><mtext>',
-                                node.category,
-                                '</mtext></mfrac>']
-                if node.left_child.is_leaf:
-                    node.left_child.mathml += ['<mfrac><mtext>',
-                                               node.left_child.content[0],
-                                               '</mtext><mtext>',
-                                               node.left_child.category,
-                                               '</mtext></mfrac>']
-                else:
-                    waiting_nodes.append(node.left_child)
-                if node.right_child.is_leaf:
-                    node.right_child.mathml += ['<mfrac><mtext>',
-                                                node.right_child.content[0],
-                                                '</mtext><mtext>',
-                                                node.right_child.category,
-                                                '</mtext></mfrac>']
-                else:
-                    waiting_nodes.append(node.right_child)
-    mathml_list.append('<p>Sentence ID={}</p><math>{}</math>'.format(tree.self_id,
-                       ''.join(flatten(tree.root_node.mathml))))
+            else:
+                if node.num_child == 1:
+                    node.child.mathml = []
+                    node.mathml += ['<mfrac>',
+                                    node.child.mathml,
+                                    '<mtext>',
+                                    node.category,
+                                    '</mtext></mfrac>']
+                    if node.child.is_leaf:
+                        node.child.mathml += ['<mfrac><mtext>',
+                                              node.child.content[0],
+                                              '</mtext><mtext>',
+                                              node.child.category,
+                                              '</mtext></mfrac>']
+                    else:
+                        waiting_nodes.append(node.child)
+                elif node.num_child == 2:
+                    node.left_child.mathml = []
+                    node.right_child.mathml = []
+                    node.mathml += ['<mfrac><mrow>',
+                                    node.left_child.mathml,
+                                    node.right_child.mathml,
+                                    '</mrow><mtext>',
+                                    node.category,
+                                    '</mtext></mfrac>']
+                    if node.left_child.is_leaf:
+                        node.left_child.mathml += ['<mfrac><mtext>',
+                                                   node.left_child.content[0],
+                                                   '</mtext><mtext>',
+                                                   node.left_child.category,
+                                                   '</mtext></mfrac>']
+                    else:
+                        waiting_nodes.append(node.left_child)
+                    if node.right_child.is_leaf:
+                        node.right_child.mathml += ['<mfrac><mtext>',
+                                                    node.right_child.content[0],
+                                                    '</mtext><mtext>',
+                                                    node.right_child.category,
+                                                    '</mtext></mfrac>']
+                    else:
+                        waiting_nodes.append(node.right_child)
+        mathml_list.append('<p>Sentence ID={}</p><math>{}</math>'.format(tree.self_id,
+                                                                         ''.join(flatten(tree.root_node.mathml))))
+        pbar.update(1)
 
 html = '''\
 <!doctype html>

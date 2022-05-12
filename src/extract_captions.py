@@ -4,6 +4,8 @@ from contextlib import redirect_stdout
 import argparse
 import pickle
 
+from regex import E
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--dataset', choices=['coco', 'bird'], type=str, required=True)
 args = parser.parse_args()
@@ -23,15 +25,17 @@ if dataset == 'coco':
             caps = coco.loadAnns(caps_id)
             for cap in caps:
                 cap = cap['caption']
-                cap = cap.replace(',', ' ,')
+                cap = [x.strip() for x in cap.split(',')]
+                cap = ' , '.join(cap)
                 cap = cap.replace('.', '')
+                cap = cap.replace('\'', ' \'')
                 cap = cap.replace('\n', '')
                 cap += '\n'
                 captions.append(cap)
                 images.append(str(img_id) + '\n')
-        with open(f'coco_captions_{type}.raw', 'w') as f:
+        with open(f'../data/captions/coco/captions_{type}.raw', 'w') as f:
             f.writelines(captions)
-        with open(f'coco_images_{type}.txt', 'w') as f:
+        with open(f'../data/captions/coco/images_{type}.txt', 'w') as f:
             f.writelines(images)
 elif dataset == 'bird':
     for type in ['train', 'test']:
@@ -46,9 +50,29 @@ elif dataset == 'bird':
             with open(path_to_captions, 'r') as f:
                 caps = f.readlines()
                 for cap in caps:
-                    captions.append(cap)
-                    images.append(file_name + '\n')
-        with open(f'bird_captions_{type}.raw', 'w') as f:
+                    # when caption has only one sentence
+                    if cap.count('.') == 1:
+                        cap = [x.strip() for x in cap.split(',')]
+                        cap = ' , '.join(cap)
+                        cap = cap.replace('.', '')
+                        cap = cap.replace('\'', ' \'')
+                        cap = cap.replace('\n', '')
+                        cap += '\n'
+                        captions.append(cap)
+                        images.append(file_name + '\n')
+                    # when caption has multiple sentences
+                    else:
+                        cap = [x.strip() for x in cap.rstrip().rstrip('.').split('.')]
+                        cap = ' , '.join(cap)
+                        cap = [x.strip() for x in cap.split(',')]
+                        cap = ' , '.join(cap)
+                        cap = cap.replace('.', '')
+                        cap = cap.replace('\'', ' \'')
+                        cap = cap.replace('\n', '')
+                        cap += '\n'
+                        captions.append(cap)
+                        images.append(file_name + '\n')
+        with open(f'../data/captions/bird/captions_{type}.raw', 'w') as f:
             f.writelines(captions)
-        with open(f'bird_images_{type}.txt', 'w') as f:
+        with open(f'../data/captions/bird/images_{type}.txt', 'w') as f:
             f.writelines(images)
