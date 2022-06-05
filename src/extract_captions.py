@@ -25,11 +25,16 @@ if dataset == 'coco':
             caps = coco.loadAnns(caps_id)
             for cap in caps:
                 cap = cap['caption']
+                if 'A young man riding a surfboard on a wave machine' in cap:
+                    a =0
                 cap = [x.strip() for x in cap.split(',')]
                 cap = ' , '.join(cap)
                 cap = cap.replace('.', '')
                 cap = cap.replace('\'', ' \'')
                 cap = cap.replace('\n', '')
+                cap = cap.rstrip(' ')
+                cap = cap.replace('  ', ' ')
+                cap = cap.replace('   ', ' ')
                 cap += '\n'
                 captions.append(cap)
                 images.append(str(img_id) + '\n')
@@ -57,6 +62,8 @@ elif dataset == 'bird':
                         cap = cap.replace('.', '')
                         cap = cap.replace('\'', ' \'')
                         cap = cap.replace('\n', '')
+                        cap = cap.rstrip(' ')
+                        cap = cap.replace('  ', ' ')
                         cap += '\n'
                         captions.append(cap)
                         images.append(file_name + '\n')
@@ -69,6 +76,8 @@ elif dataset == 'bird':
                         cap = cap.replace('.', '')
                         cap = cap.replace('\'', ' \'')
                         cap = cap.replace('\n', '')
+                        cap = cap.rstrip(' ')
+                        cap = cap.replace('  ', ' ')
                         cap += '\n'
                         captions.append(cap)
                         images.append(file_name + '\n')
