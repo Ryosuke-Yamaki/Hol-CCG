@@ -1,9 +1,10 @@
+from utils import DIR
+from os.path import join
 from utils import load
 import torch
 from tqdm import tqdm
-import os
 import argparse
-
+import pathlib
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model', type=str, required=True)
 parser.add_argument('-t', '--target', type=str, choices=['dev', 'test'], required=True)
@@ -14,54 +15,35 @@ parser.add_argument('--failure', action='store_true')
 args = parser.parse_args()
 
 args = parser.parse_args()
-
 MODEL = args.model
-TARGET = args.target
+TYPE = args.target
 STAG_THRESHOLD = args.stag_threshold
 FAILURE = args.failure
 DEVICE = args.device
-MODEL_TARGET = MODEL.replace(".pth", "_" + TARGET)
-
-path_to_word_category_vocab = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    '../data/grammar/word_category_vocab.pickle')
-path_to_model = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                          '../data/model/'), MODEL)
+TARGET = str(pathlib.Path(MODEL).name).replace(".pth", "_") + TYPE
+path_to_word_category_vocab = join(DIR,
+                                   'data/grammar/word_category_vocab.pickle')
 if FAILURE:
-    path_to_sentence = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                    "../span_parsing/FAILURE/{}.raw".format(MODEL_TARGET))
-    path_to_auto_pos = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                    "../span_parsing/FAILURE/{}.auto_pos".format(MODEL_TARGET))
-    stagged_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "../span_parsing/FAILURE/{}.stagged".format(MODEL_TARGET))
+    path_to_sentence = join(DIR, "span_parsing/FAILURE/{}.raw".format(TARGET))
+    path_to_auto_pos = join(DIR, "span_parsing/FAILURE/{}.auto_pos".format(TARGET))
+    stagged_file = join(DIR, "span_parsing/FAILURE/{}.stagged".format(TARGET))
 else:
     if TARGET == 'dev':
-        path_to_sentence = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw")
-        path_to_auto_pos = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "../../java-candc/data/auto-pos/wsj00.auto_pos")
-        stagged_file = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "../../java-candc/data/auto-stagged/" +
-            MODEL_TARGET +
-            '.stagged')
+        path_to_sentence = join(DIR,
+                                "../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw")
+        path_to_auto_pos = join(DIR,
+                                "../java-candc/data/auto-pos/wsj00.auto_pos")
+        stagged_file = join(DIR,
+                            f"../java-candc/data/auto-stagged/{TARGET}.stagged")
     elif TARGET == 'test':
-        path_to_sentence = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw")
-        path_to_auto_pos = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "../../java-candc/data/auto-pos/wsj23.auto_pos")
-        stagged_file = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "../../java-candc/data/auto-stagged/" +
-            MODEL_TARGET +
-            '.stagged')
-
+        path_to_sentence = join(DIR,
+                                "../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw")
+        path_to_auto_pos = join(DIR,
+                                "../java-candc/data/auto-pos/wsj23.auto_pos")
+        stagged_file = join(DIR,
+                            f"../java-candc/data/auto-stagged/{TARGET}.stagged")
 word_category_vocab = load(path_to_word_category_vocab)
-tree_net = torch.load(path_to_model, map_location=DEVICE)
+tree_net = torch.load(MODEL, map_location=DEVICE)
 tree_net.device = DEVICE
 tree_net.eval()
 word_ff = tree_net.word_ff

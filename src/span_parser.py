@@ -1,10 +1,9 @@
 import os
 import argparse
-from collections import Counter
-import sys
 from utils import load
 import torch
-from utils import circular_correlation, circular_convolution
+from utils import circular_correlation, circular_convolution, shuffled_circular_convolution, DIR
+from os.path import join
 
 
 class Category:
@@ -124,6 +123,8 @@ class Parser:
                     self.binary_rule[(key[0], key[1])] = [key[2]]
         self.tree_net = tree_net
         self.composition = tree_net.composition
+        if self.composition == 's_conv':
+            self.P = tree_net.P
         self.word_ff = tree_net.word_ff
         self.phrase_ff = tree_net.phrase_ff
         self.span_ff = tree_net.span_ff
@@ -216,6 +217,9 @@ class Parser:
                                 elif self.composition == 'conv':
                                     composed_vector = circular_convolution(
                                         left_cat.vector, right_cat.vector, self.tree_net.vector_norm)
+                                elif self.composition == 's_conv':
+                                    composed_vector = shuffled_circular_convolution(
+                                        left_cat.vector, right_cat.vector, self.P, self.tree_net.vector_norm)
                                 span_prob = torch.softmax(
                                     self.span_ff(composed_vector), dim=-1)[1]
                                 if span_prob > self.span_threshold:
@@ -376,7 +380,7 @@ def main():
 
     args = parser.parse_args()
 
-    model = args.model
+    path_to_model = args.model
     target = args.target
     stag_threhold = args.stag_threshold
     phrase_threshold = args.phrase_threshold
@@ -386,28 +390,20 @@ def main():
     device = args.device
     max_num_sentence = args.max_num_sentence
 
-    path_to_model = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                              '../data/model/'), model)
-    path_to_word_category_vocab = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        '../data/grammar/word_category_vocab.pickle')
-    path_to_phrase_category_vocab = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        '../data/grammar/phrase_category_vocab.pickle')
-    path_to_head_info = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        '../data/grammar/head_info.pickle')
-    path_to_rule_counter = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        '../data/grammar/rule_counter.pickle')
+    path_to_word_category_vocab = join(DIR,
+                                       'data/grammar/word_category_vocab.pickle')
+    path_to_phrase_category_vocab = join(DIR,
+                                         'data/grammar/phrase_category_vocab.pickle')
+    path_to_head_info = join(DIR,
+                             'data/grammar/head_info.pickle')
+    path_to_rule_counter = join(DIR,
+                                'data/grammar/rule_counter.pickle')
     if target == 'dev':
-        path_to_sentence_list = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            '../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw')
+        path_to_sentence_list = join(DIR,
+                                     '../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw')
     elif target == 'test':
-        path_to_sentence_list = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            '../../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw')
+        path_to_sentence_list = join(DIR,
+                                     '../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw')
     else:
         path_to_sentence_list = target
     word_category_vocab = load(path_to_word_category_vocab)
@@ -432,8 +428,6 @@ def main():
     with open(path_to_sentence_list, 'r') as f:
         sentence_list = f.readlines()
 
-    num_success = 0
-    num_fail = 0
     sentence_id = 0
     for sentence in sentence_list[:max_num_sentence]:
         sentence_id += 1
@@ -442,7 +436,6 @@ def main():
         root_cell = list(chart.values())[-1]
         # when parsing is failed
         if len(root_cell.best_category) == 0:
-            num_fail += 1
             if apply_skimmer:
                 autos, scope_list = parser.skimmer(chart)
                 n = 0
@@ -457,12 +450,9 @@ def main():
                 print('(<L fail POS POS {} fail>)'.format('_'.join(sentence.split())))
         # when parsing is succesful
         else:
-            num_success += 1
             auto = parser.decode(root_cell)
             print('ID={} PARSER=TEST APPLY_SKIMMER=FALSE'.format(sentence_id))
             print(auto)
-    print(
-        f'success ratio: {num_success / (num_success + num_fail)}({num_success}/{(num_success + num_fail)})')
 
 
 if __name__ == "__main__":

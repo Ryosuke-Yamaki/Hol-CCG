@@ -9,8 +9,7 @@ from torch.nn.utils.rnn import pad_sequence
 import torch
 import torch.nn as nn
 from operator import itemgetter
-from utils import circular_correlation, circular_convolution, complex_normalize
-from collections import OrderedDict
+from utils import circular_correlation, circular_convolution, shuffled_circular_convolution, complex_normalize
 
 
 class Node:
@@ -603,6 +602,8 @@ class Tree_Net(nn.Module):
         elif self.normalize_type == 'complex':
             self.vector_norm = None
         self.composition = composition
+        if self.composition == 's_conv':
+            self.P = torch.tensor(np.random.permutation(self.model_dim), device=device)
         self.train_encoder = train_encoder
         # the list which to record the modules to set separated learning rate
         self.base_modules = []
@@ -742,6 +743,9 @@ class Tree_Net(nn.Module):
                 elif self.composition == 'conv':
                     composed_vector = circular_convolution(
                         left_child_vector, right_child_vector, self.vector_norm)
+                elif self.composition == 's_conv':
+                    composed_vector = shuffled_circular_convolution(
+                        left_child_vector, right_child_vector, self.P, self.vector_norm)
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
 

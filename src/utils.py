@@ -11,6 +11,8 @@ from torch import conj
 from torch.fft import fft, ifft
 from torch.nn.functional import normalize
 
+DIR = os.getcwd().replace("src", "")
+
 
 def circular_correlation(a, b, vector_norm):
     a_ = fft(a)
@@ -45,20 +47,22 @@ def circular_convolution(a, b, vector_norm):
     return c
 
 
-def shuffled_circular_convolution(a, b, P):
-    a_ = fft(a)
-    b_ = fft(torch.mv(P, b))
-    c_ = a_ * b_
-    c = ifft(c_).real
-    return c
-
-
 def inverse_circular_convolution(p, c1):
     p_ = fft(p)
     c1_ = conj(fft(c1))
     c2_ = p_ / (c1_ + 1e-6)
     c2 = ifft(c2_).real
     return c2
+
+
+def shuffled_circular_convolution(a, b, P, vector_norm):
+    a_ = fft(a)
+    b_ = fft(torch.index_select(b, -1, P))
+    c_ = a_ * b_
+    c = ifft(c_).real
+    if vector_norm is not None:
+        c = vector_norm * normalize(c, dim=-1)
+    return c
 
 
 def complex_normalize(v):
