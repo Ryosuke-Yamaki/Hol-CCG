@@ -680,10 +680,16 @@ class Tree_Net(nn.Module):
             padding=True,
             return_tensors='pt').to(self.device)
         if self.train_encoder:
-            word_vector = self.model(**input).last_hidden_state[:, 1:-1]
+            if 'opt' in self.model.name_or_path:
+                word_vector = self.model(**input).last_hidden_state[:, 1:]
+            else:
+                word_vector = self.model(**input).last_hidden_state[:, 1:-1]
         else:
             with torch.no_grad():
-                word_vector = self.model(**input).last_hidden_state[:, 1:-1]
+                if 'opt' in self.model.name_or_path:
+                    word_vector = self.model(**input).last_hidden_state[:, 1:]
+                else:
+                    word_vector = self.model(**input).last_hidden_state[:, 1:-1]
         word_vector_list = []
         lengths = []
         for vector, info in zip(word_vector, word_split):
