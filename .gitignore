@@ -6,3 +6,4 @@ __pycache__/
 /src/*test*
 /src/wandb
 /src/*.log
+id_rsa
