@@ -7,3 +7,4 @@ __pycache__/
 /src/wandb
 /src/*.log
 id_rsa
+/parser/
