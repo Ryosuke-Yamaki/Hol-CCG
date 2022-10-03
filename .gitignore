@@ -7,4 +7,5 @@ __pycache__/
 /src/wandb
 /src/*.log
 id_rsa
-/parser/
+/candc-1.00/
+/java-candc/
