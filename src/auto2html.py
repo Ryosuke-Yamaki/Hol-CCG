@@ -12,8 +12,18 @@ class Converter:
         self.sentence_list = []
         f = open(path_to_data, 'r')
         data = f.readlines()
+        filtered_data = []
+        for line in data:
+            if line == '\n' or line == ' ':
+                continue
+            else:
+                filtered_data.append(line)
+        data = filtered_data
+
         f.close()
-        for i in range(len(data)):
+        for i in range(len(data[:250])):
+            # if data[i] == '':
+            #     continue
             if i % 2 == 1:
                 self.sentence_list.append(data[i])
 
@@ -173,22 +183,22 @@ def flatten(mathml):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('path_to_auto', type=str)
-parser.add_argument('path_to_images', type=str)
+# parser.add_argument('path_to_images', type=str)
 
 args = parser.parse_args()
 
 path_to_auto = args.path_to_auto
-path_to_images = args.path_to_images
-if 'coco' in path_to_images:
-    if 'train' in path_to_images:
-        path_to_image = 'coco/train2014/COCO_train2014_'
-    elif 'val' in path_to_images:
-        path_to_image = 'coco/val2014/COCO_val2014_'
-elif 'bird' in path_to_images:
-    path_to_image = 'CUB_200_2011/images/'
-else:
-    print('Error!')
-    exit()
+# path_to_images = args.path_to_images
+# if 'coco' in path_to_images:
+#     if 'train' in path_to_images:
+#         path_to_image = 'coco/train2014/COCO_train2014_'
+#     elif 'val' in path_to_images:
+#         path_to_image = 'coco/val2014/COCO_val2014_'
+# elif 'bird' in path_to_images:
+#     path_to_image = 'CUB_200_2011/images/'
+# else:
+#     print('Error!')
+#     exit()
 path_to_converted = 'converted.txt'
 
 open(path_to_converted, 'w')
@@ -218,25 +228,27 @@ with tqdm(total=len(tree_list.tree_list), unit="tree") as pbar:
                     node.right_child = tree.node_list[node.right_child_node_id]
         pbar.update(1)
 
-with open(path_to_images, 'r') as f:
-    images = f.readlines()
+# with open(path_to_images, 'r') as f:
+#     images = f.readlines()
 
 mathml_list = []
 previous_image = ''
+num_sentence = 0
 with tqdm(total=len(tree_list.tree_list), unit="tree") as pbar:
     pbar.set_description("Converting to html format...")
-    for tree, image in zip(tree_list.tree_list, images):
-        image = image.rstrip()
-        if image != previous_image:
-            num_sentence = 0
-            if 'coco' in path_to_images:
-                mathml_list.append('<p>Image ID={}</p><img src="{}" height="150">'.format(image,
-                                                                                          path_to_image + str(image.zfill(12)) + '.jpg'))
-            elif 'bird' in path_to_images:
-                mathml_list.append(
-                    '<p>Image ID={}</p><img src="{}" height="150">'.format(image, path_to_image + image + '.jpg'))
-        tree.self_id = image + '.' + str(num_sentence)
-        previous_image = image
+    # for tree, image in zip(tree_list.tree_list, images):
+    #     image = image.rstrip()
+    #     if image != previous_image:
+    #         num_sentence = 0
+    #         if 'coco' in path_to_images:
+    #             mathml_list.append('<p>Image ID={}</p><img src="{}" height="150">'.format(image,
+    #                                                                                       path_to_image + str(image.zfill(12)) + '.jpg'))
+    #         elif 'bird' in path_to_images:
+    #             mathml_list.append(
+    #                 '<p>Image ID={}</p><img src="{}" height="150">'.format(image, path_to_image + image + '.jpg'))
+    for tree in tree_list.tree_list:
+        # tree.self_id = image + '.' + str(num_sentence)
+        # previous_image = image
         num_sentence += 1
         tree.root_node.mathml = []
         waiting_nodes = [tree.root_node]

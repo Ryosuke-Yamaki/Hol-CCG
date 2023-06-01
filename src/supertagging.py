@@ -7,12 +7,11 @@ import argparse
 import pathlib
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model', type=str, required=True)
-parser.add_argument('-t', '--target', type=str, choices=['dev', 'test'], required=True)
+# parser.add_argument('-t', '--target', type=str, choices=['dev', 'test'], required=True)
+parser.add_argument('-t', '--target', type=str, required=True)
 parser.add_argument('--stag_threshold', type=float, default=0.1)
 parser.add_argument('-d', '--device', type=torch.device, default=torch.device('cuda:0'))
 parser.add_argument('--failure', action='store_true')
-
-args = parser.parse_args()
 
 args = parser.parse_args()
 MODEL = args.model
@@ -28,20 +27,24 @@ if FAILURE:
     path_to_auto_pos = join(DIR, "span_parsing/FAILURE/{}.auto_pos".format(TARGET))
     stagged_file = join(DIR, "span_parsing/FAILURE/{}.stagged".format(TARGET))
 else:
-    if TARGET == 'dev':
+    if TYPE == 'dev':
         path_to_sentence = join(DIR,
                                 "../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw")
         path_to_auto_pos = join(DIR,
-                                "../java-candc/data/auto-pos/wsj00.auto_pos")
+                                "java-candc/data/auto-pos/wsj00.auto_pos")
         stagged_file = join(DIR,
-                            f"../java-candc/data/auto-stagged/{TARGET}.stagged")
-    elif TARGET == 'test':
+                            f"java-candc/data/auto-stagged/{TARGET}.stagged")
+    elif TYPE == 'test':
         path_to_sentence = join(DIR,
                                 "../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw")
         path_to_auto_pos = join(DIR,
                                 "../java-candc/data/auto-pos/wsj23.auto_pos")
         stagged_file = join(DIR,
                             f"../java-candc/data/auto-stagged/{TARGET}.stagged")
+    else:
+        path_to_sentence = TYPE
+        path_to_auto_pos = join(f'../candc-1.00/{TYPE.replace(".raw", ".pos")}')
+        stagged_file = join(f'../candc-1.00/{TYPE.replace(".raw", ".stagged")}')
 word_category_vocab = load(path_to_word_category_vocab)
 tree_net = torch.load(MODEL, map_location=DEVICE)
 tree_net.device = DEVICE
@@ -99,16 +102,20 @@ with torch.no_grad():
             for info in pos:
                 pos_tags.append(info.split('|')[1])
 
+            line = []
             for word, pos, super in zip(converted_sentence_, pos_tags, super_tags):
                 temp = []
                 temp.append(word)
                 temp.append(pos)
-                temp.append(str(len(super)))
+                # temp.append(str(len(super)))
                 for info in super:
                     temp.append(info[0])
-                    temp.append(str(info[1]))
-                parser_input.append('\t'.join(temp) + '\n')
-            parser_input.append('\n')
+                    break
+                    # temp.append(str(info[1]))
+                line.append('|'.join(temp))
+            parser_input.append(' '.join(line)+'\n')
+            # parser_input.append('|'.join(temp))
+            # parser_input.append('\n')
             pbar.update(1)
 
 with open(stagged_file, "w") as f:
