@@ -1,6 +1,6 @@
 import os
 from typing import Tuple
-from models import Tree_List
+from tree import TreeList
 from utils import dump
 
 
@@ -308,21 +308,21 @@ def main():
             break
 
     print('Initializing tree...')
-    train_tree_list = Tree_List(
+    train_tree_list = TreeList(
         os.path.join(path_to_converted, 'train.txt'), type='train')
 
     word_category_vocab = train_tree_list.word_category_vocab
     phrase_category_vocab = train_tree_list.phrase_category_vocab
     head_info = train_tree_list.head_info
 
-    dev_tree_list = Tree_List(
+    dev_tree_list = TreeList(
         os.path.join(path_to_converted, 'dev.txt'),
         type='dev',
         word_category_vocab=word_category_vocab,
         phrase_category_vocab=phrase_category_vocab,
         head_info=head_info)
 
-    test_tree_list = Tree_List(
+    test_tree_list = TreeList(
         os.path.join(path_to_converted, 'test.txt'),
         type='test',
         word_category_vocab=word_category_vocab,
