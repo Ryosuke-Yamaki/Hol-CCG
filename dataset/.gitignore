@@ -1,0 +1,5 @@
+!.gitignore
+ccgbank_1_1/*
+converted/*.txt
+grammar/*.pickle
+tree_list/*.pickle
