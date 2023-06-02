@@ -1,4 +1,3 @@
-
 from torchtext.vocab import Vocab
 from collections import Counter
 import random
@@ -7,10 +6,20 @@ import numpy as np
 import torch
 from operator import itemgetter
 from utils import circular_correlation, circular_convolution
+from typing import List, Union
+from transformers import RobertaTokenizer, BertTokenizer
+from holccg import HolCCG
 
 
 class Node:
-    def __init__(self, node_info):
+    def __init__(self, node_info: list) -> None:
+        """Class for node in constituency tree.
+
+        Parameters
+        ----------
+        node_info : list
+            node information
+        """
         if node_info[0] == 'True':
             self.is_leaf = True
         else:
@@ -34,7 +43,19 @@ class Node:
                 self.right_child_node_id = int(node_info[5])
                 self.head = int(node_info[6])
 
-    def convert_content(self, content):
+    def convert_content(self, content: str) -> str:
+        """Convert content to readable format.
+
+        Parameters
+        ----------
+        content : str
+            content to be converted
+
+        Returns
+        -------
+        str
+            converted content
+        """
         if content == "-LRB-":
             content = "("
         elif content == "-LCB-":
@@ -49,11 +70,22 @@ class Node:
 
 
 class Tree:
-    def __init__(self, self_id, node_list):
+    def __init__(self, self_id: int, node_list: list) -> None:
+        """Class for constituency tree.
+
+        Parameters
+        ----------
+        self_id : int
+            self id of the tree
+        node_list : list
+            list of nodes in the tree
+        """
         self.self_id = self_id
         self.node_list = node_list
 
-    def set_node_composition_info(self):
+    def set_node_composition_info(self) -> None:
+        """Set composition information of each node.
+        """
         for node in self.node_list:
             if node.is_leaf:
                 node.ready = True
@@ -85,7 +117,9 @@ class Tree:
                 break
         self.sentence = self.node_list[-1].content
 
-    def set_original_position_of_leaf_node(self):
+    def set_original_position_of_leaf_node(self) -> None:
+        """Set original position in the sentence of each leaf node.
+        """
         self.original_position = []
         self.spans = []
         node = self.node_list[-1]
@@ -124,8 +158,8 @@ class Tree:
                     self.original_position.append(
                         [right_child_node.self_id, right_child_node.original_position])
 
-    # generate the random binary tree in order to obtain negative training sample for span scoring
-    def generate_random_tree(self):
+    def generate_random_tree(self) -> None:
+        """generate the random binary tree in order to obtain negative training sample for span classification."""
         random_composition_info = []
         random_original_position = []
         # list of span's id which do not exist in gold tree
@@ -186,7 +220,19 @@ class Tree:
         random_composition_info.reverse()
         return len(node_list), random_composition_info, random_original_position, negative_node_id
 
-    def set_word_split(self, tokenizer):
+    def set_word_split(self, tokenizer: Union[RobertaTokenizer, BertTokenizer]) -> List[List[int]]:
+        """Set word split information, where each word is split into several tokens.
+
+        Parameters
+        ----------
+        tokenizer : Union[RobertaTokenizer, BertTokenizer]
+            Tokenizer used to split words into tokens.
+
+        Returns
+        -------
+        List[List[int]]
+            List of word split information.
+        """
         sentence = " ".join(self.sentence)
         tokens = tokenizer.tokenize(sentence)
         tokenized_pos = 0
@@ -212,19 +258,40 @@ class Tree:
 class TreeList:
     def __init__(
             self,
-            PATH_TO_DATA,
-            type,
-            word_category_vocab=None,
-            phrase_category_vocab=None,
-            head_info=None,
-            min_word_category=0,
-            min_phrase_category=0,
-            device=torch.device('cpu')):
+            path_to_tree_list: str,
+            type: str,
+            word_category_vocab: Vocab = None,
+            phrase_category_vocab: Vocab = None,
+            head_info: dict = None,
+            min_word_category: int = 0,
+            min_phrase_category: int = 0,
+            device: torch.device = torch.device('cuda')) -> None:
+        """class for tree list
+
+        Parameters
+        ----------
+        path_to_tree_list : str
+            path to preprocessd tree list
+        type : str
+            type of tree list, 'train' or 'dev' or 'test'
+        word_category_vocab : Vocab, optional
+            vocabulary for word category, by default None
+        phrase_category_vocab : Vocab, optional
+            vocabulary for phrase category, by default None
+        head_info : dict, optional
+            dictionary of head information, by default None
+        min_word_category : int, optional
+            minimum frequency of word category, by default 0
+        min_phrase_category : int, optional
+            minimum frequency of phrase category, by default 0
+        device : torch.device, optional
+            device to use, by default torch.device('cuda')
+        """
         self.type = type
         self.device = device
         self.min_word_category = min_word_category
         self.min_phrase_category = min_phrase_category
-        self.set_tree_list(PATH_TO_DATA)
+        self.set_tree_list(path_to_tree_list)
         if type == 'train':
             self.set_vocab_and_head()
         else:
@@ -233,11 +300,18 @@ class TreeList:
             self.head_info = head_info
         self.set_category_id()
 
-    def set_tree_list(self, PATH_TO_DATA):
+    def set_tree_list(self, path_to_tree_list: str) -> None:
+        """Construct the list of trees.
+
+        Parameters
+        ----------
+        path_to_tree_list : str
+            path to preprocessd tree list
+        """
         self.tree_list = []
         tree_id = 0
         node_list = []
-        with open(PATH_TO_DATA, 'r') as f:
+        with open(path_to_tree_list, 'r') as f:
             node_info_list = [node_info.strip() for node_info in f.readlines()]
         node_info_list = [node_info.replace(
             '\n', '') for node_info in node_info_list]
@@ -253,7 +327,9 @@ class TreeList:
                     tree_id += 1
                 pbar.update(1)
 
-    def set_vocab_and_head(self):
+    def set_vocab_and_head(self) -> None:
+        """Construct vocabulary for word and phrase category and head information.
+        """
         word_category_counter = Counter()
         phrase_category_counter = Counter()
         head_info_temp = {}
@@ -290,7 +366,9 @@ class TreeList:
             else:
                 self.head_info[k] = 1
 
-    def set_category_id(self):
+    def set_category_id(self) -> None:
+        """Set category id for each node.
+        """
         word_category_vocab = self.word_category_vocab
         phrase_category_vocab = self.phrase_category_vocab
         for tree in self.tree_list:
@@ -302,7 +380,14 @@ class TreeList:
             tree.set_node_composition_info()
             tree.set_original_position_of_leaf_node()
 
-    def set_info_for_training(self, tokenizer=None):
+    def set_info_for_training(self, tokenizer: Union[RobertaTokenizer, BertTokenizer]) -> None:
+        """Set information for training.
+
+        Parameters
+        ----------
+        tokenizer : Union[RobertaTokenizer, BertTokenizer]
+            tokenizer to use for tokenization
+        """
         self.num_node = []
         self.sentence_list = []
         self.label_list = []
@@ -329,7 +414,8 @@ class TreeList:
             self.word_split.append(tree.set_word_split(tokenizer))
         self.sorted_tree_id = np.argsort(self.num_node)
 
-    def make_shuffled_tree_id(self):
+    def make_shuffled_tree_id(self) -> np.ndarray:
+        """Make shuffled tree id."""
         shuffled_tree_id = []
         splitted = np.array_split(self.sorted_tree_id, 4)
         for id_list in splitted:
@@ -337,7 +423,14 @@ class TreeList:
             shuffled_tree_id.append(id_list)
         return np.concatenate(shuffled_tree_id)
 
-    def make_batch(self, BATCH_SIZE=None):
+    def make_batch(self, batch_size: int = None) -> None:
+        """Make batch for training.
+
+        Parameters
+        ----------
+        batch_size : int, optional
+            batch size, by default None
+        """
         # make batch content id includes leaf node content id for each tree belongs to batch
         batch_num_node = []
         batch_sentence_list = []
@@ -376,7 +469,7 @@ class TreeList:
                     random_tree_info[3],
                     dtype=torch.long,
                     device=self.device))
-        if BATCH_SIZE is None:
+        if batch_size is None:
             batch_tree_id_list = list(range(num_tree))
             batch_num_node.append(
                 list(itemgetter(*batch_tree_id_list)(self.num_node)))
@@ -403,8 +496,8 @@ class TreeList:
         else:
             # shuffle the tree_id in tree_list
             shuffled_tree_id = self.make_shuffled_tree_id()
-            for idx in range(0, num_tree - BATCH_SIZE, BATCH_SIZE):
-                batch_tree_id_list = shuffled_tree_id[idx:idx + BATCH_SIZE]
+            for idx in range(0, num_tree - batch_size, batch_size):
+                batch_tree_id_list = shuffled_tree_id[idx:idx + batch_size]
                 batch_num_node.append(
                     list(itemgetter(*batch_tree_id_list)(self.num_node)))
                 batch_sentence_list.append(
@@ -432,27 +525,27 @@ class TreeList:
                     list(itemgetter(*batch_tree_id_list)(random_original_position)))
                 batch_random_negative_node_id.append(
                     list(itemgetter(*batch_tree_id_list)(random_negative_node_id)))
-            # the part cannot devided by BATCH_SIZE
+            # the part cannot devided by batch_size
             batch_num_node.append(list(itemgetter(
-                *shuffled_tree_id[idx + BATCH_SIZE:])(self.num_node)))
+                *shuffled_tree_id[idx + batch_size:])(self.num_node)))
             batch_sentence_list.append(
-                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.sentence_list)))
+                list(itemgetter(*shuffled_tree_id[idx + batch_size:])(self.sentence_list)))
             batch_label_list.append(list(itemgetter(
-                *shuffled_tree_id[idx + BATCH_SIZE:])(self.label_list)))
+                *shuffled_tree_id[idx + batch_size:])(self.label_list)))
             batch_original_position.append(
-                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.original_position)))
+                list(itemgetter(*shuffled_tree_id[idx + batch_size:])(self.original_position)))
             batch_composition_info.append(list(itemgetter(
-                *shuffled_tree_id[idx + BATCH_SIZE:])(self.composition_info)))
+                *shuffled_tree_id[idx + batch_size:])(self.composition_info)))
             batch_word_split.append(
-                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(self.word_split)))
+                list(itemgetter(*shuffled_tree_id[idx + batch_size:])(self.word_split)))
             batch_random_num_node.append(
-                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_num_node)))
+                list(itemgetter(*shuffled_tree_id[idx + batch_size:])(random_num_node)))
             batch_random_composition_info.append(
-                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_composition_info)))
+                list(itemgetter(*shuffled_tree_id[idx + batch_size:])(random_composition_info)))
             batch_random_original_pos.append(
-                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_original_position)))
+                list(itemgetter(*shuffled_tree_id[idx + batch_size:])(random_original_position)))
             batch_random_negative_node_id.append(
-                list(itemgetter(*shuffled_tree_id[idx + BATCH_SIZE:])(random_negative_node_id)))
+                list(itemgetter(*shuffled_tree_id[idx + batch_size:])(random_negative_node_id)))
 
         for idx in range(len(batch_composition_info)):
             composition_list = batch_composition_info[idx]
@@ -495,7 +588,7 @@ class TreeList:
             batch_random_negative_node_id))
         return batch_list
 
-    def set_vector(self, holccg):
+    def set_vector(self, holccg: HolCCG) -> None:
         """set the vector for all node in tree list
 
         Parameters
@@ -527,7 +620,14 @@ class TreeList:
                             left_node.vector, right_node.vector, holccg.vector_norm)
                 pbar.update(1)
 
-    def convert_to_binary(self, type):
+    def convert_to_binary(self, type: str) -> None:
+        """convert tree to binary tree
+
+        Parameters
+        ----------
+        type
+            type of binary tree
+        """
         for tree in self.tree_list:
             root_node = tree.node_list[-1]
             root_node.parent_node = None
@@ -564,7 +664,14 @@ class TreeList:
             self.set_vocab_and_head()
         self.set_category_id()
 
-    def count_rule(self):
+    def count_rule(self) -> Counter:
+        """count rule in tree list
+
+        Returns
+        -------
+        rule_counter
+            rule counter
+        """
         rule_counter = Counter()
         for tree in self.tree_list:
             for node in tree.node_list:
