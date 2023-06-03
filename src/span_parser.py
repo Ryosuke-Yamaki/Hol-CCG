@@ -1,27 +1,60 @@
 import os
 import argparse
-from utils import load
+from utils import load, convert_content
 import torch
-from utils import circular_correlation, circular_convolution, shuffled_circular_convolution, DIR
-from os.path import join
+from utils import circular_correlation, circular_convolution, shuffled_circular_convolution
+from torchtext.vocab import Vocab
+from holccg import HolCCG
+from typing import List, Dict, Tuple
 
 
 class Category:
     def __init__(
             self,
-            cell_id,
-            cat,
-            type,
-            is_leaf=False,
-            vector=None,
-            total_ll=None,
-            cat_ll=None,
-            span_ll=None,
-            num_child=None,
-            left_child=None,
-            right_child=None,
-            head=None,
-            word=None):
+            cell_id: Tuple[int, int],
+            cat: str,
+            type: str,
+            is_leaf: bool = False,
+            vector: torch.Tensor = None,
+            total_ll: float = None,
+            cat_ll: float = None,
+            span_ll: float = None,
+            num_child: int = None,
+            left_child: 'Category' = None,
+            right_child: 'Category' = None,
+            head: int = None,
+            word: str = None) -> None:
+        """class for each category in the chart
+
+        Parameters
+        ----------
+        cell_id : Tuple[int, int]
+            id of the cell. (start, end)
+        cat : str
+            category
+        type : str
+            type of combinatory rule. 'bin' or 'unary'.
+        is_leaf : bool, optional
+            whether the category is leaf or not, by default False
+        vector : torch.Tensor, optional
+            vector representation of the category, by default None
+        total_ll : float, optional
+            total log likelihood of the category, by default None
+        cat_ll : float, optional
+            log likelihood of the category assignment, by default None
+        span_ll : float, optional
+            log likelihood of the span existence, by default None
+        num_child : int, optional
+            number of children, by default None
+        left_child : Category, optional
+            left child of the category, by default None
+        right_child : Category, optional
+            right child of the category, by default None
+        head : int, optional
+            direction of the head, by default None
+        word : str, optional
+            corresponding word to the category, by default None
+        """
         self.cell_id = cell_id
         self.original_cat = cat
         cat_list = cat.split('-->')
@@ -42,11 +75,25 @@ class Category:
 
 
 class Cell:
-    def __init__(self, content):
+    def __init__(self, content: str) -> None:
+        """class for each cell in the chart
+
+        Parameters
+        ----------
+        content : str
+            word or phrase of the cell
+        """
         self.content = content
         self.best_category = {}
 
-    def add_category(self, category):
+    def add_category(self, category: Category) -> None:
+        """add category into the cell
+
+        Parameters
+        ----------
+        category : Category
+            category to add
+        """
         # when category already exist in the cell
         if category.cat in self.best_category:
             best_category = self.best_category[category.cat]
@@ -60,7 +107,15 @@ class Cell:
         if len(category.unary_chain) > 0:
             self.set_unary_chain(category)
 
-    def set_unary_chain(self, category):
+    def set_unary_chain(self, category: Category) -> None:
+        """set unary chain of the category for merged category
+
+        Parameters
+        ----------
+        category : Category
+            category to set unary chain
+        """
+
         cell_id = category.cell_id
         type = category.type
         is_leaf = category.is_leaf
@@ -99,18 +154,41 @@ class Cell:
         category.word = word
 
 
-class Parser:
+class SpanParser:
     def __init__(
             self,
-            word_category_vocab,
-            phrase_category_vocab,
-            head_info,
-            rule_counter,
-            tree_net,
-            stag_threshold,
-            phrase_threshold,
-            span_threshold,
-            min_freq):
+            word_category_vocab: Vocab,
+            phrase_category_vocab: Vocab,
+            head_info: dict,
+            rule_counter: dict,
+            holccg: HolCCG,
+            stag_threshold: float,
+            phrase_threshold: float,
+            span_threshold: float,
+            min_freq: int = 1) -> None:
+        """class for span parser using HolCCG
+
+        Parameters
+        ----------
+        word_category_vocab : Vocab
+            word category vocabulary
+        phrase_category_vocab : Vocab
+            phrase category vocabulary
+        head_info : dict
+            head information depends on each combinatory rule
+        rule_counter : dict
+            dictionary of combinatory rules and its frequency
+        holccg : HolCCG
+            pre-trained HolCCG model
+        stag_threshold : float
+            supertagging threshold
+        phrase_threshold : float
+            phrase category threshold
+        span_threshold : float
+            span threshold
+        min_freq : int, optional
+            minimum frequency of combinatory rules, by default 1
+        """
         self.word_category_vocab = word_category_vocab
         self.phrase_category_vocab = phrase_category_vocab
         self.head_info = head_info
@@ -121,38 +199,41 @@ class Parser:
                     self.binary_rule[(key[0], key[1])].append(key[2])
                 else:
                     self.binary_rule[(key[0], key[1])] = [key[2]]
-        self.tree_net = tree_net
-        self.composition = tree_net.composition
+        self.holccg = holccg
+        self.composition = holccg.composition
         if self.composition == 's_conv':
-            self.P = tree_net.P
-        self.word_ff = tree_net.word_ff
-        self.phrase_ff = tree_net.phrase_ff
-        self.span_ff = tree_net.span_ff
+            self.P = holccg.P
+        self.word_classifier = holccg.word_classifier
+        self.phrase_classifier = holccg.phrase_classifier
+        self.span_classifier = holccg.span_classifier
         self.stag_threshold = stag_threshold
         self.phrase_threshold = phrase_threshold
         self.span_threshold = span_threshold
 
     @torch.no_grad()
-    def initialize_chart(self, sentence):
+    def initialize_chart(self, sentence: str) -> Dict[Tuple[int, int], Cell]:
+        """initialize CKY chart
+
+        Parameters
+        ----------
+        sentence : str
+            sentence to be parsed
+
+        Returns
+        -------
+        Dict[Tuple[int, int], Cell]
+            initialized CKY chart
+        """
+
         sentence = sentence.split()
         converted_sentence = []
         for i in range(len(sentence)):
             content = sentence[i]
-            if content == "-LRB-":
-                content = "("
-            elif content == "-LCB-":
-                content = "{"
-            elif content == "-RRB-":
-                content = ")"
-            elif content == "-RCB-":
-                content = "}"
-            if r"\/" in content:
-                content = content.replace(r"\/", "/")
-            converted_sentence.append(content)
-        word_split = self.tree_net.set_word_split(converted_sentence)
-        word_vectors, _ = self.tree_net.encode([" ".join(converted_sentence)], [word_split])
+            converted_sentence.append(convert_content(content))
+        word_split = self.holccg.set_word_split(converted_sentence)
+        word_vectors, _ = self.holccg.encode([" ".join(converted_sentence)], [word_split])
         word_vectors = word_vectors[0]
-        word_probs_list = torch.softmax(self.word_ff(word_vectors), dim=-1)
+        word_probs_list = torch.softmax(self.word_classifier(word_vectors), dim=-1)
         word_predict_cats = torch.argsort(word_probs_list, descending=True)
         word_predict_cats = word_predict_cats[word_predict_cats != 0].view(
             word_probs_list.shape[0], -1)
@@ -194,7 +275,20 @@ class Parser:
         return chart
 
     @torch.no_grad()
-    def parse(self, sentence):
+    def parse(self, sentence: str) -> Dict[Tuple[int, int], Cell]:
+        """parse sentence using span-based CKY algorithm
+
+        Parameters
+        ----------
+        sentence : str
+            sentence to be parsed
+
+        Returns
+        -------
+        Dict[Tuple[int, int], Cell]
+            parsed CKY chart
+        """
+
         chart = self.initialize_chart(sentence)
         n = len(chart)
         for length in range(2, n + 1):
@@ -213,19 +307,19 @@ class Parser:
                             else:
                                 if self.composition == 'corr':
                                     composed_vector = circular_correlation(
-                                        left_cat.vector, right_cat.vector, self.tree_net.vector_norm)
+                                        left_cat.vector, right_cat.vector, self.holccg.vector_norm)
                                 elif self.composition == 'conv':
                                     composed_vector = circular_convolution(
-                                        left_cat.vector, right_cat.vector, self.tree_net.vector_norm)
+                                        left_cat.vector, right_cat.vector, self.holccg.vector_norm)
                                 elif self.composition == 's_conv':
                                     composed_vector = shuffled_circular_convolution(
-                                        left_cat.vector, right_cat.vector, self.P, self.tree_net.vector_norm)
+                                        left_cat.vector, right_cat.vector, self.P, self.holccg.vector_norm)
                                 span_prob = torch.softmax(
-                                    self.span_ff(composed_vector), dim=-1)[1]
+                                    self.span_classifier(composed_vector), dim=-1)[1]
                                 if span_prob > self.span_threshold:
                                     span_ll = torch.log(span_prob)
                                     phrase_probs = torch.softmax(
-                                        self.phrase_ff(composed_vector), dim=-1)
+                                        self.phrase_classifier(composed_vector), dim=-1)
                                     for parent_cat in possible_cats:
                                         parent_cat_id = self.phrase_category_vocab[parent_cat]
                                         # when category is not <unk>
@@ -252,7 +346,20 @@ class Parser:
                                                     parent_category)
         return chart
 
-    def skimmer(self, chart):
+    def skimmer(self, chart: Dict[Tuple[int, int], Cell]) -> Tuple[str, Tuple[int, int]]:
+        """apply skimmer mode to chart. find successfully parsed subspans.
+
+        Parameters
+        ----------
+        chart : Dict[Tuple[int, int], Cell]
+            parsed CKY chart
+
+        Returns
+        -------
+        Tuple[str, Tuple[int, int]]
+            parsed sentence in auto format and its span id
+        """
+
         len_sentence = list(chart.keys())[-1][1]
         found_span_id = []
         if len_sentence == 1:
@@ -307,8 +414,34 @@ class Parser:
                 break
         return sorted_autos, sorted_auto_scopes
 
-    def decode(self, root_cell):
-        def next(waiting_cats):
+    def decode(self, root_cell: Cell) -> str:
+        """decode parsed CKY chart to auto format
+
+        Parameters
+        ----------
+        root_cell : Cell
+            root cell of parserd CKY chart
+
+        Returns
+        -------
+        str
+            auto format of parsed sentence
+        """
+
+        def next(waiting_cats: List[Category]) -> List[Category]:
+            """find next category to be processed
+
+            Parameters
+            ----------
+            waiting_cats : List[Category]
+                list of categories waiting to be processed
+
+            Returns
+            -------
+            List[Category]
+                list of categories waiting to be processed
+            """
+
             cat = waiting_cats.pop(0)
             if cat.is_leaf:
                 cat.auto.append('(<L')
@@ -343,7 +476,20 @@ class Parser:
                 waiting_cats.append(right_child_cat)
             return waiting_cats
 
-        def flatten(auto):
+        def flatten(auto: List) -> List:
+            """flatten nested list
+
+            Parameters
+            ----------
+            auto : List
+                nested list
+
+            Returns
+            -------
+            List
+                flattened list
+            """
+
             for i in auto:
                 if isinstance(i, list):
                     yield from flatten(i)
@@ -366,77 +512,60 @@ class Parser:
         return auto
 
 
-def main():
+def arg_parse():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--model', type=str, required=True)
-    parser.add_argument('-t', '--target', type=str, required=True)
-    parser.add_argument('--stag_threshold', type=float, default=0.1)
-    parser.add_argument('--phrase_threshold', type=float, default=0.01)
-    parser.add_argument('--span_threshold', type=float, default=0.01)
-    parser.add_argument('--min_freq', type=int, default=1)
-    parser.add_argument('--skimmer_off', action='store_true')
-    parser.add_argument('-d', '--device', type=torch.device, default=torch.device('cuda:0'))
-    parser.add_argument('--max_num_sentence', type=int, default=None)
-
+    parser.add_argument('--path_to_sentence', type=str, help='path to sentence to be supertagged')
+    parser.add_argument('--path_to_model', type=str, help='path to model used for supertagging')
+    parser.add_argument('--path_to_dataset', type=str, default='../dataset/', help='path to dataset')
+    parser.add_argument('--stag_threshold', type=float, default=0.1, help='threshold for supertagging')
+    parser.add_argument('--phrase_threshold', type=float, default=0.01, help='threshold for phrase')
+    parser.add_argument('--span_threshold', type=float, default=0.01, help='threshold for span')
+    parser.add_argument('--min_freq', type=int, default=1, help='minimum frequency of combinatory rule to be used')
+    parser.add_argument('--skimmer', action='store_true', help='use skimmer')
+    parser.add_argument(
+        '--device',
+        type=torch.device,
+        default=torch.device('cuda:0'),
+        help='device to use for supertagging')
     args = parser.parse_args()
+    return args
 
-    path_to_model = args.model
-    target = args.target
-    stag_threhold = args.stag_threshold
-    phrase_threshold = args.phrase_threshold
-    span_threshold = args.span_threshold
-    min_freq = args.min_freq
-    apply_skimmer = not args.skimmer_off
-    device = args.device
-    max_num_sentence = args.max_num_sentence
 
-    path_to_word_category_vocab = join(DIR,
-                                       'data/grammar/word_category_vocab.pickle')
-    path_to_phrase_category_vocab = join(DIR,
-                                         'data/grammar/phrase_category_vocab.pickle')
-    path_to_head_info = join(DIR,
-                             'data/grammar/head_info.pickle')
-    path_to_rule_counter = join(DIR,
-                                'data/grammar/rule_counter.pickle')
-    if target == 'dev':
-        path_to_sentence_list = join(DIR,
-                                     '../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw')
-    elif target == 'test':
-        path_to_sentence_list = join(DIR,
-                                     '../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw')
-    else:
-        path_to_sentence_list = target
-    word_category_vocab = load(path_to_word_category_vocab)
-    phrase_category_vocab = load(path_to_phrase_category_vocab)
-    head_info = load(path_to_head_info)
-    rule_counter = load(path_to_rule_counter)
-    tree_net = torch.load(path_to_model, map_location=device)
-    tree_net.device = device
-    tree_net.eval()
+def main():
+    args = arg_parse()
 
-    parser = Parser(
+    word_category_vocab = load(os.path.join(args.path_to_dataset, 'grammar/word_category_vocab.pickle'))
+    phrase_category_vocab = load(os.path.join(args.path_to_dataset, 'grammar/phrase_category_vocab.pickle'))
+    head_info = load(os.path.join(args.path_to_dataset, 'grammar/head_info.pickle'))
+    rule_counter = load(os.path.join(args.path_to_dataset, 'grammar/rule_counter.pickle'))
+
+    with open(args.path_to_sentence, 'r') as f:
+        sentence_list = f.readlines()
+
+    holccg = torch.load(args.path_to_model, map_location=args.device)
+    holccg.device = args.device
+    holccg.eval()
+
+    parser = SpanParser(
         word_category_vocab=word_category_vocab,
         phrase_category_vocab=phrase_category_vocab,
         head_info=head_info,
         rule_counter=rule_counter,
-        tree_net=tree_net,
-        stag_threshold=stag_threhold,
-        phrase_threshold=phrase_threshold,
-        span_threshold=span_threshold,
-        min_freq=min_freq)
-
-    with open(path_to_sentence_list, 'r') as f:
-        sentence_list = f.readlines()
+        holccg=holccg,
+        stag_threshold=args.stag_threshold,
+        phrase_threshold=args.phrase_threshold,
+        span_threshold=args.span_threshold,
+        min_freq=args.min_freq)
 
     sentence_id = 0
-    for sentence in sentence_list[:max_num_sentence]:
+    for sentence in sentence_list:
         sentence_id += 1
         sentence = sentence.rstrip()
         chart = parser.parse(sentence)
         root_cell = list(chart.values())[-1]
         # when parsing is failed
         if len(root_cell.best_category) == 0:
-            if apply_skimmer:
+            if args.skimmer:
                 autos, scope_list = parser.skimmer(chart)
                 n = 0
                 for auto, scope in zip(autos, scope_list):
