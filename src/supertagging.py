@@ -1,86 +1,108 @@
-from utils import DIR
-from os.path import join
 from utils import load
 import torch
-from tqdm import tqdm
 import argparse
-import pathlib
-parser = argparse.ArgumentParser()
-parser.add_argument('-m', '--model', type=str, required=True)
-# parser.add_argument('-t', '--target', type=str, choices=['dev', 'test'], required=True)
-parser.add_argument('-t', '--target', type=str, required=True)
-parser.add_argument('--stag_threshold', type=float, default=0.1)
-parser.add_argument('-d', '--device', type=torch.device, default=torch.device('cuda:0'))
-parser.add_argument('--failure', action='store_true')
+import os
 
-args = parser.parse_args()
-MODEL = args.model
-TYPE = args.target
-STAG_THRESHOLD = args.stag_threshold
-FAILURE = args.failure
-DEVICE = args.device
-TARGET = str(pathlib.Path(MODEL).name).replace(".pth", "_") + TYPE
-path_to_word_category_vocab = join(DIR,
-                                   'data/grammar/word_category_vocab.pickle')
-if FAILURE:
-    path_to_sentence = join(DIR, "span_parsing/FAILURE/{}.raw".format(TARGET))
-    path_to_auto_pos = join(DIR, "span_parsing/FAILURE/{}.auto_pos".format(TARGET))
-    stagged_file = join(DIR, "span_parsing/FAILURE/{}.stagged".format(TARGET))
-else:
-    if TYPE == 'dev':
-        path_to_sentence = join(DIR,
-                                "../CCGbank/ccgbank_1_1/data/RAW/CCGbank.00.raw")
-        path_to_auto_pos = join(DIR,
-                                "java-candc/data/auto-pos/wsj00.auto_pos")
-        stagged_file = join(DIR,
-                            f"java-candc/data/auto-stagged/{TARGET}.stagged")
-    elif TYPE == 'test':
-        path_to_sentence = join(DIR,
-                                "../CCGbank/ccgbank_1_1/data/RAW/CCGbank.23.raw")
-        path_to_auto_pos = join(DIR,
-                                "../java-candc/data/auto-pos/wsj23.auto_pos")
-        stagged_file = join(DIR,
-                            f"../java-candc/data/auto-stagged/{TARGET}.stagged")
+
+def arg_parse():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--path_to_sentence', type=str, help='path to sentence to be supertagged')
+    parser.add_argument('--path_to_model', type=str, help='path to model used for supertagging')
+    parser.add_argument('--path_to_pos', type=str, default=None, help='path to pos tagged file')
+    parser.add_argument('--path_to_dataset', type=str, default='../dataset/', help='path to dataset')
+    parser.add_argument('--stag_threshold', type=float, default=0.1, help='threshold for supertagging')
+    parser.add_argument('--print_probability', action='store_true', help='print probability of supertags')
+    parser.add_argument(
+        '--device',
+        type=torch.device,
+        default=torch.device('cuda:0'),
+        help='device to use for supertagging')
+    args = parser.parse_args()
+    return args
+
+
+def convert_bracket(content: str) -> str:
+    """convert bracket to readable format
+
+    Parameters
+    ----------
+    content : str
+        content to be converted
+
+    Returns
+    -------
+    str
+        converted content
+    """
+    if content == "-LRB-":
+        content = "("
+    elif content == "-LCB-":
+        content = "{"
+    elif content == "-RRB-":
+        content = ")"
+    elif content == "-RCB-":
+        content = "}"
+    return content
+
+
+def convert_slash(content: str) -> str:
+    """convert slash to readable format
+
+    Parameters
+    ----------
+    content : str
+        content to be converted
+
+    Returns
+    -------
+    str
+        converted content
+    """
+    if r"\/" in content:
+        content = content.replace(r"\/", "/")
+    return content
+
+
+def main():
+    args = arg_parse()
+
+    word_category_vocab = load(os.path.join(args.path_to_dataset, "grammar/word_category_vocab.pickle"))
+
+    holccg = torch.load(args.path_to_model, map_location=args.device)
+    holccg.device = args.device
+    holccg.eval()
+
+    word_classifier = holccg.word_classifier
+
+    with open(args.path_to_sentence, "r") as f:
+        sentence_list = f.readlines()
+    if args.path_to_pos is None:
+        # make the same shape POS list as sentence_list
+        pos_list = []
+        for sentence in sentence_list:
+            pos_list.append(['POS'] * len(sentence.split()))
     else:
-        path_to_sentence = TYPE
-        path_to_auto_pos = join(f'../candc-1.00/{TYPE.replace(".raw", ".pos")}')
-        stagged_file = join(f'../candc-1.00/{TYPE.replace(".raw", ".stagged")}')
-word_category_vocab = load(path_to_word_category_vocab)
-tree_net = torch.load(MODEL, map_location=DEVICE)
-tree_net.device = DEVICE
-tree_net.eval()
-word_ff = tree_net.word_ff
-with open(path_to_sentence, "r") as f:
-    sentence_list = f.readlines()
-with open(path_to_auto_pos, "r") as f:
-    auto_pos_list = f.readlines()
+        pos_list = []
+        with open(args.path_to_pos, "r") as f:
+            lines = f.readlines()
+            for pos in lines:
+                pos_tags = []
+                pos = pos.strip().split()
+                pos_tags.append(pos.split('|')[1])
+            pos_list.append(pos_tags)
 
-parser_input = []
-with torch.no_grad():
-    with tqdm(total=len(sentence_list)) as pbar:
-        pbar.set_description("supertagging...")
-        for sentence, pos in zip(sentence_list, auto_pos_list):
+    with torch.no_grad():
+        for sentence, pos_tags in zip(sentence_list, pos_list):
             sentence = sentence.split()
-            # make the set of super-tags
-            converted_sentence = []
-            converted_sentence_ = []
+            converted_sentence_for_supertagging = []
+            converted_sentence_for_print = []
             for i in range(len(sentence)):
                 content = sentence[i]
-                if content == "-LRB-":
-                    content = "("
-                elif content == "-LCB-":
-                    content = "{"
-                elif content == "-RRB-":
-                    content = ")"
-                elif content == "-RCB-":
-                    content = "}"
-                converted_sentence_.append(content)
-                if r"\/" in content:
-                    content = content.replace(r"\/", "/")
-                converted_sentence.append(content)
-            word_split = tree_net.set_word_split(converted_sentence)
-            word_vectors, _ = tree_net.encode([" ".join(converted_sentence)], [word_split])
-            word_cat_prob = torch.softmax(word_ff(word_vectors[0]), dim=-1)
+                converted_sentence_for_supertagging.append(convert_slash(convert_bracket(content)))
+                converted_sentence_for_print.append(convert_bracket(content))
+            word_split = holccg.set_word_split(converted_sentence_for_supertagging)
+            word_vectors, _ = holccg.encode([" ".join(converted_sentence_for_supertagging)], [word_split])
+            word_cat_prob = torch.softmax(word_classifier(word_vectors[0]), dim=-1)
             predict_cat_id = torch.argsort(word_cat_prob, descending=True)
             # remove '<unk>'
             predict_cat_id = predict_cat_id[predict_cat_id != 0].view(word_cat_prob.shape[0], -1)
@@ -90,33 +112,25 @@ with torch.no_grad():
                 temp = [[word_category_vocab.itos[predict_cat_id[idx, 0]].split('-->')[0],
                         word_cat_prob[idx, predict_cat_id[idx, 0]].item()]]
                 for cat_id in predict_cat_id[idx, 1:]:
-                    if word_cat_prob[idx, cat_id] > STAG_THRESHOLD:
+                    if word_cat_prob[idx, cat_id] > args.stag_threshold:
                         temp.append([word_category_vocab.itos[cat_id].split('-->')[0],
                                     word_cat_prob[idx, cat_id].item()])
                     else:
                         break
                 super_tags.append(temp)
 
-            pos = pos.strip().split()
-            pos_tags = []
-            for info in pos:
-                pos_tags.append(info.split('|')[1])
-
             line = []
-            for word, pos, super in zip(converted_sentence_, pos_tags, super_tags):
+            for word, pos, super in zip(converted_sentence_for_print, pos_tags, super_tags):
                 temp = []
                 temp.append(word)
                 temp.append(pos)
-                # temp.append(str(len(super)))
                 for info in super:
                     temp.append(info[0])
-                    break
-                    # temp.append(str(info[1]))
+                    if args.print_probability:
+                        temp.append(str(info[1]))
                 line.append('|'.join(temp))
-            parser_input.append(' '.join(line)+'\n')
-            # parser_input.append('|'.join(temp))
-            # parser_input.append('\n')
-            pbar.update(1)
+            print(' '.join(line))
 
-with open(stagged_file, "w") as f:
-    f.writelines(parser_input)
+
+if __name__ == "__main__":
+    main()
