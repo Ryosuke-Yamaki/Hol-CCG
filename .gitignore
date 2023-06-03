@@ -1,11 +1,10 @@
 .vscode/
 __pycache__/
-/data/
-/result/data/weight_matrix
-/result/data/model
 /src/*test*
 /src/wandb
 /src/*.log
-id_rsa
 /candc-1.00/
 /java-candc/
+data/*
+model/*.pth
+!model/.gitkeep
