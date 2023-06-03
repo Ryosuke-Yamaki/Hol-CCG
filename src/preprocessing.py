@@ -55,10 +55,10 @@ class Converter:
         node_id = 0
         node_info, idx = self.extract_node(line, idx)
         root_node = Node(node_info)
-        stack_dict[level] = Node_Stack()
+        stack_dict[level] = NodeStack()
         stack_dict[level].push(root_node)
         if not root_node.is_leaf:
-            stack_dict[level + 1] = Node_Stack(capacity=root_node.num_child)
+            stack_dict[level + 1] = NodeStack(capacity=root_node.num_child)
 
         while True:
             char = line[idx]
@@ -68,7 +68,7 @@ class Converter:
                 node = Node(node_info)
                 stack_dict[level].push(node)
                 if not node.is_leaf:
-                    stack_dict[level + 1] = Node_Stack(capacity=node.num_child)
+                    stack_dict[level + 1] = NodeStack(capacity=node.num_child)
             elif char == ')':
                 level -= 1
             idx += 1
@@ -226,7 +226,7 @@ class Node:
         self.child_id = id
 
 
-class Node_Stack:
+class NodeStack:
     def __init__(self, capacity: int = None):
         """the class for node stack to search parent-child relation
         """
