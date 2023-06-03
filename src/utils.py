@@ -212,3 +212,29 @@ def load(path: str) -> Any:
     with open(path, mode='rb') as f:
         data = pickle.load(f)
         return data
+
+
+def convert_content(content: str) -> str:
+    """Convert content to readable format.
+
+    Parameters
+    ----------
+    content : str
+        content to be converted
+
+    Returns
+    -------
+    str
+        converted content
+    """
+    if content == "-LRB-":
+        content = "("
+    elif content == "-LCB-":
+        content = "{"
+    elif content == "-RRB-":
+        content = ")"
+    elif content == "-RCB-":
+        content = "}"
+    elif r"\/" in content:
+        content = content.replace(r"\/", "/")
+    return content

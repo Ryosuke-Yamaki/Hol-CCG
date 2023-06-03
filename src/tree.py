@@ -5,7 +5,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from operator import itemgetter
-from utils import circular_correlation, circular_convolution
+from utils import circular_correlation, circular_convolution, convert_content
 from typing import List, Union
 from transformers import RobertaTokenizer, BertTokenizer
 from holccg import HolCCG
@@ -27,7 +27,7 @@ class Node:
         self.self_id = int(node_info[1])
         if self.is_leaf:
             content = node_info[2]
-            self.content = [self.convert_content(content)]
+            self.content = [convert_content(content)]
             self.category = node_info[3]
             self.pos = node_info[4]
             self.ready = True
@@ -42,31 +42,6 @@ class Node:
                 self.left_child_node_id = int(node_info[4])
                 self.right_child_node_id = int(node_info[5])
                 self.head = int(node_info[6])
-
-    def convert_content(self, content: str) -> str:
-        """Convert content to readable format.
-
-        Parameters
-        ----------
-        content : str
-            content to be converted
-
-        Returns
-        -------
-        str
-            converted content
-        """
-        if content == "-LRB-":
-            content = "("
-        elif content == "-LCB-":
-            content = "{"
-        elif content == "-RRB-":
-            content = ")"
-        elif content == "-RCB-":
-            content = "}"
-        elif r"\/" in content:
-            content = content.replace(r"\/", "/")
-        return content
 
 
 class Tree:
