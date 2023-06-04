@@ -180,7 +180,7 @@ def infilling_with_roberta(args, berkeley_parser, tree_list):
             tokenized_target_phrase = tokenizer.tokenize(target_phrase)
             mask_tokens = ''.join([tokenizer.mask_token] * len(tokenized_target_phrase))
             masked_sentence = original_sentence.replace(target_phrase, mask_tokens)
-            input_ids = torch.tensor([tokenizer.encode(masked_sentence, add_special_tokens=True)]).to(device)
+            input_ids = torch.tensor([tokenizer.encode(masked_sentence, add_special_tokens=True)]).to(args.device)
             predicted_tokens = []
             for i in range(len(tokenized_target_phrase)):
                 with torch.no_grad():
