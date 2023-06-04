@@ -3,8 +3,6 @@ __pycache__/
 /src/*test*
 /src/wandb
 /src/*.log
-/candc-1.00/
-/java-candc/
-data/*
-model/*.pth
+/data/*
+/model/*.pth
 !model/.gitkeep
