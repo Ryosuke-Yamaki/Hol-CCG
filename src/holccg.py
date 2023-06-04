@@ -5,25 +5,51 @@ from torch.nn.utils.rnn import pad_sequence
 import torch
 import torch.nn as nn
 from utils import circular_correlation, circular_convolution, shuffled_circular_convolution, complex_normalize
+from typing import List, Tuple
 
 
 class HolCCG(nn.Module):
     def __init__(
             self,
-            num_word_cat,
-            num_phrase_cat,
-            model,
-            tokenizer,
-            model_dim,
-            dropout,
-            normalize_type,
-            vector_norm,
-            composition,
-            device):
+            num_word_cat: int,
+            num_phrase_cat: int,
+            encoder: nn.Module,
+            tokenizer: nn.Module,
+            model_dim: int,
+            dropout: float,
+            normalize_type: str,
+            vector_norm: int,
+            composition: str,
+            device: torch.device) -> None:
+        """class for HolCCG
+
+        Parameters
+        ----------
+        num_word_cat : int
+            The number of word category. This is used for building HolCCG's syntactic classifier
+        num_phrase_cat : int
+            The number of phrase category. This is used for building HolCCG's syntactic classifier
+        encoder : nn.Module
+            Text encoder used for HolCCG
+        tokenizer : nn.Module
+            Tokenizer used for HolCCG
+        model_dim : int
+            The dimension of HolCCG's representation
+        dropout : float
+            The dropout rate
+        normalize_type : str
+            The type of normalization. This is used for HolCCG's representation
+        vector_norm : int
+            The maximum norm of HolCCG's representation
+        composition : str
+            The type of composition.
+        device : torch.device
+            The device to use for HolCCG
+        """
         super(HolCCG, self).__init__()
         self.num_word_cat = num_word_cat
         self.num_phrase_cat = num_phrase_cat
-        self.encoder = model
+        self.encoder = encoder
         self.tokenizer = tokenizer
         self.model_dim = model_dim
         self.normalize_type = normalize_type
@@ -62,7 +88,20 @@ class HolCCG(nn.Module):
         self.device = device
 
     # input batch as tuple of training info
-    def forward(self, batch):
+    def forward(self, batch: Tuple) -> Tuple:
+        """forward function
+
+        Parameters
+        ----------
+        batch : Tuple
+            The batch of training data
+
+        Returns
+        -------
+        Tuple
+            The output of HolCCG. Classification results of word, phrase and span and their corresponding labels.
+        """
+
         num_node = batch[0]
         sentence = batch[1]
         original_position = batch[2]
@@ -104,7 +143,22 @@ class HolCCG(nn.Module):
         return word_output, phrase_output, span_output, word_label, phrase_label, span_label
 
     # encoding word vector
-    def encode(self, sentence, word_split):
+    def encode(self, sentence: List[str], word_split: List[List[Tuple]]) -> Tuple:
+        """Encoding sentence into word vectors
+
+        Parameters
+        ----------
+        sentence : List[str]
+            The sentence to encode
+        word_split : List[List[Tuple]]
+            The word split information
+
+        Returns
+        -------
+        Tuple
+            The word vectors and their corresponding lengths
+        """
+
         input = self.tokenizer(
             sentence,
             padding=True,
@@ -127,7 +181,31 @@ class HolCCG(nn.Module):
         lengths = torch.tensor(lengths, device=torch.device('cpu'))
         return word_vector, lengths
 
-    def set_leaf_node_vector(self, num_node, vector_list, lengths, original_position):
+    def set_leaf_node_vector(
+            self,
+            num_node: List[int],
+            vector_list: torch.Tensor,
+            lengths: torch.Tensor,
+            original_position: list) -> torch.Tensor:
+        """Set the vector of leaf nodes as tensor
+
+        Parameters
+        ----------
+        num_node : List[int]
+            number of nodes in each tree
+        vector_list : torch.Tensor
+            list of word vectors
+        lengths : torch.Tensor
+            length of each word vector
+        original_position : list
+            the original position of each word vector in the sentence
+
+        Returns
+        -------
+        torch.Tensor
+            The tensor of leaf node vectors
+        """
+
         leaf_node_vector = torch.zeros(
             (len(num_node),
              torch.tensor(max(num_node)),
@@ -141,7 +219,22 @@ class HolCCG(nn.Module):
             leaf_node_vector[(batch_id, target_id)] = vector_list[(batch_id, source_id)]
         return leaf_node_vector
 
-    def compose(self, vector, composition_info):
+    def compose(self, vector: torch.Tensor, composition_info: list) -> torch.Tensor:
+        """Recursive composition of word vectors
+
+        Parameters
+        ----------
+        vector : torch.Tensor
+            The word vectors
+        composition_info : list
+            The composition information
+
+        Returns
+        -------
+        torch.Tensor
+            The composed vector
+        """
+
         # itteration of composition
         for idx in range(composition_info.shape[1]):
             # the positional index where the composition info of one child is located in batch
@@ -175,7 +268,23 @@ class HolCCG(nn.Module):
                 vector[(two_child_composition_idx, two_child_parent_idx)] = composed_vector
         return vector
 
-    def devide_word_phrase(self, vector, batch_label, original_position):
+    def devide_word_phrase(self, vector: torch.Tensor, batch_label: list, original_position: list) -> Tuple:
+        """Devide the word vector and phrase vector
+
+        Parameters
+        ----------
+        vector : torch.Tensor
+            The vectors of all nodes
+        batch_label : list
+            The labels of all nodes
+        original_position : list
+            The original position of all nodes in the sentence
+
+        Returns
+        -------
+        Tuple
+            The word vector, phrase vector, word label and phrase label"""
+
         word_vector = []
         phrase_vector = []
         word_label = []
@@ -202,7 +311,28 @@ class HolCCG(nn.Module):
         phrase_label = torch.squeeze(torch.vstack(phrase_label))
         return word_vector, phrase_vector, word_label, phrase_label
 
-    def extract_span_vector(self, phrase_vector, random_composed_vector, random_negative_node_id):
+    def extract_span_vector(
+            self,
+            phrase_vector: torch.Tensor,
+            random_composed_vector: torch.Tensor,
+            random_negative_node_id: List[int]) -> Tuple:
+        """Extract the span vector from phrase vector and random composed vector
+
+        Parameters
+        ----------
+        phrase_vector : torch.Tensor
+            vector of gold phrases
+        random_composed_vector : torch.Tensor
+            vector of random composed phrases
+        random_negative_node_id : List[int]
+            the node id of random negative phrases
+
+        Returns
+        -------
+        Tuple
+            The span vector and span label
+        """
+
         # the label for gold spans
         positive_label = torch.ones(phrase_vector.shape[0], dtype=torch.long, device=self.device)
 
@@ -227,7 +357,19 @@ class HolCCG(nn.Module):
 
         return span_vector, span_label
 
-    def set_word_split(self, sentence):
+    def set_word_split(self, sentence: List[str]) -> List[List[int]]:
+        """Set the word split for each word
+
+        Parameters
+        ----------
+        sentence : List[str]
+            The sentence
+
+        Returns
+        -------
+        List[List[int]]
+            The word split for each word
+        """
         tokenizer = self.tokenizer
         sentence = " ".join(sentence)
         tokens = tokenizer.tokenize(sentence)
@@ -254,7 +396,20 @@ class HolCCG(nn.Module):
 
 
 class SyntacticClassifier(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, dropout=0.2):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, dropout: float = 0.2) -> None:
+        """class for syntactic classifier
+
+        Parameters
+        ----------
+        input_dim : int
+            The dimension of input vector
+        hidden_dim : int
+            The dimension of hidden layer
+        output_dim : int
+            The dimension of output
+        dropout : float, optional
+            The dropout rate, by default 0.2
+        """
         super(SyntacticClassifier, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_dim)
         self.layer_norm = nn.LayerNorm(hidden_dim)
@@ -264,6 +419,18 @@ class SyntacticClassifier(nn.Module):
         kaiming_uniform_(self.linear1.weight)
         kaiming_uniform_(self.linear2.weight)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward function
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            The input vector
+
+        Returns
+        -------
+        torch.Tensor
+            The output vector
+        """
         x = self.linear2(self.dropout(self.relu(self.layer_norm(self.linear1(x)))))
         return x
