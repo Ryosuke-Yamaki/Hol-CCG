@@ -7,42 +7,6 @@ from tree import Tree
 
 
 @torch.no_grad()
-def evaluate_tree_list(tree_list, holccg):
-    for tree in tree_list.tree_list:
-        tree.set_word_split(holccg.tokenizer)
-    tree_list.set_vector(holccg)
-    word_classifier = holccg.word_classifier
-    phrase_classifier = holccg.phrase_classifier
-    num_word = 0
-    num_phrase = 0
-    num_correct_word = 0
-    num_correct_phrase = 0
-    with tqdm(total=len(tree_list.tree_list)) as pbar:
-        pbar.set_description("evaluating...")
-        for tree in tree_list.tree_list:
-            for node in tree.node_list:
-                if node.is_leaf:
-                    output = word_classifier(node.vector)
-                    predict = torch.topk(output, k=1)[1]
-                    num_word += 1
-                    if node.category_id in predict and node.category_id != 0:
-                        num_correct_word += 1
-                else:
-                    output = phrase_classifier(node.vector)
-                    predict = torch.topk(output, k=1)[1]
-                    num_phrase += 1
-                    if node.category_id in predict and node.category_id != 0:
-                        num_correct_phrase += 1
-            pbar.update(1)
-    word_acc = num_correct_word / num_word
-    phrase_acc = num_correct_phrase / num_phrase
-    print('-' * 50)
-    print('word acc: {}'.format(word_acc))
-    print('phrase acc: {}'.format(phrase_acc))
-    return word_acc, phrase_acc
-
-
-@torch.no_grad()
 def evaluate_batch_list(
         batch_list: list,
         holccg: HolCCG) -> dict:
@@ -118,51 +82,6 @@ def evaluate_batch_list(
         stat["word_acc"], stat["phrase_acc"], stat["span_acc"]))
 
     return stat
-
-
-@torch.no_grad()
-def evaluate_multi(tree_list, holccg, gamma=0.1, alpha=10):
-    word_classifier = holccg.word_classifier
-    phrase_classifier = holccg.phrase_classifier
-    num_word = 0
-    num_phrase = 0
-    num_correct_word = 0
-    num_correct_phrase = 0
-    num_predicted_word = 0
-    num_predicted_phrase = 0
-    with tqdm(total=len(tree_list.tree_list)) as pbar:
-        pbar.set_description("evaluating...")
-        for tree in tree_list.tree_list:
-            for node in tree.node_list:
-                if node.is_leaf:
-                    # probability distribution
-                    output = torch.softmax(word_classifier(node.vector), dim=-1)
-                    predict_prob, predict_idx = torch.sort(output[1:], dim=-1, descending=True)
-                    # add one to index for the removing of zero index of "<UNK>"
-                    predict_idx += 1
-                    predict_idx = predict_idx[predict_prob >= gamma][:alpha]
-                    num_word += 1
-                    num_predicted_word += predict_idx.shape[0]
-                    if node.category_id in predict_idx and node.category_id != 0:
-                        num_correct_word += 1
-                else:
-                    output = torch.softmax(phrase_classifier(node.vector), dim=-1)
-                    predict_prob, predict_idx = torch.sort(output[1:], dim=-1, descending=True)
-                    predict_idx += 1
-                    predict_idx = predict_idx[predict_prob >= gamma][:alpha]
-                    num_phrase += 1
-                    num_predicted_phrase += predict_idx.shape[0]
-                    if node.category_id in predict_idx and node.category_id != 0:
-                        num_correct_phrase += 1
-            pbar.update(1)
-    print('-' * 50)
-    print(f'gamma={gamma}, alpha={alpha}')
-    print(f'word: {num_correct_word / num_word}')
-    print(f'cat per word: {num_predicted_word / num_word}')
-    print(f'phrase: {num_correct_phrase / num_phrase}')
-    print(f'cat per phrase: {num_predicted_phrase / num_phrase}')
-
-    return num_correct_word / num_word, num_predicted_word / num_word
 
 
 @torch.no_grad()
