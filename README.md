@@ -24,13 +24,3 @@ python supertagging.py --path_to_sentence [path to sentence to be parsed] --path
 ```
 python span_parser.py --path_to_sentence [path to sentence to be parsed] --path_to_model [path to trained Hol-CCG]
 ```
-
-# Directory Structure
-## `src/` => for source code
-
-## `dataset/` => for dataset
-### `dataset/converted/` => for converted format of CCGbank
-### `dataset/grammar/` => for gramatical data 
-### `dataset/tree_list/` => for converted tree list
-
-## `model/` => for trained model
