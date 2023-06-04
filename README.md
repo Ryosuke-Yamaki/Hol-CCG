@@ -1,4 +1,5 @@
 # Holographic CCG (Hol-CCG)
+<img src="https://github.com/Ryosuke-Yamaki/Hol-CCG/assets/71750653/c1e83e12-bd4f-4e85-a9e7-fce34e8224e8" width="500px">
 
 # Prerequisite
 - Place the CCGbank (ccgbank_1_1) in `dataset` directory.
