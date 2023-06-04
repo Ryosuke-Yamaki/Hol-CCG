@@ -1,7 +1,7 @@
 # Holographic CCG (Hol-CCG)
 Python implementation of Holographic CCG Parsing.
 
-<img src="https://github.com/Ryosuke-Yamaki/Hol-CCG/assets/71750653/8f3538ed-b228-4351-aa5a-8e09abc98bd7" width="500px">
+<img src="holccg.svg" width="500px">
 
 # Prerequisites
 - Python >= 3.8.8
