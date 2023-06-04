@@ -160,7 +160,7 @@ def train():
     holccg = HolCCG(
         num_word_cat=num_word_cat,
         num_phrase_cat=num_phrase_cat,
-        model=encoder,
+        encoder=encoder,
         tokenizer=tokenizer,
         model_dim=model_dim,
         dropout=args.dropout,
