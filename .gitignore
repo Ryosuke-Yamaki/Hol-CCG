@@ -1,8 +1,4 @@
-.vscode/
-__pycache__/
-/src/*test*
-/src/wandb
-/src/*.log
-/data/*
+/src/__pycache__/
+/src/wandb/
 /model/*.pth
 !model/.gitkeep
