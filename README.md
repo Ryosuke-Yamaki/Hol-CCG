@@ -1,5 +1,5 @@
 # Holographic CCG (Hol-CCG)
-Python implementation of Holographic CCG Parsing.
+This is the Python implementation of [Holographic CCG Parsing](https://aclanthology.org/2023.acl-long.15/) at ACL2023.
 
 <img src="holccg.svg" width="500px">
 
